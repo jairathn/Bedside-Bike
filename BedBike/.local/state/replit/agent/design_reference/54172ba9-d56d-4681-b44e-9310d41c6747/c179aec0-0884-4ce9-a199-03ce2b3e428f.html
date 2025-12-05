@@ -1,0 +1,531 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Bedside Bike - Patient Interface</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        'medical-blue': '#2563EB',
+                        'success-green': '#10B981',
+                        'progress-orange': '#F59E0B',
+                        'medical-gray': '#6B7280'
+                    },
+                    fontFamily: {
+                        'sans': ['Inter', 'system-ui', 'sans-serif']
+                    }
+                }
+            }
+        };
+    </script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <style>
+        .progress-ring {
+            transform: rotate(-90deg);
+        }
+        .progress-ring-circle {
+            transition: stroke-dashoffset 0.35s;
+            transform: rotate(90deg);
+            transform-origin: 50% 50%;
+        }
+        .fade-in {
+            animation: fadeIn 0.5s ease-in;
+        }
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(20px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        .pulse-glow {
+            animation: pulseGlow 2s infinite;
+        }
+        @keyframes pulseGlow {
+            0%, 100% { box-shadow: 0 0 20px rgba(37, 99, 235, 0.3); }
+            50% { box-shadow: 0 0 30px rgba(37, 99, 235, 0.5); }
+        }
+    </style>
+</head>
+<body class="bg-gray-50 font-sans">
+
+    <!-- @COMPONENT: LoginScreen -->
+    <div id="loginScreen" class="min-h-screen flex items-center justify-center bg-gradient-to-br from-medical-blue to-blue-600 px-4">
+        <div class="max-w-md w-full bg-white rounded-2xl shadow-2xl p-8 fade-in">
+            <div class="text-center mb-8">
+                <div class="mx-auto w-16 h-16 bg-medical-blue rounded-full flex items-center justify-center mb-4">
+                    <i class="fas fa-bicycle text-white text-2xl"></i>
+                </div>
+                <h1 class="text-2xl font-bold text-gray-900">Bedside Bike</h1>
+                <p class="text-gray-600 mt-2">Patient Portal</p>
+            </div>
+            
+            <form class="space-y-6" data-event="submit:handleLogin">
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-2">Patient ID</label>
+                    <input type="text" class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-medical-blue focus:border-transparent transition-all" placeholder="Enter your patient ID" data-mock="true">
+                </div>
+                
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-2">Access Code</label>
+                    <input type="password" class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-medical-blue focus:border-transparent transition-all" placeholder="Enter your access code" data-mock="true">
+                </div>
+                
+                <button type="button" onclick="showDashboard()" class="w-full bg-medical-blue text-white py-3 px-4 rounded-lg font-medium hover:bg-blue-700 transition-colors duration-200 pulse-glow">
+                    Sign In
+                </button>
+                
+                <div class="text-center">
+                    <a href="#" class="text-sm text-medical-blue hover:underline">Need help accessing your account?</a>
+                </div>
+            </form>
+        </div>
+    </div>
+    <!-- @END_COMPONENT: LoginScreen -->
+
+    <!-- @COMPONENT: MainDashboard -->
+    <div id="dashboard" class="hidden min-h-screen bg-gray-50">
+        <!-- Header -->
+        <header class="bg-white shadow-sm border-b border-gray-200">
+            <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+                <div class="flex justify-between items-center h-16">
+                    <div class="flex items-center">
+                        <div class="w-8 h-8 bg-medical-blue rounded-full flex items-center justify-center mr-3">
+                            <i class="fas fa-bicycle text-white text-sm"></i>
+                        </div>
+                        <h1 class="text-xl font-semibold text-gray-900">Bedside Bike</h1>
+                    </div>
+                    <div class="flex items-center space-x-4">
+                        <span class="text-sm text-gray-600" data-bind="user.name" data-mock="true">Welcome, Sarah M.</span>
+                        <button class="p-2 text-gray-400 hover:text-gray-600 transition-colors">
+                            <i class="fas fa-cog"></i>
+                        </button>
+                        <button onclick="showLogin()" class="p-2 text-gray-400 hover:text-gray-600 transition-colors">
+                            <i class="fas fa-sign-out-alt"></i>
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </header>
+
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+            <!-- Welcome Section -->
+            <div class="mb-8">
+                <div class="bg-gradient-to-r from-medical-blue to-blue-600 rounded-2xl p-6 text-white">
+                    <div class="flex items-center justify-between">
+                        <div>
+                            <h2 class="text-2xl font-bold mb-2">Day 12 of Your Journey</h2>
+                            <p class="text-blue-100">You've been consistently improving! Keep it up!</p>
+                        </div>
+                        <div class="text-right">
+                            <div class="text-3xl font-bold" data-bind="daysCount" data-mock="true">12</div>
+                            <div class="text-sm text-blue-200">Days Active</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Quick Stats -->
+            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+                <!-- @MAP: quickStats.map(stat => ( -->
+                <div class="bg-white rounded-xl p-6 shadow-sm border border-gray-200">
+                    <div class="flex items-center justify-between mb-2">
+                        <div class="w-10 h-10 bg-success-green/10 rounded-full flex items-center justify-center">
+                            <i class="fas fa-clock text-success-green"></i>
+                        </div>
+                        <span class="text-xs text-gray-500">Today</span>
+                    </div>
+                    <div class="text-2xl font-bold text-gray-900" data-mock="true">23m</div>
+                    <div class="text-sm text-gray-600">Session Time</div>
+                    <div class="text-xs text-success-green mt-1">+5m from yesterday</div>
+                </div>
+
+                <div class="bg-white rounded-xl p-6 shadow-sm border border-gray-200">
+                    <div class="flex items-center justify-between mb-2">
+                        <div class="w-10 h-10 bg-progress-orange/10 rounded-full flex items-center justify-center">
+                            <i class="fas fa-bolt text-progress-orange"></i>
+                        </div>
+                        <span class="text-xs text-gray-500">Today</span>
+                    </div>
+                    <div class="text-2xl font-bold text-gray-900" data-mock="true">145W</div>
+                    <div class="text-sm text-gray-600">Avg Power</div>
+                    <div class="text-xs text-progress-orange mt-1">+12W from yesterday</div>
+                </div>
+
+                <div class="bg-white rounded-xl p-6 shadow-sm border border-gray-200">
+                    <div class="flex items-center justify-between mb-2">
+                        <div class="w-10 h-10 bg-medical-blue/10 rounded-full flex items-center justify-center">
+                            <i class="fas fa-target text-medical-blue"></i>
+                        </div>
+                        <span class="text-xs text-gray-500">Weekly</span>
+                    </div>
+                    <div class="text-2xl font-bold text-gray-900" data-mock="true">85%</div>
+                    <div class="text-sm text-gray-600">Goal Progress</div>
+                    <div class="text-xs text-medical-blue mt-1">4 of 5 days completed</div>
+                </div>
+
+                <div class="bg-white rounded-xl p-6 shadow-sm border border-gray-200">
+                    <div class="flex items-center justify-between mb-2">
+                        <div class="w-10 h-10 bg-purple-100 rounded-full flex items-center justify-center">
+                            <i class="fas fa-trophy text-purple-600"></i>
+                        </div>
+                        <span class="text-xs text-gray-500">Rank</span>
+                    </div>
+                    <div class="text-2xl font-bold text-gray-900" data-mock="true">Top 25%</div>
+                    <div class="text-sm text-gray-600">This Week</div>
+                    <div class="text-xs text-purple-600 mt-1">Better than 89 others</div>
+                </div>
+                <!-- @END_MAP )) -->
+            </div>
+
+            <div class="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
+                <!-- Progress Chart -->
+                <div class="lg:col-span-2 bg-white rounded-xl p-6 shadow-sm border border-gray-200">
+                    <div class="flex items-center justify-between mb-6">
+                        <h3 class="text-lg font-semibold text-gray-900">Your Progress</h3>
+                        <div class="flex space-x-2">
+                            <button class="px-3 py-1 text-xs bg-medical-blue text-white rounded-full">7 Days</button>
+                            <button class="px-3 py-1 text-xs text-gray-600 hover:bg-gray-100 rounded-full">30 Days</button>
+                        </div>
+                    </div>
+                    
+                    <!-- Mock Chart Area -->
+                    <div class="h-64 bg-gray-50 rounded-lg flex items-center justify-center relative overflow-hidden">
+                        <!-- @FUNCTIONALITY: Implement interactive chart showing daily usage trends using Chart.js or similar -->
+                        <div class="absolute inset-0 p-4">
+                            <div class="h-full flex items-end justify-between space-x-2">
+                                <!-- Mock bar chart data -->
+                                <div class="flex flex-col items-center space-y-2">
+                                    <div class="w-8 bg-medical-blue rounded-t" style="height: 40%"></div>
+                                    <span class="text-xs text-gray-500">Mon</span>
+                                </div>
+                                <div class="flex flex-col items-center space-y-2">
+                                    <div class="w-8 bg-medical-blue rounded-t" style="height: 65%"></div>
+                                    <span class="text-xs text-gray-500">Tue</span>
+                                </div>
+                                <div class="flex flex-col items-center space-y-2">
+                                    <div class="w-8 bg-medical-blue rounded-t" style="height: 80%"></div>
+                                    <span class="text-xs text-gray-500">Wed</span>
+                                </div>
+                                <div class="flex flex-col items-center space-y-2">
+                                    <div class="w-8 bg-medical-blue rounded-t" style="height: 55%"></div>
+                                    <span class="text-xs text-gray-500">Thu</span>
+                                </div>
+                                <div class="flex flex-col items-center space-y-2">
+                                    <div class="w-8 bg-medical-blue rounded-t" style="height: 90%"></div>
+                                    <span class="text-xs text-gray-500">Fri</span>
+                                </div>
+                                <div class="flex flex-col items-center space-y-2">
+                                    <div class="w-8 bg-success-green rounded-t" style="height: 75%"></div>
+                                    <span class="text-xs text-gray-500">Sat</span>
+                                </div>
+                                <div class="flex flex-col items-center space-y-2">
+                                    <div class="w-8 bg-progress-orange rounded-t" style="height: 100%"></div>
+                                    <span class="text-xs text-gray-500">Today</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Goals & Achievements -->
+                <div class="bg-white rounded-xl p-6 shadow-sm border border-gray-200">
+                    <h3 class="text-lg font-semibold text-gray-900 mb-4">Today's Goals</h3>
+                    
+                    <!-- Goal Progress Rings -->
+                    <div class="space-y-6">
+                        <div class="flex items-center space-x-4">
+                            <div class="relative w-16 h-16">
+                                <svg class="w-16 h-16 progress-ring">
+                                    <circle cx="32" cy="32" r="28" stroke="#E5E7EB" stroke-width="4" fill="none"/>
+                                    <circle cx="32" cy="32" r="28" stroke="#10B981" stroke-width="4" fill="none" 
+                                            stroke-dasharray="176" stroke-dashoffset="35" class="progress-ring-circle"/>
+                                </svg>
+                                <div class="absolute inset-0 flex items-center justify-center">
+                                    <span class="text-sm font-semibold text-gray-900" data-mock="true">80%</span>
+                                </div>
+                            </div>
+                            <div>
+                                <div class="font-medium text-gray-900">Exercise Duration</div>
+                                <div class="text-sm text-gray-600" data-mock="true">24/30 minutes</div>
+                            </div>
+                        </div>
+
+                        <div class="flex items-center space-x-4">
+                            <div class="relative w-16 h-16">
+                                <svg class="w-16 h-16 progress-ring">
+                                    <circle cx="32" cy="32" r="28" stroke="#E5E7EB" stroke-width="4" fill="none"/>
+                                    <circle cx="32" cy="32" r="28" stroke="#F59E0B" stroke-width="4" fill="none" 
+                                            stroke-dasharray="176" stroke-dashoffset="88" class="progress-ring-circle"/>
+                                </svg>
+                                <div class="absolute inset-0 flex items-center justify-center">
+                                    <span class="text-sm font-semibold text-gray-900" data-mock="true">50%</span>
+                                </div>
+                            </div>
+                            <div>
+                                <div class="font-medium text-gray-900">Power Output</div>
+                                <div class="text-sm text-gray-600" data-mock="true">145/200 watts</div>
+                            </div>
+                        </div>
+
+                        <div class="flex items-center space-x-4">
+                            <div class="relative w-16 h-16">
+                                <svg class="w-16 h-16 progress-ring">
+                                    <circle cx="32" cy="32" r="28" stroke="#E5E7EB" stroke-width="4" fill="none"/>
+                                    <circle cx="32" cy="32" r="28" stroke="#2563EB" stroke-width="4" fill="none" 
+                                            stroke-dasharray="176" stroke-dashoffset="0" class="progress-ring-circle"/>
+                                </svg>
+                                <div class="absolute inset-0 flex items-center justify-center">
+                                    <i class="fas fa-check text-medical-blue text-sm"></i>
+                                </div>
+                            </div>
+                            <div>
+                                <div class="font-medium text-gray-900">Consistency</div>
+                                <div class="text-sm text-success-green" data-mock="true">Goal achieved!</div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <button class="w-full mt-6 bg-medical-blue text-white py-2 px-4 rounded-lg font-medium hover:bg-blue-700 transition-colors">
+                        Set New Goals
+                    </button>
+                </div>
+            </div>
+
+            <!-- Gamification Section -->
+            <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
+                <!-- Achievement Game -->
+                <div class="bg-white rounded-xl p-6 shadow-sm border border-gray-200">
+                    <div class="flex items-center justify-between mb-4">
+                        <h3 class="text-lg font-semibold text-gray-900">Recovery Quest</h3>
+                        <div class="flex items-center space-x-1">
+                            <i class="fas fa-star text-yellow-400"></i>
+                            <span class="text-sm font-medium text-gray-600" data-mock="true">Level 3</span>
+                        </div>
+                    </div>
+                    
+                    <div class="mb-4">
+                        <div class="flex justify-between text-sm text-gray-600 mb-2">
+                            <span>Progress to Level 4</span>
+                            <span data-mock="true">750/1000 XP</span>
+                        </div>
+                        <div class="w-full bg-gray-200 rounded-full h-3">
+                            <div class="bg-gradient-to-r from-purple-500 to-purple-600 h-3 rounded-full" style="width: 75%"></div>
+                        </div>
+                    </div>
+
+                    <div class="space-y-3">
+                        <div class="flex items-center space-x-3 p-3 bg-success-green/5 rounded-lg border border-success-green/20">
+                            <div class="w-8 h-8 bg-success-green rounded-full flex items-center justify-center">
+                                <i class="fas fa-check text-white text-xs"></i>
+                            </div>
+                            <div class="flex-1">
+                                <div class="font-medium text-gray-900">Daily Rider</div>
+                                <div class="text-sm text-gray-600">Exercise for 20+ minutes</div>
+                            </div>
+                            <div class="text-sm font-medium text-success-green">+50 XP</div>
+                        </div>
+
+                        <div class="flex items-center space-x-3 p-3 bg-gray-50 rounded-lg">
+                            <div class="w-8 h-8 bg-gray-300 rounded-full flex items-center justify-center">
+                                <i class="fas fa-target text-gray-600 text-xs"></i>
+                            </div>
+                            <div class="flex-1">
+                                <div class="font-medium text-gray-900">Power Pusher</div>
+                                <div class="text-sm text-gray-600">Reach 200W average power</div>
+                            </div>
+                            <div class="text-sm font-medium text-gray-500">+75 XP</div>
+                        </div>
+
+                        <div class="flex items-center space-x-3 p-3 bg-gray-50 rounded-lg">
+                            <div class="w-8 h-8 bg-gray-300 rounded-full flex items-center justify-center">
+                                <i class="fas fa-calendar text-gray-600 text-xs"></i>
+                            </div>
+                            <div class="flex-1">
+                                <div class="font-medium text-gray-900">Week Warrior</div>
+                                <div class="text-sm text-gray-600">Complete 5 days this week</div>
+                            </div>
+                            <div class="text-sm font-medium text-gray-500">+100 XP</div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Peer Comparison -->
+                <div class="bg-white rounded-xl p-6 shadow-sm border border-gray-200">
+                    <h3 class="text-lg font-semibold text-gray-900 mb-4">This Week's Leaderboard</h3>
+                    <p class="text-sm text-gray-600 mb-4">See how you're doing compared to others in your recovery journey (anonymized)</p>
+                    
+                    <div class="space-y-3">
+                        <!-- @MAP: leaderboard.map((entry, index) => ( -->
+                        <div class="flex items-center space-x-3 p-3 bg-yellow-50 rounded-lg border border-yellow-200">
+                            <div class="w-8 h-8 bg-yellow-400 rounded-full flex items-center justify-center">
+                                <span class="text-xs font-bold text-white">1</span>
+                            </div>
+                            <div class="flex-1">
+                                <div class="font-medium text-gray-900">Patient Alpha</div>
+                                <div class="text-sm text-gray-600">2.5 hours this week</div>
+                            </div>
+                            <i class="fas fa-crown text-yellow-400"></i>
+                        </div>
+
+                        <div class="flex items-center space-x-3 p-3 bg-gray-50 rounded-lg">
+                            <div class="w-8 h-8 bg-gray-400 rounded-full flex items-center justify-center">
+                                <span class="text-xs font-bold text-white">2</span>
+                            </div>
+                            <div class="flex-1">
+                                <div class="font-medium text-gray-900">Patient Beta</div>
+                                <div class="text-sm text-gray-600">2.1 hours this week</div>
+                            </div>
+                        </div>
+
+                        <div class="flex items-center space-x-3 p-3 bg-medical-blue/5 rounded-lg border border-medical-blue/20">
+                            <div class="w-8 h-8 bg-medical-blue rounded-full flex items-center justify-center">
+                                <span class="text-xs font-bold text-white">3</span>
+                            </div>
+                            <div class="flex-1">
+                                <div class="font-medium text-gray-900">You (Sarah M.)</div>
+                                <div class="text-sm text-gray-600">1.9 hours this week</div>
+                            </div>
+                            <i class="fas fa-medal text-medical-blue"></i>
+                        </div>
+
+                        <div class="flex items-center space-x-3 p-3 bg-gray-50 rounded-lg">
+                            <div class="w-8 h-8 bg-gray-400 rounded-full flex items-center justify-center">
+                                <span class="text-xs font-bold text-white">4</span>
+                            </div>
+                            <div class="flex-1">
+                                <div class="font-medium text-gray-900">Patient Delta</div>
+                                <div class="text-sm text-gray-600">1.7 hours this week</div>
+                            </div>
+                        </div>
+                        <!-- @END_MAP )) -->
+                    </div>
+
+                    <div class="mt-4 p-3 bg-blue-50 rounded-lg">
+                        <div class="text-sm text-medical-blue font-medium">💪 Great work!</div>
+                        <div class="text-sm text-gray-600 mt-1">You're ahead of 68% of patients at similar recovery stages.</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Customizable Metrics -->
+            <div class="bg-white rounded-xl p-6 shadow-sm border border-gray-200 mb-8">
+                <div class="flex items-center justify-between mb-6">
+                    <h3 class="text-lg font-semibold text-gray-900">Your Custom Metrics</h3>
+                    <button class="text-medical-blue hover:text-blue-700 text-sm font-medium">
+                        <i class="fas fa-plus mr-1"></i>Add Metric
+                    </button>
+                </div>
+
+                <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                    <!-- @MAP: customMetrics.map(metric => ( -->
+                    <div class="p-4 border border-gray-200 rounded-lg">
+                        <div class="flex items-center justify-between mb-2">
+                            <h4 class="font-medium text-gray-900">Sessions per Day</h4>
+                            <button class="text-gray-400 hover:text-gray-600">
+                                <i class="fas fa-ellipsis-h text-xs"></i>
+                            </button>
+                        </div>
+                        <div class="text-2xl font-bold text-medical-blue mb-1" data-mock="true">2.3</div>
+                        <div class="text-sm text-gray-600">Average</div>
+                        <div class="text-xs text-success-green mt-1">↗ +0.2 from last week</div>
+                    </div>
+
+                    <div class="p-4 border border-gray-200 rounded-lg">
+                        <div class="flex items-center justify-between mb-2">
+                            <h4 class="font-medium text-gray-900">Recovery Rate</h4>
+                            <button class="text-gray-400 hover:text-gray-600">
+                                <i class="fas fa-ellipsis-h text-xs"></i>
+                            </button>
+                        </div>
+                        <div class="text-2xl font-bold text-success-green mb-1" data-mock="true">85%</div>
+                        <div class="text-sm text-gray-600">Estimated</div>
+                        <div class="text-xs text-success-green mt-1">↗ +5% from last week</div>
+                    </div>
+
+                    <div class="p-4 border border-gray-200 rounded-lg">
+                        <div class="flex items-center justify-between mb-2">
+                            <h4 class="font-medium text-gray-900">Resistance Level</h4>
+                            <button class="text-gray-400 hover:text-gray-600">
+                                <i class="fas fa-ellipsis-h text-xs"></i>
+                            </button>
+                        </div>
+                        <div class="text-2xl font-bold text-progress-orange mb-1" data-mock="true">6.2</div>
+                        <div class="text-sm text-gray-600">Average</div>
+                        <div class="text-xs text-progress-orange mt-1">↗ +0.8 from last week</div>
+                    </div>
+                    <!-- @END_MAP )) -->
+                </div>
+            </div>
+
+            <!-- Quick Actions -->
+            <div class="bg-white rounded-xl p-6 shadow-sm border border-gray-200">
+                <h3 class="text-lg font-semibold text-gray-900 mb-4">Quick Actions</h3>
+                
+                <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+                    <button class="flex flex-col items-center p-4 border border-gray-200 rounded-lg hover:border-medical-blue hover:bg-blue-50 transition-all">
+                        <div class="w-12 h-12 bg-medical-blue/10 rounded-full flex items-center justify-center mb-2">
+                            <i class="fas fa-play text-medical-blue"></i>
+                        </div>
+                        <span class="text-sm font-medium text-gray-900">Start Session</span>
+                    </button>
+
+                    <button class="flex flex-col items-center p-4 border border-gray-200 rounded-lg hover:border-success-green hover:bg-green-50 transition-all">
+                        <div class="w-12 h-12 bg-success-green/10 rounded-full flex items-center justify-center mb-2">
+                            <i class="fas fa-target text-success-green"></i>
+                        </div>
+                        <span class="text-sm font-medium text-gray-900">Update Goals</span>
+                    </button>
+
+                    <button class="flex flex-col items-center p-4 border border-gray-200 rounded-lg hover:border-progress-orange hover:bg-orange-50 transition-all">
+                        <div class="w-12 h-12 bg-progress-orange/10 rounded-full flex items-center justify-center mb-2">
+                            <i class="fas fa-chart-line text-progress-orange"></i>
+                        </div>
+                        <span class="text-sm font-medium text-gray-900">View Reports</span>
+                    </button>
+
+                    <button class="flex flex-col items-center p-4 border border-gray-200 rounded-lg hover:border-purple-500 hover:bg-purple-50 transition-all">
+                        <div class="w-12 h-12 bg-purple-100 rounded-full flex items-center justify-center mb-2">
+                            <i class="fas fa-gamepad text-purple-600"></i>
+                        </div>
+                        <span class="text-sm font-medium text-gray-900">Play Games</span>
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+    <!-- @END_COMPONENT: MainDashboard -->
+
+    <script>
+        // TODO: Implement proper authentication and session management
+        function showDashboard() {
+            document.getElementById('loginScreen').classList.add('hidden');
+            document.getElementById('dashboard').classList.remove('hidden');
+        }
+
+        function showLogin() {
+            document.getElementById('dashboard').classList.add('hidden');
+            document.getElementById('loginScreen').classList.remove('hidden');
+        }
+
+        // TODO: Implement real-time data updates
+        (function() {
+            // Mock dynamic updates - in production, this would connect to real device data
+            function updateMetrics() {
+                // Simulate real-time metric updates
+                console.log('Updating metrics with real device data...');
+            }
+
+            // Update metrics every 30 seconds
+            setInterval(updateMetrics, 30000);
+
+            // TODO: Implement progressive goal adjustment based on performance
+            // TODO: Add notification system for achievements and milestones
+            // TODO: Connect to hospital's patient management system
+            // TODO: Implement data export functionality for healthcare providers
+        })();
+    </script>
+</body>
+</html>
