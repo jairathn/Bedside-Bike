@@ -8,6 +8,13 @@ import { eq, and } from "drizzle-orm";
 import { calculateRisks } from "./risk-calculator";
 // Removed duplicate calculator - using only central risk calculator
 import { kudosService } from "./kudos-service";
+import {
+  apiLimiter,
+  authLimiter,
+  riskAssessmentLimiter,
+  createLimiter,
+  kudosLimiter
+} from "./rate-limit";
 import { 
   loginSchema,
   patientRegistrationSchema,
@@ -26,14 +33,54 @@ import {
 export async function registerRoutes(app: Express): Promise<Server> {
   
   // Authentication system already configured
-  
+
   // Seed initial provider data
   await seedInitialData();
+
+  // Health Check Endpoints
+
+  // Basic health check - returns 200 OK if server is running
+  app.get("/health", (req, res) => {
+    res.status(200).json({
+      status: "healthy",
+      timestamp: new Date().toISOString(),
+      uptime: process.uptime(),
+      environment: process.env.NODE_ENV || "development"
+    });
+  });
+
+  // Detailed health check - includes database connectivity
+  app.get("/health/detailed", async (req, res) => {
+    const healthCheck = {
+      status: "healthy",
+      timestamp: new Date().toISOString(),
+      uptime: process.uptime(),
+      environment: process.env.NODE_ENV || "development",
+      database: "unknown",
+      memory: {
+        used: Math.round(process.memoryUsage().heapUsed / 1024 / 1024),
+        total: Math.round(process.memoryUsage().heapTotal / 1024 / 1024),
+        unit: "MB"
+      }
+    };
+
+    // Check database connectivity
+    try {
+      await db.select().from(users).limit(1);
+      healthCheck.database = "connected";
+    } catch (error) {
+      healthCheck.status = "degraded";
+      healthCheck.database = "disconnected";
+    }
+
+    const statusCode = healthCheck.status === "healthy" ? 200 : 503;
+    res.status(statusCode).json(healthCheck);
+  });
 
   // Auth Routes
 
   // Patient/Provider Registration
-  app.post("/api/auth/register", async (req, res) => {
+  app.post("/api/auth/register", authLimiter, async (req, res) => {
     try {
       const { userType } = req.body;
       
@@ -71,7 +118,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Patient/Provider Login
-  app.post("/api/auth/login", async (req, res) => {
+  app.post("/api/auth/login", authLimiter, async (req, res) => {
     try {
       // Legacy patient login support (name + DOB)
       if (req.body.firstName && req.body.lastName && req.body.dateOfBirth && !req.body.email) {
@@ -296,7 +343,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Push goals from risk assessment (Provider-only endpoint)
-  app.post("/api/patients/:id/goals/from-assessment", async (req, res) => {
+  app.post("/api/patients/:id/goals/from-assessment", createLimiter, async (req, res) => {
     try {
       const patientId = parseInt(req.params.id);
       const { mobilityRecommendation } = req.body;
@@ -330,7 +377,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Session Routes
 
   // Create exercise session
-  app.post("/api/sessions", async (req, res) => {
+  app.post("/api/sessions", createLimiter, async (req, res) => {
     try {
       const sessionData = insertExerciseSessionSchema.parse(req.body) as InsertExerciseSession;
       const session = await storage.createSession(sessionData);
@@ -362,7 +409,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Goal Routes
 
   // Create goal (providers only)
-  app.post("/api/goals", async (req, res) => {
+  app.post("/api/goals", createLimiter, async (req, res) => {
     try {
       const goalData = insertPatientGoalSchema.parse(req.body) as InsertPatientGoal;
       const goal = await storage.createGoal(goalData);
@@ -402,7 +449,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Provider saves goals to patient profile
-  app.post("/api/patients/:id/goals", async (req, res) => {
+  app.post("/api/patients/:id/goals", createLimiter, async (req, res) => {
     try {
       const patientId = parseInt(req.params.id);
       const { goals, providerId } = req.body;
@@ -485,7 +532,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Risk Assessment Routes
 
   // Process text input using AI
-  app.post("/api/risk-assessment/process-text", async (req, res) => {
+  app.post("/api/risk-assessment/process-text", riskAssessmentLimiter, async (req, res) => {
     try {
       const { field, text } = req.body;
       
@@ -511,7 +558,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post("/api/risk-assessment", async (req, res) => {
+  app.post("/api/risk-assessment", riskAssessmentLimiter, async (req, res) => {
     try {
       console.log("Risk assessment request body:", JSON.stringify(req.body, null, 2));
       const riskData = riskAssessmentInputSchema.parse(req.body) as RiskAssessmentInput;
@@ -573,7 +620,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Anonymous risk assessment endpoint - same calculation but no data storage
-  app.post("/api/anonymous-risk-assessment", async (req, res) => {
+  app.post("/api/anonymous-risk-assessment", riskAssessmentLimiter, async (req, res) => {
     try {
       console.log("Anonymous risk assessment request body:", JSON.stringify(req.body, null, 2));
       const riskData = riskAssessmentInputSchema.parse(req.body) as RiskAssessmentInput;
@@ -761,7 +808,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Add reaction to feed item
-  app.post("/api/kudos/react", async (req, res) => {
+  app.post("/api/kudos/react", kudosLimiter, async (req, res) => {
     try {
       const patientId = parseInt(req.query.patientId as string) || 4; // Default to Neil for testing
       const { feedItemId, reactionType } = req.body;
@@ -774,7 +821,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Send nudge
-  app.post("/api/kudos/nudge", async (req, res) => {
+  app.post("/api/kudos/nudge", kudosLimiter, async (req, res) => {
     try {
       const senderId = parseInt(req.query.patientId as string) || 4; // Default to Neil for testing
       const { recipientId, templateType, metadata } = req.body;

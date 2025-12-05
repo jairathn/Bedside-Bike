@@ -1,10 +1,16 @@
 import express, { type Request, Response, NextFunction } from "express";
+import session from "express-session";
 import { registerRoutes } from "./routes";
 import { setupVite, serveStatic, log } from "./vite";
+import { logger, errorLogger } from "./logger";
+import sessionConfig from "./session";
 
 const app = express();
 app.use(express.json());
 app.use(express.urlencoded({ extended: false }));
+
+// Session middleware - must be before routes
+app.use(session(sessionConfig));
 
 app.use((req, res, next) => {
   const start = Date.now();
@@ -39,12 +45,15 @@ app.use((req, res, next) => {
 (async () => {
   const server = await registerRoutes(app);
 
+  // Error logging middleware
+  app.use(errorLogger);
+
+  // Error handler
   app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
     const status = err.status || err.statusCode || 500;
     const message = err.message || "Internal Server Error";
 
     res.status(status).json({ message });
-    throw err;
   });
 
   // importantly only setup vite in development and after
@@ -66,5 +75,10 @@ app.use((req, res, next) => {
     reusePort: true,
   }, () => {
     log(`serving on port ${port}`);
+    logger.info(`Bedside Bike API server started on port ${port}`, {
+      port,
+      environment: process.env.NODE_ENV || 'development',
+      database: process.env.USE_LOCAL_DB === 'true' ? 'SQLite' : 'Azure SQL'
+    });
   });
 })();
