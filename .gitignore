@@ -10,3 +10,6 @@ vite.config.ts.*
 .env.local
 .env.production
 .env.*.local
+
+# Replit state files
+.local/
