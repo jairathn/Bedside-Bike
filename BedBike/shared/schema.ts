@@ -2,241 +2,239 @@ import { sql } from 'drizzle-orm';
 import {
   boolean,
   index,
-  integer,
-  jsonb,
-  pgEnum,
-  pgTable,
-  serial,
+  int,
   text,
-  timestamp,
   varchar,
   decimal,
   date,
   real,
-} from "drizzle-orm/pg-core";
+  datetime2,
+} from "drizzle-orm/mssql-core";
+import { mssqlTable } from "drizzle-orm/mssql-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
-// Enums
-export const userTypeEnum = pgEnum('user_type', ['patient', 'provider']);
-export const providerRoleEnum = pgEnum('provider_role', ['physician', 'nurse', 'physical_therapist', 'mobility_tech', 'other']);
-export const levelOfCareEnum = pgEnum('level_of_care', ['icu', 'stepdown', 'ward', 'rehab']);
-export const mobilityStatusEnum = pgEnum('mobility_status', ['bedbound', 'chair_bound', 'standing_assist', 'walking_assist', 'independent']);
-export const cognitiveStatusEnum = pgEnum('cognitive_status', ['normal', 'mild_impairment', 'delirium_dementia']);
+// MS SQL doesn't support native enums, so we use CHECK constraints via varchar
+// Enum types defined as Zod schemas for validation
+export const userTypeEnum = z.enum(['patient', 'provider']);
+export const providerRoleEnum = z.enum(['physician', 'nurse', 'physical_therapist', 'mobility_tech', 'other']);
+export const levelOfCareEnum = z.enum(['icu', 'stepdown', 'ward', 'rehab']);
+export const mobilityStatusEnum = z.enum(['bedbound', 'chair_bound', 'standing_assist', 'walking_assist', 'independent']);
+export const cognitiveStatusEnum = z.enum(['normal', 'mild_impairment', 'delirium_dementia']);
 
 // Session storage table for authentication
-export const sessions = pgTable(
+export const sessions = mssqlTable(
   "sessions",
   {
-    sid: varchar("sid").primaryKey(),
-    sess: jsonb("sess").notNull(),
-    expire: timestamp("expire").notNull(),
+    sid: varchar("sid", { length: 255 }).primaryKey(),
+    sess: varchar("sess", { length: "max" }).notNull(),
+    expire: datetime2("expire").notNull(),
   },
   (table) => [index("IDX_session_expire").on(table.expire)],
 );
 
 // Users table - supports both patients and providers
-export const users = pgTable("users", {
-  id: serial("id").primaryKey(),
+export const users = mssqlTable("users", {
+  id: int("id").primaryKey({ autoIncrement: true }),
   email: varchar("email", { length: 255 }).unique().notNull(),
   firstName: varchar("first_name", { length: 100 }).notNull(),
   lastName: varchar("last_name", { length: 100 }).notNull(),
-  userType: userTypeEnum("user_type").notNull(),
+  userType: varchar("user_type", { length: 20 }).notNull(), // 'patient' or 'provider'
   dateOfBirth: date("date_of_birth"), // Required for patients
   admissionDate: date("admission_date"), // For patients
   // Provider specific fields
-  providerRole: providerRoleEnum("provider_role"), // For access control
+  providerRole: varchar("provider_role", { length: 50 }), // For access control
   credentials: varchar("credentials", { length: 100 }), // e.g., "DPT", "MD", "RN"
   specialty: varchar("specialty", { length: 100 }), // e.g., "Physical Therapy"
   licenseNumber: varchar("license_number", { length: 50 }),
   isActive: boolean("is_active").default(true),
-  createdAt: timestamp("created_at").defaultNow(),
-  updatedAt: timestamp("updated_at").defaultNow(),
+  createdAt: datetime2("created_at").default(sql`GETDATE()`),
+  updatedAt: datetime2("updated_at").default(sql`GETDATE()`),
 });
 
 // Patient profiles for risk assessment data
-export const patientProfiles = pgTable("patient_profiles", {
-  id: serial("id").primaryKey(),
-  userId: integer("user_id").references(() => users.id).notNull(),
-  age: integer("age").notNull(),
+export const patientProfiles = mssqlTable("patient_profiles", {
+  id: int("id").primaryKey({ autoIncrement: true }),
+  userId: int("user_id").references(() => users.id).notNull(),
+  age: int("age").notNull(),
   sex: varchar("sex", { length: 10 }),
   weightKg: decimal("weight_kg", { precision: 5, scale: 2 }),
   heightCm: decimal("height_cm", { precision: 5, scale: 2 }),
-  levelOfCare: levelOfCareEnum("level_of_care").notNull(),
-  mobilityStatus: mobilityStatusEnum("mobility_status").notNull(),
-  cognitiveStatus: cognitiveStatusEnum("cognitive_status").notNull(),
-  daysImmobile: integer("days_immobile").default(0),
+  levelOfCare: varchar("level_of_care", { length: 20 }).notNull(),
+  mobilityStatus: varchar("mobility_status", { length: 30 }).notNull(),
+  cognitiveStatus: varchar("cognitive_status", { length: 30 }).notNull(),
+  daysImmobile: int("days_immobile").default(0),
   admissionDiagnosis: text("admission_diagnosis"),
-  comorbidities: jsonb("comorbidities").default([]),
-  medications: jsonb("medications").default([]),
-  devices: jsonb("devices").default([]),
+  comorbidities: varchar("comorbidities", { length: "max" }).default('[]'),
+  medications: varchar("medications", { length: "max" }).default('[]'),
+  devices: varchar("devices", { length: "max" }).default('[]'),
   // Additional risk factors
   incontinent: boolean("incontinent").default(false),
   albuminLow: boolean("albumin_low").default(false),
   baselineFunction: varchar("baseline_function", { length: 20 }),
   onVteProphylaxis: boolean("on_vte_prophylaxis").default(true),
-  losExpectedDays: integer("los_expected_days"),
-  createdAt: timestamp("created_at").defaultNow(),
-  updatedAt: timestamp("updated_at").defaultNow(),
+  losExpectedDays: int("los_expected_days"),
+  createdAt: datetime2("created_at").default(sql`GETDATE()`),
+  updatedAt: datetime2("updated_at").default(sql`GETDATE()`),
 });
 
 // Provider-Patient relationships
-export const providerPatients = pgTable("provider_patients", {
-  id: serial("id").primaryKey(),
-  providerId: integer("provider_id").references(() => users.id).notNull(),
-  patientId: integer("patient_id").references(() => users.id).notNull(),
+export const providerPatients = mssqlTable("provider_patients", {
+  id: int("id").primaryKey({ autoIncrement: true }),
+  providerId: int("provider_id").references(() => users.id).notNull(),
+  patientId: int("patient_id").references(() => users.id).notNull(),
   permissionGranted: boolean("permission_granted").default(false),
-  grantedAt: timestamp("granted_at"),
+  grantedAt: datetime2("granted_at"),
   isActive: boolean("is_active").default(true),
-  createdAt: timestamp("created_at").defaultNow(),
+  createdAt: datetime2("created_at").default(sql`GETDATE()`),
 });
 
 // Risk assessments
-export const riskAssessments = pgTable("risk_assessments", {
-  id: serial("id").primaryKey(),
-  patientId: integer("patient_id").references(() => users.id).notNull(),
+export const riskAssessments = mssqlTable("risk_assessments", {
+  id: int("id").primaryKey({ autoIncrement: true }),
+  patientId: int("patient_id").references(() => users.id).notNull(),
   // Risk scores as JSON objects with detailed data
-  deconditioning: jsonb("deconditioning").notNull(),
-  vte: jsonb("vte").notNull(),
-  falls: jsonb("falls").notNull(),
-  pressure: jsonb("pressure").notNull(),
+  deconditioning: varchar("deconditioning", { length: "max" }).notNull(),
+  vte: varchar("vte", { length: "max" }).notNull(),
+  falls: varchar("falls", { length: "max" }).notNull(),
+  pressure: varchar("pressure", { length: "max" }).notNull(),
   // Mobility recommendation
-  mobilityRecommendation: jsonb("mobility_recommendation").notNull(),
+  mobilityRecommendation: varchar("mobility_recommendation", { length: "max" }).notNull(),
   // Benefit calculations
-  losData: jsonb("los_data"),
-  dischargeData: jsonb("discharge_data"),
-  readmissionData: jsonb("readmission_data"),
-  createdAt: timestamp("created_at").defaultNow(),
+  losData: varchar("los_data", { length: "max" }),
+  dischargeData: varchar("discharge_data", { length: "max" }),
+  readmissionData: varchar("readmission_data", { length: "max" }),
+  createdAt: datetime2("created_at").default(sql`GETDATE()`),
 });
 
 // Patient goals - set by providers based on risk assessment
-export const patientGoals = pgTable("patient_goals", {
-  id: serial("id").primaryKey(),
-  patientId: integer("patient_id").references(() => users.id).notNull(),
-  providerId: integer("provider_id").references(() => users.id),
+export const patientGoals = mssqlTable("patient_goals", {
+  id: int("id").primaryKey({ autoIncrement: true }),
+  patientId: int("patient_id").references(() => users.id).notNull(),
+  providerId: int("provider_id").references(() => users.id),
   goalType: varchar("goal_type", { length: 50 }).notNull(), // 'duration', 'power', 'resistance'
   targetValue: decimal("target_value", { precision: 8, scale: 2 }).notNull(),
-  currentValue: decimal("current_value", { precision: 8, scale: 2 }).default("0"),
+  currentValue: decimal("current_value", { precision: 8, scale: 2 }).default('0'),
   unit: varchar("unit", { length: 20 }).notNull(),
   label: varchar("label", { length: 100 }).notNull(),
   subtitle: varchar("subtitle", { length: 200 }),
   period: varchar("period", { length: 20 }).notNull(), // 'daily', 'session'
   aiRecommended: boolean("ai_recommended").default(false),
   isActive: boolean("is_active").default(true),
-  createdAt: timestamp("created_at").defaultNow(),
-  updatedAt: timestamp("updated_at").defaultNow(),
+  createdAt: datetime2("created_at").default(sql`GETDATE()`),
+  updatedAt: datetime2("updated_at").default(sql`GETDATE()`),
 });
 
 // Bedside Bike devices
-export const devices = pgTable("devices", {
+export const devices = mssqlTable("devices", {
   id: varchar("id", { length: 10 }).primaryKey(), // "121", "122", etc.
   name: varchar("name", { length: 100 }).notNull(), // "Bedside Bike 121"
   location: varchar("location", { length: 100 }), // "Room 305", "ICU Bay 3"
-  status: varchar("status", { length: 20 }).default("available"), // available, in_use, maintenance
-  currentPatientId: integer("current_patient_id").references(() => users.id),
-  lastUsed: timestamp("last_used"),
-  createdAt: timestamp("created_at").defaultNow(),
-  updatedAt: timestamp("updated_at").defaultNow(),
+  status: varchar("status", { length: 20 }).default('available'), // available, in_use, maintenance
+  currentPatientId: int("current_patient_id").references(() => users.id),
+  lastUsed: datetime2("last_used"),
+  createdAt: datetime2("created_at").default(sql`GETDATE()`),
+  updatedAt: datetime2("updated_at").default(sql`GETDATE()`),
 });
 
 // Device session links - which patient used which device when
-export const deviceSessions = pgTable("device_sessions", {
-  id: serial("id").primaryKey(),
-  patientId: integer("patient_id").references(() => users.id).notNull(),
+export const deviceSessions = mssqlTable("device_sessions", {
+  id: int("id").primaryKey({ autoIncrement: true }),
+  patientId: int("patient_id").references(() => users.id).notNull(),
   deviceId: varchar("device_id", { length: 10 }).references(() => devices.id).notNull(),
-  sessionId: integer("session_id").references(() => exerciseSessions.id).notNull(),
-  startedAt: timestamp("started_at").defaultNow(),
-  endedAt: timestamp("ended_at"),
+  sessionId: int("session_id").references(() => exerciseSessions.id).notNull(),
+  startedAt: datetime2("started_at").default(sql`GETDATE()`),
+  endedAt: datetime2("ended_at"),
 });
 
 // Exercise sessions
-export const exerciseSessions = pgTable("exercise_sessions", {
-  id: serial("id").primaryKey(),
-  patientId: integer("patient_id").references(() => users.id).notNull(),
+export const exerciseSessions = mssqlTable("exercise_sessions", {
+  id: int("id").primaryKey({ autoIncrement: true }),
+  patientId: int("patient_id").references(() => users.id).notNull(),
   deviceId: varchar("device_id", { length: 10 }).references(() => devices.id), // NEW: which bike was used
-  duration: integer("duration").notNull(), // in seconds
+  duration: int("duration").notNull(), // in seconds
   avgPower: decimal("avg_power", { precision: 5, scale: 2 }),
   maxPower: decimal("max_power", { precision: 5, scale: 2 }),
   resistance: decimal("resistance", { precision: 3, scale: 1 }),
   sessionDate: date("session_date").notNull(),
-  startTime: timestamp("start_time").notNull(),
-  endTime: timestamp("end_time"),
-  stopsAndStarts: integer("stops_and_starts").default(0),
+  startTime: datetime2("start_time").notNull(),
+  endTime: datetime2("end_time"),
+  stopsAndStarts: int("stops_and_starts").default(0),
   isCompleted: boolean("is_completed").default(false),
-  createdAt: timestamp("created_at").defaultNow(),
+  createdAt: datetime2("created_at").default(sql`GETDATE()`),
 });
 
 // Achievements
-export const achievements = pgTable("achievements", {
-  id: serial("id").primaryKey(),
-  patientId: integer("patient_id").references(() => users.id).notNull(),
+export const achievements = mssqlTable("achievements", {
+  id: int("id").primaryKey({ autoIncrement: true }),
+  patientId: int("patient_id").references(() => users.id).notNull(),
   type: text("type").notNull(),
   title: varchar("title", { length: 100 }).notNull(),
   description: text("description").notNull(),
-  xpReward: integer("xp_reward").default(0),
+  xpReward: int("xp_reward").default(0),
   isUnlocked: boolean("is_unlocked").default(false),
-  unlockedAt: timestamp("unlocked_at"),
-  createdAt: timestamp("created_at").defaultNow(),
+  unlockedAt: datetime2("unlocked_at"),
+  createdAt: datetime2("created_at").default(sql`GETDATE()`),
 });
 
 // Patient stats
-export const patientStats = pgTable("patient_stats", {
-  id: serial("id").primaryKey(),
-  patientId: integer("patient_id").references(() => users.id).notNull(),
-  level: integer("level").default(1),
-  xp: integer("xp").default(0),
-  totalSessions: integer("total_sessions").default(0),
-  totalDuration: integer("total_duration").default(0), // in seconds
+export const patientStats = mssqlTable("patient_stats", {
+  id: int("id").primaryKey({ autoIncrement: true }),
+  patientId: int("patient_id").references(() => users.id).notNull(),
+  level: int("level").default(1),
+  xp: int("xp").default(0),
+  totalSessions: int("total_sessions").default(0),
+  totalDuration: int("total_duration").default(0), // in seconds
   avgDailyDuration: real("avg_daily_duration").default(0),
-  consistencyStreak: integer("consistency_streak").default(0),
-  lastSessionDate: timestamp("last_session_date"),
-  updatedAt: timestamp("updated_at").defaultNow(),
+  consistencyStreak: int("consistency_streak").default(0),
+  lastSessionDate: datetime2("last_session_date"),
+  updatedAt: datetime2("updated_at").default(sql`GETDATE()`),
 });
 
 // Kudos & Nudge Wall Tables
-export const feedItems = pgTable("feed_items", {
-  id: serial("id").primaryKey(),
-  patientId: integer("patient_id").references(() => users.id).notNull(),
+export const feedItems = mssqlTable("feed_items", {
+  id: int("id").primaryKey({ autoIncrement: true }),
+  patientId: int("patient_id").references(() => users.id).notNull(),
   displayName: varchar("display_name", { length: 50 }).notNull(),
-  avatarEmoji: varchar("avatar_emoji", { length: 10 }).default("👤"),
+  avatarEmoji: varchar("avatar_emoji", { length: 10 }).default('👤'),
   eventType: varchar("event_type", { length: 50 }).notNull(), // goal_completed, session_started, session_missed, streak_extended
   templateId: varchar("template_id", { length: 50 }).notNull(),
   message: text("message").notNull(),
-  metadata: jsonb("metadata").default({}), // watts, minutes, streak count etc
-  unit: varchar("unit", { length: 50 }).default("general"), // hospital unit for cohort filtering
+  metadata: varchar("metadata", { length: "max" }).default('{}'), // watts, minutes, streak count etc
+  unit: varchar("unit", { length: 50 }).default('general'), // hospital unit for cohort filtering
   isVisible: boolean("is_visible").default(true),
-  createdAt: timestamp("created_at").defaultNow(),
+  createdAt: datetime2("created_at").default(sql`GETDATE()`),
 });
 
-export const nudgeMessages = pgTable("nudge_messages", {
-  id: serial("id").primaryKey(),
-  senderId: integer("sender_id").references(() => users.id).notNull(),
-  recipientId: integer("recipient_id").references(() => users.id).notNull(),
-  feedItemId: integer("feed_item_id").references(() => feedItems.id),
+export const nudgeMessages = mssqlTable("nudge_messages", {
+  id: int("id").primaryKey({ autoIncrement: true }),
+  senderId: int("sender_id").references(() => users.id).notNull(),
+  recipientId: int("recipient_id").references(() => users.id).notNull(),
+  feedItemId: int("feed_item_id").references(() => feedItems.id),
   templateId: varchar("template_id", { length: 50 }).notNull(),
   message: text("message").notNull(),
   isRead: boolean("is_read").default(false),
-  createdAt: timestamp("created_at").defaultNow(),
+  createdAt: datetime2("created_at").default(sql`GETDATE()`),
 });
 
-export const kudosReactions = pgTable("kudos_reactions", {
-  id: serial("id").primaryKey(),
-  patientId: integer("patient_id").references(() => users.id).notNull(),
-  feedItemId: integer("feed_item_id").references(() => feedItems.id).notNull(),
+export const kudosReactions = mssqlTable("kudos_reactions", {
+  id: int("id").primaryKey({ autoIncrement: true }),
+  patientId: int("patient_id").references(() => users.id).notNull(),
+  feedItemId: int("feed_item_id").references(() => feedItems.id).notNull(),
   reactionType: varchar("reaction_type", { length: 20 }).notNull(), // 👏, 💪, 🎉, ❤️
-  createdAt: timestamp("created_at").defaultNow(),
+  createdAt: datetime2("created_at").default(sql`GETDATE()`),
 });
 
-export const patientPreferences = pgTable("patient_preferences", {
-  id: serial("id").primaryKey(),
-  patientId: integer("patient_id").references(() => users.id).notNull(),
+export const patientPreferences = mssqlTable("patient_preferences", {
+  id: int("id").primaryKey({ autoIncrement: true }),
+  patientId: int("patient_id").references(() => users.id).notNull(),
   displayName: varchar("display_name", { length: 50 }).notNull(),
-  avatarEmoji: varchar("avatar_emoji", { length: 10 }).default("👤"),
+  avatarEmoji: varchar("avatar_emoji", { length: 10 }).default('👤'),
   optInKudos: boolean("opt_in_kudos").default(false),
   optInNudges: boolean("opt_in_nudges").default(false),
-  unit: varchar("unit", { length: 50 }).default("general"),
-  createdAt: timestamp("created_at").defaultNow(),
-  updatedAt: timestamp("updated_at").defaultNow(),
+  unit: varchar("unit", { length: 50 }).default('general'),
+  createdAt: datetime2("created_at").default(sql`GETDATE()`),
+  updatedAt: datetime2("updated_at").default(sql`GETDATE()`),
 });
 
 // Authentication schemas

@@ -1,9 +1,6 @@
-import { Pool, neonConfig } from '@neondatabase/serverless';
-import { drizzle } from 'drizzle-orm/neon-serverless';
-import ws from "ws";
+import sql from 'mssql';
+import { drizzle } from 'drizzle-orm/mssql';
 import * as schema from "@shared/schema";
-
-neonConfig.webSocketConstructor = ws;
 
 if (!process.env.DATABASE_URL) {
   throw new Error(
@@ -11,5 +8,26 @@ if (!process.env.DATABASE_URL) {
   );
 }
 
-export const pool = new Pool({ connectionString: process.env.DATABASE_URL });
-export const db = drizzle({ client: pool, schema });
+// Azure SQL connection configuration
+const config: sql.config = {
+  connectionString: process.env.DATABASE_URL,
+  options: {
+    encrypt: true, // Required for Azure SQL
+    trustServerCertificate: false, // Azure SQL uses valid certificates
+  },
+  pool: {
+    max: 10,
+    min: 0,
+    idleTimeoutMillis: 30000,
+  },
+};
+
+export const pool = new sql.ConnectionPool(config);
+
+// Initialize connection pool
+pool.connect().catch(err => {
+  console.error('Database connection failed:', err);
+  process.exit(1);
+});
+
+export const db = drizzle(pool, { schema });
