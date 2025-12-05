@@ -5,6 +5,9 @@ server/public
 vite.config.ts.*
 *.tar.gz
 
+# Local SQLite database
+local.db
+
 # Environment variables with sensitive data
 .env
 .env.local
