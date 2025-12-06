@@ -15,6 +15,7 @@ import {
   createLimiter,
   kudosLimiter
 } from "./rate-limit";
+import { registerPersonalizationRoutes } from "./personalization/routes";
 import { 
   loginSchema,
   patientRegistrationSchema,
@@ -1728,6 +1729,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.status(500).json({ error: "Failed to fetch portable session data" });
     }
   });
+
+  // Register Personalization Routes (Tier 1 & Tier 2 Patent Features)
+  registerPersonalizationRoutes(app);
 
   const httpServer = createServer(app);
   return httpServer;
