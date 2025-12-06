@@ -245,6 +245,36 @@ export const alerts = sqliteTable("alerts", {
   createdAt: integer("created_at", { mode: 'timestamp' }).default(sql`(unixepoch())`),
 });
 
+// Clinical protocols - Evidence-based exercise prescriptions
+export const clinicalProtocols = sqliteTable("clinical_protocols", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  name: text("name").notNull(),
+  indication: text("indication").notNull(), // Clinical indication (e.g., "Total Knee Replacement")
+  contraindications: text("contraindications"), // JSON array of contraindications
+  diagnosisCodes: text("diagnosis_codes"), // JSON array of ICD-10 codes
+  protocolData: text("protocol_data").notNull(), // JSON object with phases
+  evidenceCitation: text("evidence_citation"), // Research citation
+  isActive: integer("is_active", { mode: 'boolean' }).default(true),
+  createdAt: integer("created_at", { mode: 'timestamp' }).default(sql`(unixepoch())`),
+  updatedAt: integer("updated_at", { mode: 'timestamp' }).default(sql`(unixepoch())`),
+});
+
+// Patient protocol assignments - Track which protocol a patient is following
+export const patientProtocolAssignments = sqliteTable("patient_protocol_assignments", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  patientId: integer("patient_id").notNull().references(() => users.id),
+  protocolId: integer("protocol_id").notNull().references(() => clinicalProtocols.id),
+  assignedBy: integer("assigned_by").notNull().references(() => users.id),
+  currentPhase: text("current_phase"), // e.g., "POD 0-2", "POD 3-7"
+  startDate: integer("start_date", { mode: 'timestamp' }).notNull(),
+  progressionDate: integer("progression_date", { mode: 'timestamp' }), // When they moved to current phase
+  completionDate: integer("completion_date", { mode: 'timestamp' }),
+  status: text("status").notNull(), // 'active', 'completed', 'discontinued'
+  notes: text("notes"),
+  createdAt: integer("created_at", { mode: 'timestamp' }).default(sql`(unixepoch())`),
+  updatedAt: integer("updated_at", { mode: 'timestamp' }).default(sql`(unixepoch())`),
+});
+
 // Validation schemas (reuse from main schema)
 export const loginSchema = z.object({
   email: z.string().email("Please enter a valid email address"),

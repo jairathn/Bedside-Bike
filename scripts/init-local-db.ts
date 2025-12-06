@@ -18,6 +18,8 @@ console.log('🗄️  Initializing local SQLite database...\n');
 
 // Drop all tables (in reverse dependency order)
 const dropTables = `
+DROP TABLE IF EXISTS patient_protocol_assignments;
+DROP TABLE IF EXISTS clinical_protocols;
 DROP TABLE IF EXISTS kudos_reactions;
 DROP TABLE IF EXISTS nudge_messages;
 DROP TABLE IF EXISTS feed_items;
@@ -236,6 +238,36 @@ CREATE TABLE alerts (
     acknowledged_at INTEGER,
     acknowledged_by INTEGER REFERENCES users(id),
     created_at INTEGER DEFAULT (unixepoch())
+);
+
+-- Clinical protocols - Evidence-based exercise prescriptions
+CREATE TABLE clinical_protocols (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT NOT NULL,
+    indication TEXT NOT NULL,
+    contraindications TEXT,
+    diagnosis_codes TEXT,
+    protocol_data TEXT NOT NULL,
+    evidence_citation TEXT,
+    is_active INTEGER DEFAULT 1,
+    created_at INTEGER DEFAULT (unixepoch()),
+    updated_at INTEGER DEFAULT (unixepoch())
+);
+
+-- Patient protocol assignments
+CREATE TABLE patient_protocol_assignments (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    patient_id INTEGER NOT NULL REFERENCES users(id),
+    protocol_id INTEGER NOT NULL REFERENCES clinical_protocols(id),
+    assigned_by INTEGER NOT NULL REFERENCES users(id),
+    current_phase TEXT,
+    start_date INTEGER NOT NULL,
+    progression_date INTEGER,
+    completion_date INTEGER,
+    status TEXT NOT NULL CHECK(status IN ('active', 'completed', 'discontinued')),
+    notes TEXT,
+    created_at INTEGER DEFAULT (unixepoch()),
+    updated_at INTEGER DEFAULT (unixepoch())
 );
 
 -- Feed items
