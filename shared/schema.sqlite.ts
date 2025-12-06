@@ -136,13 +136,22 @@ export const exerciseSessions = sqliteTable("exercise_sessions", {
   duration: integer("duration").notNull(),
   avgPower: real("avg_power"),
   maxPower: real("max_power"),
+  avgRpm: real("avg_rpm"),
   resistance: real("resistance"),
   sessionDate: text("session_date").notNull(), // ISO date string
   startTime: integer("start_time", { mode: 'timestamp' }).notNull(),
   endTime: integer("end_time", { mode: 'timestamp' }),
   stopsAndStarts: integer("stops_and_starts").default(0),
   isCompleted: integer("is_completed", { mode: 'boolean' }).default(false),
+  // Real-time tracking fields (updated via WebSocket)
+  currentRpm: real("current_rpm"),
+  currentPower: real("current_power"),
+  distanceMeters: real("distance_meters"),
+  durationSeconds: integer("duration_seconds"),
+  currentStatus: text("current_status"), // 'active' | 'paused' | 'completed'
+  targetDuration: integer("target_duration"), // Target duration in seconds
   createdAt: integer("created_at", { mode: 'timestamp' }).default(sql`(unixepoch())`),
+  updatedAt: integer("updated_at", { mode: 'timestamp' }).default(sql`(unixepoch())`),
 });
 
 // Achievements
@@ -217,6 +226,51 @@ export const patientPreferences = sqliteTable("patient_preferences", {
   optInKudos: integer("opt_in_kudos", { mode: 'boolean' }).default(false),
   optInNudges: integer("opt_in_nudges", { mode: 'boolean' }).default(false),
   unit: text("unit").default('general'),
+  createdAt: integer("created_at", { mode: 'timestamp' }).default(sql`(unixepoch())`),
+  updatedAt: integer("updated_at", { mode: 'timestamp' }).default(sql`(unixepoch())`),
+});
+
+// Alerts for smart monitoring system
+export const alerts = sqliteTable("alerts", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  patientId: integer("patient_id").notNull().references(() => users.id),
+  type: text("type").notNull(), // 'session_incomplete', 'no_activity_24h', etc.
+  priority: text("priority").notNull(), // 'low', 'medium', 'high', 'critical'
+  message: text("message").notNull(),
+  actionRequired: text("action_required").notNull(),
+  metadata: text("metadata"), // JSON as text
+  triggeredAt: integer("triggered_at", { mode: 'timestamp' }).notNull(),
+  acknowledgedAt: integer("acknowledged_at", { mode: 'timestamp' }),
+  acknowledgedBy: integer("acknowledged_by").references(() => users.id),
+  createdAt: integer("created_at", { mode: 'timestamp' }).default(sql`(unixepoch())`),
+});
+
+// Clinical protocols - Evidence-based exercise prescriptions
+export const clinicalProtocols = sqliteTable("clinical_protocols", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  name: text("name").notNull(),
+  indication: text("indication").notNull(), // Clinical indication (e.g., "Total Knee Replacement")
+  contraindications: text("contraindications"), // JSON array of contraindications
+  diagnosisCodes: text("diagnosis_codes"), // JSON array of ICD-10 codes
+  protocolData: text("protocol_data").notNull(), // JSON object with phases
+  evidenceCitation: text("evidence_citation"), // Research citation
+  isActive: integer("is_active", { mode: 'boolean' }).default(true),
+  createdAt: integer("created_at", { mode: 'timestamp' }).default(sql`(unixepoch())`),
+  updatedAt: integer("updated_at", { mode: 'timestamp' }).default(sql`(unixepoch())`),
+});
+
+// Patient protocol assignments - Track which protocol a patient is following
+export const patientProtocolAssignments = sqliteTable("patient_protocol_assignments", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  patientId: integer("patient_id").notNull().references(() => users.id),
+  protocolId: integer("protocol_id").notNull().references(() => clinicalProtocols.id),
+  assignedBy: integer("assigned_by").notNull().references(() => users.id),
+  currentPhase: text("current_phase"), // e.g., "POD 0-2", "POD 3-7"
+  startDate: integer("start_date", { mode: 'timestamp' }).notNull(),
+  progressionDate: integer("progression_date", { mode: 'timestamp' }), // When they moved to current phase
+  completionDate: integer("completion_date", { mode: 'timestamp' }),
+  status: text("status").notNull(), // 'active', 'completed', 'discontinued'
+  notes: text("notes"),
   createdAt: integer("created_at", { mode: 'timestamp' }).default(sql`(unixepoch())`),
   updatedAt: integer("updated_at", { mode: 'timestamp' }).default(sql`(unixepoch())`),
 });

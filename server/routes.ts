@@ -8,6 +8,13 @@ import { eq, and } from "drizzle-orm";
 import { calculateRisks } from "./risk-calculator";
 // Removed duplicate calculator - using only central risk calculator
 import { kudosService } from "./kudos-service";
+import {
+  apiLimiter,
+  authLimiter,
+  riskAssessmentLimiter,
+  createLimiter,
+  kudosLimiter
+} from "./rate-limit";
 import { 
   loginSchema,
   patientRegistrationSchema,
@@ -26,14 +33,54 @@ import {
 export async function registerRoutes(app: Express): Promise<Server> {
   
   // Authentication system already configured
-  
+
   // Seed initial provider data
   await seedInitialData();
+
+  // Health Check Endpoints
+
+  // Basic health check - returns 200 OK if server is running
+  app.get("/health", (req, res) => {
+    res.status(200).json({
+      status: "healthy",
+      timestamp: new Date().toISOString(),
+      uptime: process.uptime(),
+      environment: process.env.NODE_ENV || "development"
+    });
+  });
+
+  // Detailed health check - includes database connectivity
+  app.get("/health/detailed", async (req, res) => {
+    const healthCheck = {
+      status: "healthy",
+      timestamp: new Date().toISOString(),
+      uptime: process.uptime(),
+      environment: process.env.NODE_ENV || "development",
+      database: "unknown",
+      memory: {
+        used: Math.round(process.memoryUsage().heapUsed / 1024 / 1024),
+        total: Math.round(process.memoryUsage().heapTotal / 1024 / 1024),
+        unit: "MB"
+      }
+    };
+
+    // Check database connectivity
+    try {
+      await db.select().from(users).limit(1);
+      healthCheck.database = "connected";
+    } catch (error) {
+      healthCheck.status = "degraded";
+      healthCheck.database = "disconnected";
+    }
+
+    const statusCode = healthCheck.status === "healthy" ? 200 : 503;
+    res.status(statusCode).json(healthCheck);
+  });
 
   // Auth Routes
 
   // Patient/Provider Registration
-  app.post("/api/auth/register", async (req, res) => {
+  app.post("/api/auth/register", authLimiter, async (req, res) => {
     try {
       const { userType } = req.body;
       
@@ -71,7 +118,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Patient/Provider Login
-  app.post("/api/auth/login", async (req, res) => {
+  app.post("/api/auth/login", authLimiter, async (req, res) => {
     try {
       // Legacy patient login support (name + DOB)
       if (req.body.firstName && req.body.lastName && req.body.dateOfBirth && !req.body.email) {
@@ -296,7 +343,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Push goals from risk assessment (Provider-only endpoint)
-  app.post("/api/patients/:id/goals/from-assessment", async (req, res) => {
+  app.post("/api/patients/:id/goals/from-assessment", createLimiter, async (req, res) => {
     try {
       const patientId = parseInt(req.params.id);
       const { mobilityRecommendation } = req.body;
@@ -330,7 +377,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Session Routes
 
   // Create exercise session
-  app.post("/api/sessions", async (req, res) => {
+  app.post("/api/sessions", createLimiter, async (req, res) => {
     try {
       const sessionData = insertExerciseSessionSchema.parse(req.body) as InsertExerciseSession;
       const session = await storage.createSession(sessionData);
@@ -362,7 +409,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Goal Routes
 
   // Create goal (providers only)
-  app.post("/api/goals", async (req, res) => {
+  app.post("/api/goals", createLimiter, async (req, res) => {
     try {
       const goalData = insertPatientGoalSchema.parse(req.body) as InsertPatientGoal;
       const goal = await storage.createGoal(goalData);
@@ -402,7 +449,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Provider saves goals to patient profile
-  app.post("/api/patients/:id/goals", async (req, res) => {
+  app.post("/api/patients/:id/goals", createLimiter, async (req, res) => {
     try {
       const patientId = parseInt(req.params.id);
       const { goals, providerId } = req.body;
@@ -485,7 +532,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Risk Assessment Routes
 
   // Process text input using AI
-  app.post("/api/risk-assessment/process-text", async (req, res) => {
+  app.post("/api/risk-assessment/process-text", riskAssessmentLimiter, async (req, res) => {
     try {
       const { field, text } = req.body;
       
@@ -511,7 +558,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post("/api/risk-assessment", async (req, res) => {
+  app.post("/api/risk-assessment", riskAssessmentLimiter, async (req, res) => {
     try {
       console.log("Risk assessment request body:", JSON.stringify(req.body, null, 2));
       const riskData = riskAssessmentInputSchema.parse(req.body) as RiskAssessmentInput;
@@ -573,7 +620,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Anonymous risk assessment endpoint - same calculation but no data storage
-  app.post("/api/anonymous-risk-assessment", async (req, res) => {
+  app.post("/api/anonymous-risk-assessment", riskAssessmentLimiter, async (req, res) => {
     try {
       console.log("Anonymous risk assessment request body:", JSON.stringify(req.body, null, 2));
       const riskData = riskAssessmentInputSchema.parse(req.body) as RiskAssessmentInput;
@@ -761,7 +808,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Add reaction to feed item
-  app.post("/api/kudos/react", async (req, res) => {
+  app.post("/api/kudos/react", kudosLimiter, async (req, res) => {
     try {
       const patientId = parseInt(req.query.patientId as string) || 4; // Default to Neil for testing
       const { feedItemId, reactionType } = req.body;
@@ -774,7 +821,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Send nudge
-  app.post("/api/kudos/nudge", async (req, res) => {
+  app.post("/api/kudos/nudge", kudosLimiter, async (req, res) => {
     try {
       const senderId = parseInt(req.query.patientId as string) || 4; // Default to Neil for testing
       const { recipientId, templateType, metadata } = req.body;
@@ -810,6 +857,402 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Get nudge targets error:", error);
       res.status(500).json({ error: "Failed to get nudge targets" });
+    }
+  });
+
+  // Protocol Engine Routes
+
+  // Get all active protocols
+  app.get("/api/protocols", async (req, res) => {
+    try {
+      const { protocolEngine } = await import('./protocols/protocol-engine');
+      const protocols = await protocolEngine.getAllProtocols();
+      res.json(protocols);
+    } catch (error) {
+      console.error("Get protocols error:", error);
+      res.status(500).json({ error: "Failed to get protocols" });
+    }
+  });
+
+  // Get specific protocol by ID
+  app.get("/api/protocols/:id", async (req, res) => {
+    try {
+      const protocolId = parseInt(req.params.id);
+      const { protocolEngine } = await import('./protocols/protocol-engine');
+      const protocol = await protocolEngine.getProtocolById(protocolId);
+
+      if (!protocol) {
+        return res.status(404).json({ error: "Protocol not found" });
+      }
+
+      res.json(protocol);
+    } catch (error) {
+      console.error("Get protocol error:", error);
+      res.status(500).json({ error: "Failed to get protocol" });
+    }
+  });
+
+  // Match protocol for patient based on diagnosis
+  app.post("/api/protocols/match", async (req, res) => {
+    try {
+      const { diagnosis, comorbidities = [], diagnosisCodes = [] } = req.body;
+
+      if (!diagnosis && diagnosisCodes.length === 0) {
+        return res.status(400).json({ error: "Diagnosis or diagnosis codes required" });
+      }
+
+      const { protocolEngine } = await import('./protocols/protocol-engine');
+      const protocol = await protocolEngine.matchProtocol(
+        diagnosis || '',
+        comorbidities,
+        diagnosisCodes
+      );
+
+      if (!protocol) {
+        return res.status(404).json({
+          error: "No matching protocol found",
+          suggestion: "Consider using a general medical/surgical protocol or consult with PT"
+        });
+      }
+
+      res.json(protocol);
+    } catch (error) {
+      console.error("Protocol matching error:", error);
+      res.status(500).json({ error: "Failed to match protocol" });
+    }
+  });
+
+  // Assign protocol to patient
+  app.post("/api/patients/:patientId/protocol", createLimiter, async (req, res) => {
+    try {
+      const patientId = parseInt(req.params.patientId);
+      const { protocolId, assignedBy, startPhase } = req.body;
+
+      if (!protocolId || !assignedBy) {
+        return res.status(400).json({ error: "Protocol ID and assignedBy (provider ID) required" });
+      }
+
+      const { protocolEngine } = await import('./protocols/protocol-engine');
+      const assignment = await protocolEngine.assignProtocol(
+        patientId,
+        protocolId,
+        assignedBy,
+        startPhase
+      );
+
+      if (!assignment) {
+        return res.status(500).json({ error: "Failed to assign protocol" });
+      }
+
+      res.json(assignment);
+    } catch (error) {
+      console.error("Protocol assignment error:", error);
+      res.status(500).json({ error: "Failed to assign protocol" });
+    }
+  });
+
+  // Get patient's current protocol assignment
+  app.get("/api/patients/:patientId/protocol", async (req, res) => {
+    try {
+      const patientId = parseInt(req.params.patientId);
+      const { protocolEngine } = await import('./protocols/protocol-engine');
+      const assignment = await protocolEngine.getPatientAssignment(patientId);
+
+      if (!assignment) {
+        return res.status(404).json({ error: "No active protocol for this patient" });
+      }
+
+      res.json(assignment);
+    } catch (error) {
+      console.error("Get patient protocol error:", error);
+      res.status(500).json({ error: "Failed to get patient protocol" });
+    }
+  });
+
+  // Get current exercise prescription for patient
+  app.get("/api/patients/:patientId/prescription", async (req, res) => {
+    try {
+      const patientId = parseInt(req.params.patientId);
+      const { protocolEngine } = await import('./protocols/protocol-engine');
+      const prescription = await protocolEngine.getCurrentPrescription(patientId);
+
+      if (!prescription) {
+        return res.status(404).json({
+          error: "No active prescription",
+          suggestion: "Assign a protocol to this patient first"
+        });
+      }
+
+      res.json(prescription);
+    } catch (error) {
+      console.error("Get prescription error:", error);
+      res.status(500).json({ error: "Failed to get prescription" });
+    }
+  });
+
+  // Check if patient should progress to next phase
+  app.get("/api/patients/:patientId/protocol/progression", async (req, res) => {
+    try {
+      const patientId = parseInt(req.params.patientId);
+      const { protocolEngine } = await import('./protocols/protocol-engine');
+      const progressionCheck = await protocolEngine.checkProgressionCriteria(patientId);
+
+      res.json(progressionCheck);
+    } catch (error) {
+      console.error("Progression check error:", error);
+      res.status(500).json({ error: "Failed to check progression criteria" });
+    }
+  });
+
+  // Advance patient to next protocol phase
+  app.post("/api/patients/:patientId/protocol/progress", createLimiter, async (req, res) => {
+    try {
+      const patientId = parseInt(req.params.patientId);
+      const { protocolEngine } = await import('./protocols/protocol-engine');
+      const success = await protocolEngine.progressToNextPhase(patientId);
+
+      if (!success) {
+        return res.status(400).json({
+          error: "Cannot progress patient",
+          suggestion: "Patient may not meet progression criteria yet"
+        });
+      }
+
+      // Get updated assignment
+      const updatedAssignment = await protocolEngine.getPatientAssignment(patientId);
+      res.json(updatedAssignment);
+    } catch (error) {
+      console.error("Protocol progression error:", error);
+      res.status(500).json({ error: "Failed to progress patient" });
+    }
+  });
+
+  // Clinical Documentation Routes
+
+  // Generate nursing shift summary report (PDF)
+  app.post("/api/reports/shift-summary", createLimiter, async (req, res) => {
+    try {
+      const { patientId, startTime, endTime } = req.body;
+
+      if (!patientId || !startTime || !endTime) {
+        return res.status(400).json({
+          error: "Missing required fields: patientId, startTime, endTime"
+        });
+      }
+
+      const { reportGenerator } = await import('./reports/report-generator');
+      const pdfBuffer = await reportGenerator.generateShiftReport({
+        patientId: parseInt(patientId),
+        startTime: new Date(startTime),
+        endTime: new Date(endTime),
+        includeRiskAssessment: true,
+        includeProtocol: true
+      });
+
+      // Set headers for PDF download
+      res.setHeader('Content-Type', 'application/pdf');
+      res.setHeader('Content-Disposition', `attachment; filename="shift-report-patient-${patientId}.pdf"`);
+      res.setHeader('Content-Length', pdfBuffer.length);
+
+      res.send(pdfBuffer);
+    } catch (error: any) {
+      console.error("Shift report generation error:", error);
+      res.status(500).json({
+        error: "Failed to generate shift report",
+        details: error.message
+      });
+    }
+  });
+
+  // Generate PT progress note (SOAP format)
+  app.post("/api/reports/pt-progress-note", createLimiter, async (req, res) => {
+    try {
+      const { patientId, sessionIds, subjective, additionalNotes } = req.body;
+
+      if (!patientId || !sessionIds || !Array.isArray(sessionIds) || sessionIds.length === 0) {
+        return res.status(400).json({
+          error: "Missing required fields: patientId, sessionIds (array of session IDs)"
+        });
+      }
+
+      const { reportGenerator } = await import('./reports/report-generator');
+      const soapNote = await reportGenerator.generatePTProgressNote({
+        patientId: parseInt(patientId),
+        sessionIds: sessionIds.map((id: any) => parseInt(id)),
+        subjective,
+        additionalNotes
+      });
+
+      res.json({
+        note: soapNote,
+        format: 'SOAP',
+        generatedAt: new Date().toISOString()
+      });
+    } catch (error: any) {
+      console.error("PT progress note generation error:", error);
+      res.status(500).json({
+        error: "Failed to generate PT progress note",
+        details: error.message
+      });
+    }
+  });
+
+  // Get available reports for patient
+  app.get("/api/patients/:patientId/reports", async (req, res) => {
+    try {
+      const patientId = parseInt(req.params.patientId);
+
+      // Get session count to determine if reports can be generated
+      const sessions = await storage.getSessionsByPatient(patientId);
+
+      const availableReports = [
+        {
+          type: 'shift_summary',
+          name: 'Nursing Shift Summary',
+          description: 'Comprehensive shift report with mobility activity, risk status, and alerts',
+          format: 'PDF',
+          requiresInput: ['startTime', 'endTime'],
+          available: sessions.length > 0
+        },
+        {
+          type: 'pt_progress_note',
+          name: 'PT Progress Note',
+          description: 'SOAP format progress note for physical therapy documentation',
+          format: 'Text',
+          requiresInput: ['sessionIds'],
+          available: sessions.length > 0
+        }
+      ];
+
+      res.json({
+        patientId,
+        totalSessions: sessions.length,
+        availableReports
+      });
+    } catch (error) {
+      console.error("Get available reports error:", error);
+      res.status(500).json({ error: "Failed to get available reports" });
+    }
+  });
+
+  // Smart Alert System Routes
+
+  // Get all unacknowledged alerts (nurse monitoring dashboard)
+  app.get("/api/alerts", async (req, res) => {
+    try {
+      const { alertEngine } = await import('./alerts/alert-engine');
+      const alerts = await alertEngine.getAllUnacknowledgedAlerts();
+      res.json(alerts);
+    } catch (error) {
+      console.error("Get alerts error:", error);
+      res.status(500).json({ error: "Failed to get alerts" });
+    }
+  });
+
+  // Get alerts for specific patient
+  app.get("/api/patients/:patientId/alerts", async (req, res) => {
+    try {
+      const patientId = parseInt(req.params.patientId);
+      const includeAcknowledged = req.query.includeAcknowledged === 'true';
+
+      const { alertEngine } = await import('./alerts/alert-engine');
+      const alerts = await alertEngine.getPatientAlerts(patientId, includeAcknowledged);
+
+      res.json(alerts);
+    } catch (error) {
+      console.error("Get patient alerts error:", error);
+      res.status(500).json({ error: "Failed to get patient alerts" });
+    }
+  });
+
+  // Get alert summary statistics
+  app.get("/api/alerts/summary", async (req, res) => {
+    try {
+      const patientId = req.query.patientId ? parseInt(req.query.patientId as string) : undefined;
+
+      const { alertEngine } = await import('./alerts/alert-engine');
+      const summary = await alertEngine.getAlertSummary(patientId);
+
+      res.json(summary);
+    } catch (error) {
+      console.error("Get alert summary error:", error);
+      res.status(500).json({ error: "Failed to get alert summary" });
+    }
+  });
+
+  // Acknowledge an alert
+  app.post("/api/alerts/:alertId/acknowledge", createLimiter, async (req, res) => {
+    try {
+      const alertId = parseInt(req.params.alertId);
+      const { acknowledgedBy } = req.body;
+
+      if (!acknowledgedBy) {
+        return res.status(400).json({ error: "acknowledgedBy (provider ID) is required" });
+      }
+
+      const { alertEngine } = await import('./alerts/alert-engine');
+      const success = await alertEngine.acknowledgeAlert(alertId, acknowledgedBy);
+
+      if (!success) {
+        return res.status(500).json({ error: "Failed to acknowledge alert" });
+      }
+
+      res.json({ success: true, alertId, acknowledgedBy });
+    } catch (error) {
+      console.error("Acknowledge alert error:", error);
+      res.status(500).json({ error: "Failed to acknowledge alert" });
+    }
+  });
+
+  // Check inactivity alerts for all patients (run periodically)
+  app.post("/api/alerts/check-inactivity", createLimiter, async (req, res) => {
+    try {
+      const { alertEngine } = await import('./alerts/alert-engine');
+      const alerts = await alertEngine.checkInactivityAlerts();
+
+      res.json({
+        alertsGenerated: alerts.length,
+        alerts
+      });
+    } catch (error) {
+      console.error("Check inactivity error:", error);
+      res.status(500).json({ error: "Failed to check inactivity" });
+    }
+  });
+
+  // Check protocol compliance for patient
+  app.post("/api/patients/:patientId/alerts/check-compliance", createLimiter, async (req, res) => {
+    try {
+      const patientId = parseInt(req.params.patientId);
+
+      const { alertEngine } = await import('./alerts/alert-engine');
+      const alert = await alertEngine.checkProtocolCompliance(patientId);
+
+      res.json({
+        alert: alert || null,
+        complianceChecked: true
+      });
+    } catch (error) {
+      console.error("Check compliance error:", error);
+      res.status(500).json({ error: "Failed to check protocol compliance" });
+    }
+  });
+
+  // Run all alert checks for a patient
+  app.post("/api/patients/:patientId/alerts/check-all", createLimiter, async (req, res) => {
+    try {
+      const patientId = parseInt(req.params.patientId);
+
+      const { alertEngine } = await import('./alerts/alert-engine');
+      const alerts = await alertEngine.runAllChecks(patientId);
+
+      res.json({
+        alertsGenerated: alerts.length,
+        alerts
+      });
+    } catch (error) {
+      console.error("Run all checks error:", error);
+      res.status(500).json({ error: "Failed to run all alert checks" });
     }
   });
 
