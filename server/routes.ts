@@ -860,6 +860,173 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Protocol Engine Routes
+
+  // Get all active protocols
+  app.get("/api/protocols", async (req, res) => {
+    try {
+      const { protocolEngine } = await import('./protocols/protocol-engine');
+      const protocols = await protocolEngine.getAllProtocols();
+      res.json(protocols);
+    } catch (error) {
+      console.error("Get protocols error:", error);
+      res.status(500).json({ error: "Failed to get protocols" });
+    }
+  });
+
+  // Get specific protocol by ID
+  app.get("/api/protocols/:id", async (req, res) => {
+    try {
+      const protocolId = parseInt(req.params.id);
+      const { protocolEngine } = await import('./protocols/protocol-engine');
+      const protocol = await protocolEngine.getProtocolById(protocolId);
+
+      if (!protocol) {
+        return res.status(404).json({ error: "Protocol not found" });
+      }
+
+      res.json(protocol);
+    } catch (error) {
+      console.error("Get protocol error:", error);
+      res.status(500).json({ error: "Failed to get protocol" });
+    }
+  });
+
+  // Match protocol for patient based on diagnosis
+  app.post("/api/protocols/match", async (req, res) => {
+    try {
+      const { diagnosis, comorbidities = [], diagnosisCodes = [] } = req.body;
+
+      if (!diagnosis && diagnosisCodes.length === 0) {
+        return res.status(400).json({ error: "Diagnosis or diagnosis codes required" });
+      }
+
+      const { protocolEngine } = await import('./protocols/protocol-engine');
+      const protocol = await protocolEngine.matchProtocol(
+        diagnosis || '',
+        comorbidities,
+        diagnosisCodes
+      );
+
+      if (!protocol) {
+        return res.status(404).json({
+          error: "No matching protocol found",
+          suggestion: "Consider using a general medical/surgical protocol or consult with PT"
+        });
+      }
+
+      res.json(protocol);
+    } catch (error) {
+      console.error("Protocol matching error:", error);
+      res.status(500).json({ error: "Failed to match protocol" });
+    }
+  });
+
+  // Assign protocol to patient
+  app.post("/api/patients/:patientId/protocol", createLimiter, async (req, res) => {
+    try {
+      const patientId = parseInt(req.params.patientId);
+      const { protocolId, assignedBy, startPhase } = req.body;
+
+      if (!protocolId || !assignedBy) {
+        return res.status(400).json({ error: "Protocol ID and assignedBy (provider ID) required" });
+      }
+
+      const { protocolEngine } = await import('./protocols/protocol-engine');
+      const assignment = await protocolEngine.assignProtocol(
+        patientId,
+        protocolId,
+        assignedBy,
+        startPhase
+      );
+
+      if (!assignment) {
+        return res.status(500).json({ error: "Failed to assign protocol" });
+      }
+
+      res.json(assignment);
+    } catch (error) {
+      console.error("Protocol assignment error:", error);
+      res.status(500).json({ error: "Failed to assign protocol" });
+    }
+  });
+
+  // Get patient's current protocol assignment
+  app.get("/api/patients/:patientId/protocol", async (req, res) => {
+    try {
+      const patientId = parseInt(req.params.patientId);
+      const { protocolEngine } = await import('./protocols/protocol-engine');
+      const assignment = await protocolEngine.getPatientAssignment(patientId);
+
+      if (!assignment) {
+        return res.status(404).json({ error: "No active protocol for this patient" });
+      }
+
+      res.json(assignment);
+    } catch (error) {
+      console.error("Get patient protocol error:", error);
+      res.status(500).json({ error: "Failed to get patient protocol" });
+    }
+  });
+
+  // Get current exercise prescription for patient
+  app.get("/api/patients/:patientId/prescription", async (req, res) => {
+    try {
+      const patientId = parseInt(req.params.patientId);
+      const { protocolEngine } = await import('./protocols/protocol-engine');
+      const prescription = await protocolEngine.getCurrentPrescription(patientId);
+
+      if (!prescription) {
+        return res.status(404).json({
+          error: "No active prescription",
+          suggestion: "Assign a protocol to this patient first"
+        });
+      }
+
+      res.json(prescription);
+    } catch (error) {
+      console.error("Get prescription error:", error);
+      res.status(500).json({ error: "Failed to get prescription" });
+    }
+  });
+
+  // Check if patient should progress to next phase
+  app.get("/api/patients/:patientId/protocol/progression", async (req, res) => {
+    try {
+      const patientId = parseInt(req.params.patientId);
+      const { protocolEngine } = await import('./protocols/protocol-engine');
+      const progressionCheck = await protocolEngine.checkProgressionCriteria(patientId);
+
+      res.json(progressionCheck);
+    } catch (error) {
+      console.error("Progression check error:", error);
+      res.status(500).json({ error: "Failed to check progression criteria" });
+    }
+  });
+
+  // Advance patient to next protocol phase
+  app.post("/api/patients/:patientId/protocol/progress", createLimiter, async (req, res) => {
+    try {
+      const patientId = parseInt(req.params.patientId);
+      const { protocolEngine } = await import('./protocols/protocol-engine');
+      const success = await protocolEngine.progressToNextPhase(patientId);
+
+      if (!success) {
+        return res.status(400).json({
+          error: "Cannot progress patient",
+          suggestion: "Patient may not meet progression criteria yet"
+        });
+      }
+
+      // Get updated assignment
+      const updatedAssignment = await protocolEngine.getPatientAssignment(patientId);
+      res.json(updatedAssignment);
+    } catch (error) {
+      console.error("Protocol progression error:", error);
+      res.status(500).json({ error: "Failed to progress patient" });
+    }
+  });
+
   // Provider Relationships Routes
   
   // Get all providers for selection
