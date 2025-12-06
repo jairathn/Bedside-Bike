@@ -1027,6 +1027,114 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Clinical Documentation Routes
+
+  // Generate nursing shift summary report (PDF)
+  app.post("/api/reports/shift-summary", createLimiter, async (req, res) => {
+    try {
+      const { patientId, startTime, endTime } = req.body;
+
+      if (!patientId || !startTime || !endTime) {
+        return res.status(400).json({
+          error: "Missing required fields: patientId, startTime, endTime"
+        });
+      }
+
+      const { reportGenerator } = await import('./reports/report-generator');
+      const pdfBuffer = await reportGenerator.generateShiftReport({
+        patientId: parseInt(patientId),
+        startTime: new Date(startTime),
+        endTime: new Date(endTime),
+        includeRiskAssessment: true,
+        includeProtocol: true
+      });
+
+      // Set headers for PDF download
+      res.setHeader('Content-Type', 'application/pdf');
+      res.setHeader('Content-Disposition', `attachment; filename="shift-report-patient-${patientId}.pdf"`);
+      res.setHeader('Content-Length', pdfBuffer.length);
+
+      res.send(pdfBuffer);
+    } catch (error: any) {
+      console.error("Shift report generation error:", error);
+      res.status(500).json({
+        error: "Failed to generate shift report",
+        details: error.message
+      });
+    }
+  });
+
+  // Generate PT progress note (SOAP format)
+  app.post("/api/reports/pt-progress-note", createLimiter, async (req, res) => {
+    try {
+      const { patientId, sessionIds, subjective, additionalNotes } = req.body;
+
+      if (!patientId || !sessionIds || !Array.isArray(sessionIds) || sessionIds.length === 0) {
+        return res.status(400).json({
+          error: "Missing required fields: patientId, sessionIds (array of session IDs)"
+        });
+      }
+
+      const { reportGenerator } = await import('./reports/report-generator');
+      const soapNote = await reportGenerator.generatePTProgressNote({
+        patientId: parseInt(patientId),
+        sessionIds: sessionIds.map((id: any) => parseInt(id)),
+        subjective,
+        additionalNotes
+      });
+
+      res.json({
+        note: soapNote,
+        format: 'SOAP',
+        generatedAt: new Date().toISOString()
+      });
+    } catch (error: any) {
+      console.error("PT progress note generation error:", error);
+      res.status(500).json({
+        error: "Failed to generate PT progress note",
+        details: error.message
+      });
+    }
+  });
+
+  // Get available reports for patient
+  app.get("/api/patients/:patientId/reports", async (req, res) => {
+    try {
+      const patientId = parseInt(req.params.patientId);
+
+      // Get session count to determine if reports can be generated
+      const sessions = await storage.getSessionsByPatient(patientId);
+
+      const availableReports = [
+        {
+          type: 'shift_summary',
+          name: 'Nursing Shift Summary',
+          description: 'Comprehensive shift report with mobility activity, risk status, and alerts',
+          format: 'PDF',
+          requiresInput: ['startTime', 'endTime'],
+          available: sessions.length > 0
+        },
+        {
+          type: 'pt_progress_note',
+          name: 'PT Progress Note',
+          description: 'SOAP format progress note for physical therapy documentation',
+          format: 'Text',
+          requiresInput: ['sessionIds'],
+          available: sessions.length > 0
+        }
+      ];
+
+      res.json({
+        patientId,
+        totalSessions: sessions.length,
+        availableReports
+      });
+    } catch (error) {
+      console.error("Get available reports error:", error);
+      res.status(500).json({ error: "Failed to get available reports" });
+    }
+  });
+
   // Provider Relationships Routes
   
   // Get all providers for selection
