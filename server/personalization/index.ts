@@ -38,5 +38,21 @@ export { insuranceReportEngine } from './insurance-report-engine';
 // Tier 2 foundations
 export { bilateralForceEngine } from './bilateral-force-engine';
 
+// Device Data Adapter (bridges real device data to engine format)
+export {
+  DeviceDataStream,
+  getOrCreateStream,
+  endStream,
+  convertPedalingData,
+  convertDeviceData,
+  calculatePower,
+  calculateBilateralAsymmetry,
+  detectFatigueFromMetrics,
+  type RawPedalingData,
+  type RawDeviceData,
+  type StandardizedMetrics,
+  type SessionSummary,
+} from './device-data-adapter';
+
 // Types
 export * from './types';

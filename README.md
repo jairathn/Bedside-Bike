@@ -1,6 +1,6 @@
 # Bedside Bike - Real-Time Mobility Platform
 
-A comprehensive web application for hospital-based mobility programs using the Bedside Bike device. Provides real-time session monitoring, evidence-based clinical protocols, risk assessment, and automated documentation for nurses and physical therapists.
+A comprehensive web application for hospital-based mobility programs using the Bedside Bike device. Provides real-time session monitoring, evidence-based clinical protocols, risk assessment, personalized medicine approach, and automated documentation for nurses and physical therapists.
 
 ---
 
@@ -39,11 +39,13 @@ Send this message **every 1 second** during an active session:
     "deviceId": string,          // Your device's unique ID
     "timestamp": ISO8601 string, // Current timestamp
     "metrics": {
-      "rpm": number,             // Current RPM
+      "rpm": number,             // Current RPM (cadence)
       "power": number,           // Current power output in watts
       "distance": number,        // Total distance in meters
       "duration": number,        // Seconds since session start
-      "heartRate": number        // Optional: heart rate if sensor available
+      "heartRate": number,       // Optional: heart rate if sensor available
+      "legsRpm": number,         // Optional: bilateral legs RPM
+      "armsRpm": number          // Optional: arms RPM
     },
     "status": "active" | "paused" | "completed"
   }
@@ -88,51 +90,6 @@ Send periodically to report device health:
 }
 ```
 
-**3. Server Messages (Server → Device)**
-
-The server will send:
-
-```typescript
-// Welcome message on connection
-{
-  "type": "device_status",
-  "data": {
-    "status": "connected",
-    "message": "Connected to Bedside Bike server"
-  }
-}
-
-// Future: Commands from providers
-{
-  "type": "command",
-  "data": {
-    "command": "start" | "stop" | "pause" | "set_resistance",
-    "parameters": { ... }
-  }
-}
-```
-
-#### **Connection Lifecycle**
-
-```
-1. Device powers on
-2. Connect to WiFi
-3. Get session assignment from API: POST /api/sessions
-4. Open WebSocket connection with deviceId
-5. Receive welcome message from server
-6. Start sending session_update messages every 1 second
-7. Continue until session complete or stopped
-8. Send final update with status: "completed"
-9. Close WebSocket connection gracefully
-```
-
-#### **Heartbeat / Keep-Alive**
-
-- Server pings device every 30 seconds
-- Respond to pings with pong (automatic in most WebSocket libraries)
-- If no pong received for 60 seconds, server closes connection
-- Device should reconnect if disconnected unexpectedly
-
 #### **REST API Endpoints for Devices**
 
 **Start a Session:**
@@ -150,61 +107,17 @@ Content-Type: application/json
 Response: { "id": 42, ... }  // Use this sessionId in WebSocket messages
 ```
 
-**Link Device to Patient:**
-```bash
-POST /api/devices/121/link
-Content-Type: application/json
-
-{
-  "patientId": 4
-}
-```
-
-**Get Device Status:**
-```bash
-GET /api/devices/121
-```
-
 #### **Testing Your Device Connection**
 
-Use the built-in device simulator to verify your message format:
+Use the built-in device simulator:
 
 ```bash
-# Install dependencies
-npm install
-
-# Run the simulator
 npx tsx server/websocket/device-simulator.ts \
   --sessionId=1 \
   --deviceId=121 \
   --patientId=4 \
   --targetDuration=60
 ```
-
-This simulates a real device and shows you exactly what messages the server expects.
-
-#### **Error Handling**
-
-- If WebSocket closes unexpectedly, retry connection with exponential backoff
-- If session update fails, queue messages and retry
-- Log all errors with device ID and timestamp for debugging
-- Server will automatically detect disconnection and notify providers
-
-#### **Security Notes**
-
-- Use WSS (secure WebSocket) in production
-- Device authentication will be added (API key or certificate)
-- All session data is logged for HIPAA compliance
-- Session data stored in database survives server restarts
-
-#### **Firmware Update Required?**
-
-If your current firmware doesn't support WebSocket:
-1. Keep using Azure SQL direct upload (we still support this)
-2. Real-time monitoring won't work until WebSocket implemented
-3. Historical data and reports will still function normally
-
-Contact the development team for WebSocket integration support.
 
 ---
 
@@ -250,34 +163,80 @@ NODE_ENV=development
 
 ## 📊 **Features**
 
-### Real-Time Monitoring
+### Core Platform Features
+
+#### Real-Time Monitoring
 - ✅ Live session tracking from devices via WebSocket
-- ✅ Real-time RPM, power, distance, duration
+- ✅ Real-time RPM, power, distance, duration display
 - ✅ Multi-patient monitoring dashboard for nurses
 - ✅ Automatic alerts for paused/incomplete sessions
+- ✅ Device data streaming with automatic power calculation
 
-### Clinical Protocols (Week 2 - In Progress)
-- 🔄 Evidence-based protocol matching by diagnosis
-- 🔄 Automated prescription generation (frequency, duration, resistance)
-- 🔄 Phase-based progression (POD 0-2, POD 3-7, etc.)
-- 🔄 TKA, pneumonia, general med/surg protocols
-
-### Risk Assessment
+#### Risk Assessment
 - ✅ 4 clinical outcomes: deconditioning, VTE, falls, pressure injuries
-- ✅ Logistic regression algorithms
+- ✅ Evidence-based logistic regression algorithms
 - ✅ AI-powered text processing for diagnoses
+- ✅ Mobility benefit predictions with early mobilization impact
+- ✅ Discharge disposition and readmission risk predictions
 
-### Documentation & Reports (Week 3 - Planned)
-- 🔄 PDF nursing shift summaries
-- 🔄 PT progress notes (SOAP format)
-- 🔄 One-click export to EMR (FHIR)
-- 🔄 CMS quality measure reporting
+#### Clinical Protocols
+- ✅ Evidence-based protocol matching by diagnosis
+- ✅ Automated prescription generation (frequency, duration, resistance)
+- ✅ Phase-based progression (POD 0-2, POD 3-7, etc.)
+- ✅ TKA, THA, pneumonia, stroke, cardiac, general med/surg protocols
+- ✅ Protocol assignment and progression tracking
 
-### Gamification
+#### Documentation & Reports
+- ✅ PDF nursing shift summaries
+- ✅ PT progress notes (SOAP format)
+- ✅ Insurance authorization reports
+- ✅ Clinical documentation with timestamps
+
+#### Gamification
 - ✅ Patient achievements and badges
-- ✅ Leaderboards
+- ✅ Leaderboards (anonymous)
 - ✅ Kudos system for peer encouragement
 - ✅ Progress tracking over time
+- ✅ XP and level system
+
+#### Smart Alert System
+- ✅ Real-time clinical alerts
+- ✅ Protocol deviation detection
+- ✅ Inactivity monitoring
+- ✅ Risk-based prioritization
+- ✅ Alert acknowledgment tracking
+
+---
+
+### Personalized Medicine Features (Patent-Protected)
+
+#### Tier 1: High Priority Features
+
+| Feature | Status | Description |
+|---------|--------|-------------|
+| **Personalized Protocol Matching** | ✅ | Multi-factor algorithm matches protocols to patient diagnosis, comorbidities, age, mobility level, and personality type |
+| **Fatigue-Triggered Auto-Resistance** | ✅ | Real-time detection of power decline, cadence variability, and bilateral coordination changes triggers automatic resistance reduction |
+| **Progressive Overload Auto-Scheduling** | ✅ | Adaptive resistance and duration progression based on performance trends with confidence intervals |
+| **Setback Recovery Protocol** | ✅ | Automatic goal reduction after medical events (falls, surgery, illness) with re-baseline assessment |
+| **Medication Interaction Alerts** | ✅ | Drug class-specific monitoring (beta-blockers limit HR, anticoagulants require fall precautions, steroids affect bone loading) |
+| **Contraindication Verification** | ✅ | Pre-session checks for absolute, relative, and temporal contraindications with provider override capability |
+| **Multi-Modal Mobility Score** | ✅ | Fuses data from bike metrics, ambulation tests, PT assessments, and ADL observations |
+| **Barthel Index Translation** | ✅ | Converts bike performance metrics to standardized Barthel Index scores |
+| **FIM Score Translation** | ✅ | Converts bike performance metrics to Functional Independence Measure scores |
+| **Hospital Mobility Score** | ✅ | Generates standardized hospital mobility scores for quality reporting |
+| **Cohort Performance Benchmarking** | ✅ | Privacy-preserving comparison with similar patients (same diagnosis, age range, mobility level) |
+| **Virtual Competition System** | ✅ | Anonymous leaderboards and milestone celebrations for patient motivation |
+| **Insurance Authorization Reports** | ✅ | Auto-generated documentation for SNF, Home Health, and Outpatient PT with criteria evaluation |
+| **Fall Risk Prediction** | ✅ | Predictive algorithm using mobility metrics, fatigue patterns, and medical history |
+
+#### Tier 2: Sensor-Dependent Features (Foundations Ready)
+
+| Feature | Status | Description |
+|---------|--------|-------------|
+| **Bilateral Force Visualization** | ✅ | 3D force vector display and butterfly plots (uses RPM asymmetry when force sensors unavailable) |
+| **Bilateral Force Balancing** | ✅ | Real-time feedback to help patients balance left/right force output |
+| **Stroke Rehabilitation Protocol** | ✅ | Asymmetry-focused protocol for stroke patients with affected side tracking |
+| **Neurological Deficit Detection** | ✅ | Early warning system for sudden asymmetry changes indicating potential neurological events |
 
 ---
 
@@ -287,19 +246,18 @@ NODE_ENV=development
 - Used when `USE_LOCAL_DB=true`
 - Database file: `local.db`
 - Automatic schema creation via `init-local-db.ts`
-- Perfect for development and testing
 
 ### Production (Azure SQL Server)
 - Used when `USE_LOCAL_DB=false` or `DATABASE_URL` is set
-- Supports all MS SQL Server features
 - HIPAA-compliant audit logging
 - Automatic failover and backups
 
-### Schema
-- 15 tables covering users, sessions, goals, risks, devices
-- Real-time tracking fields in `exercise_sessions`
-- Alert system with priority levels
-- Protocol assignments and progression tracking
+### Schema Tables
+- **Core**: users, sessions, goals, achievements, patient_stats
+- **Clinical**: risk_assessments, protocol_assignments, alerts
+- **Personalization**: personalization_profiles, fatigue_events, medication_interactions
+- **Competition**: virtual_competitions, cohort_comparisons
+- **Reports**: insurance_reports, mobility_scores
 
 ---
 
@@ -308,37 +266,37 @@ NODE_ENV=development
 ```
 ┌─────────────────────────────────────────────────────────────┐
 │                     Bedside Bike Devices                    │
-│                  (via WiFi/Bluetooth → WiFi)                │
+│           (RPM, Resistance, Battery, Bilateral Data)        │
 └───────────────────────┬─────────────────────────────────────┘
-                        │ WebSocket
-                        │ (Real-time session updates)
+                        │ WebSocket + Azure SQL
                         ▼
 ┌─────────────────────────────────────────────────────────────┐
-│                   WebSocket Server (Node.js)                │
-│   • Bidirectional device ↔ server communication            │
-│   • Real-time metric processing                             │
-│   • Alert generation                                        │
-│   • Database persistence                                    │
+│              Device Data Adapter Layer                      │
+│   • RPM → Power calculation                                 │
+│   • Bilateral asymmetry detection                           │
+│   • Real-time fatigue analysis                              │
 └───────────────────────┬─────────────────────────────────────┘
-                        │
-                        ├──► SQLite (local) / Azure SQL (prod)
-                        │
+                        ▼
+┌─────────────────────────────────────────────────────────────┐
+│              Personalization Engines                        │
+│   • Protocol Matcher          • Fatigue Detection           │
+│   • Progressive Overload      • Medication Safety           │
+│   • Mobility Scoring          • Competition Engine          │
+│   • Insurance Reports         • Bilateral Force             │
+└───────────────────────┬─────────────────────────────────────┘
                         ▼
 ┌─────────────────────────────────────────────────────────────┐
 │                  Express.js REST API                        │
-│   • Session management                                      │
-│   • Risk assessment                                         │
-│   • Protocol matching                                       │
-│   • Report generation                                       │
+│   • Session management        • Risk assessment             │
+│   • Protocol matching         • Report generation           │
+│   • Personalization APIs      • Alert management            │
 └───────────────────────┬─────────────────────────────────────┘
-                        │ HTTP/JSON
                         ▼
 ┌─────────────────────────────────────────────────────────────┐
 │                React Frontend (Vite)                        │
-│   • Provider dashboard (nurses, PTs)                        │
-│   • Patient dashboard                                       │
-│   • Real-time monitoring                                    │
-│   • Risk calculator                                         │
+│   • Provider dashboard        • Patient dashboard           │
+│   • Real-time monitoring      • Risk calculator             │
+│   • Protocol management       • Competition views           │
 └─────────────────────────────────────────────────────────────┘
 ```
 
@@ -348,36 +306,358 @@ NODE_ENV=development
 
 ```
 Bedside-Bike/
-├── client/              # React frontend
+├── client/                    # React frontend
 │   ├── src/
-│   │   ├── pages/       # Dashboard, risk calculator, goals
-│   │   ├── components/  # Reusable UI components
-│   │   └── lib/         # Auth, utilities
+│   │   ├── pages/             # Dashboard, risk calculator, goals
+│   │   ├── components/        # Reusable UI components
+│   │   └── lib/               # Auth, utilities
 │
-├── server/              # Express.js backend
-│   ├── websocket/       # Real-time device communication
-│   │   ├── index.ts     # WebSocket server
-│   │   ├── types.ts     # Message interfaces
-│   │   └── device-simulator.ts  # Testing tool
-│   ├── routes.ts        # REST API endpoints
+├── server/                    # Express.js backend
+│   ├── websocket/             # Real-time device communication
+│   ├── protocols/             # Evidence-based protocol engine
+│   ├── reports/               # Clinical documentation system
+│   ├── alerts/                # Smart alert system
+│   ├── personalization/       # Personalized medicine engines
+│   │   ├── personalized-protocol-matcher.ts
+│   │   ├── fatigue-detection-engine.ts
+│   │   ├── progressive-overload-engine.ts
+│   │   ├── medication-safety-engine.ts
+│   │   ├── mobility-scoring-engine.ts
+│   │   ├── competition-engine.ts
+│   │   ├── insurance-report-engine.ts
+│   │   ├── bilateral-force-engine.ts
+│   │   ├── device-data-adapter.ts
+│   │   └── routes.ts
+│   ├── routes.ts              # REST API endpoints
 │   ├── risk-calculator.ts
-│   ├── logger.ts        # Winston logging
-│   ├── rate-limit.ts    # API protection
-│   └── session.ts       # Session management
+│   └── storage.ts             # Database operations
 │
-├── shared/              # Shared types and schemas
-│   ├── schema.sqlite.ts # SQLite schema
-│   ├── schema.mssql.ts  # Azure SQL schema
-│   └── schema.ts        # Re-export based on env
+├── shared/                    # Shared types and schemas
+│   ├── schema.sqlite.ts
+│   ├── schema.mssql.ts
+│   └── schema.ts
 │
-├── scripts/             # Database initialization
-│   └── init-local-db.ts
+├── DatabaseFiles/             # Azure SQL schema
+│   ├── Tables/
+│   └── StoredProcedures/
 │
-└── docs/                # Documentation
-    ├── FEATURE_ROADMAP.md
-    ├── IMPLEMENTATION_PLAN.md
-    └── GAPS_ANALYSIS_AND_RECOMMENDATIONS.md
+└── scripts/                   # Database initialization
+    └── init-local-db.ts
 ```
+
+---
+
+## 🎮 **Platform Walkthrough**
+
+This section guides you through every feature of the platform. Start the application with `npm run dev` and open http://localhost:5000 in your browser.
+
+### 1. Patient Login & Dashboard
+
+**Steps:**
+1. On the home page, click **"Patient Login"**
+2. Enter patient information:
+   - First Name: `Neil`
+   - Last Name: `Jairath`
+   - Date of Birth: `1996-04-01`
+3. Click **"Start Session"**
+4. View your personalized dashboard
+
+**What you'll see:**
+- **Daily Goals**: Progress rings showing duration, power, and session targets
+- **Recent Sessions**: Chart of your last 7 days of activity
+- **Achievements**: Badges earned for milestones
+- **Current Streak**: Consecutive days of activity
+
+### 2. Provider Login & Patient Management
+
+**Steps:**
+1. Return to home page, click **"Provider Login"**
+2. Enter provider email: `heidikissane@hospital.com`
+3. Click **"Sign In"**
+4. View the provider dashboard
+
+**What you'll see:**
+- **Patient List**: All patients with recent activity
+- **Risk Status**: Color-coded risk indicators
+- **Protocol Assignments**: Current protocols per patient
+- **Alert Counts**: Unacknowledged alerts
+
+### 3. Risk Assessment Calculator
+
+**Steps:**
+1. From provider dashboard, click **"Risk Assessment"** or navigate to `/risk-assessment`
+2. Select a patient or use anonymous mode
+3. Fill in the assessment form:
+   - Age, sex, level of care
+   - Mobility status, cognitive status
+   - Admission diagnosis
+   - Comorbidities (checkboxes)
+   - Current medications
+4. Click **"Calculate Risks"**
+
+**What you'll see:**
+- **Four Risk Scores**: Deconditioning, VTE, Falls, Pressure Injuries
+- **Risk Level Indicators**: Low/Moderate/High with probabilities
+- **Mobility Benefits**: Impact of early mobilization
+- **Discharge Predictions**: LOS reduction, home discharge probability
+- **Recommended Goals**: Evidence-based exercise targets
+
+### 4. Protocol Assignment
+
+**Steps:**
+1. From provider dashboard, select a patient
+2. Click **"Assign Protocol"**
+3. Enter diagnosis (e.g., "Total Knee Arthroplasty")
+4. System auto-matches appropriate protocol
+5. Review protocol phases and prescriptions
+6. Click **"Assign to Patient"**
+
+**What you'll see:**
+- **Matched Protocol**: Best-fit protocol with confidence score
+- **Phase Details**: Daily frequency, duration, resistance by POD
+- **Progression Criteria**: When patient advances to next phase
+- **Contraindications**: Conditions that require modification
+
+### 5. Personalized Protocol Matching
+
+**Steps:**
+1. Navigate to `/api/patients/4/protocol-match` (or use the UI)
+2. System analyzes patient profile:
+   - Diagnosis and comorbidities
+   - Age and mobility level
+   - Previous performance data
+   - Detected personality type (achiever, socializer, steady, cautious)
+3. View ranked protocol recommendations
+
+**API Example:**
+```bash
+curl -X POST http://localhost:5000/api/patients/4/protocol-match \
+  -H "Content-Type: application/json" \
+  -d '{"diagnosis": "hip fracture", "comorbidities": ["diabetes", "hypertension"]}'
+```
+
+### 6. Real-Time Session Monitoring
+
+**Steps:**
+1. Start a session from patient dashboard or device
+2. From provider dashboard, click **"Live Monitoring"**
+3. Watch real-time metrics update
+
+**What you'll see:**
+- **Live RPM and Power**: Updates every second
+- **Session Progress**: Duration vs. goal
+- **Fatigue Indicators**: Warning when fatigue detected
+- **Bilateral Balance**: Left/right symmetry (if available)
+
+### 7. Fatigue Detection
+
+**Automatic Feature - Observe During Sessions:**
+
+The system continuously monitors for:
+- **Power Decline**: >10% drop from session peak
+- **Cadence Variability**: Increased irregularity
+- **Bilateral Asymmetry**: One side weakening
+
+**What happens:**
+- Yellow alert for mild fatigue
+- Orange alert for moderate fatigue
+- Red alert for severe fatigue (with auto-resistance reduction recommendation)
+
+### 8. Progressive Overload Evaluation
+
+**Steps:**
+1. Navigate to patient details
+2. Click **"Progression Check"**
+3. View readiness assessment
+
+**API Example:**
+```bash
+curl http://localhost:5000/api/patients/4/progression
+```
+
+**What you'll see:**
+- **Current Performance**: Average metrics over last 3 sessions
+- **Progression Readiness**: Whether patient is ready to advance
+- **Recommended Changes**: Specific resistance/duration increases
+- **Confidence Level**: Statistical confidence in recommendation
+
+### 9. Medication Safety Check
+
+**Steps:**
+1. From patient profile, view medications
+2. Click **"Safety Check"** or make API call
+3. System analyzes drug-exercise interactions
+
+**API Example:**
+```bash
+curl -X POST http://localhost:5000/api/patients/4/medication-analysis \
+  -H "Content-Type: application/json" \
+  -d '{"medications": ["metoprolol", "warfarin", "lisinopril"]}'
+```
+
+**What you'll see:**
+- **Interaction Alerts**: Drug-specific exercise precautions
+- **Heart Rate Limits**: For beta-blockers
+- **Fall Precautions**: For anticoagulants
+- **Monitoring Requirements**: Blood pressure, symptoms
+
+### 10. Contraindication Verification
+
+**Steps:**
+1. Before starting a session, system auto-checks contraindications
+2. View any warnings in the pre-session checklist
+3. If contraindication found, provider can override with justification
+
+**Contraindication Types:**
+- **Absolute**: No exercise allowed (e.g., unstable angina)
+- **Relative**: Exercise with precautions (e.g., recent surgery)
+- **Temporal**: Wait period required (e.g., post-dialysis)
+
+### 11. Mobility Scores
+
+**Steps:**
+1. Navigate to patient details
+2. Click **"Mobility Score"** tab
+3. View multi-modal assessment
+
+**Available Scores:**
+```bash
+# Get overall mobility score
+curl http://localhost:5000/api/patients/4/mobility-score
+
+# Get Barthel Index
+curl http://localhost:5000/api/patients/4/barthel-index
+
+# Get FIM score
+curl http://localhost:5000/api/patients/4/fim-score
+
+# Get Hospital Mobility Score
+curl http://localhost:5000/api/patients/4/hospital-mobility-score
+```
+
+### 12. Cohort Comparison
+
+**Steps:**
+1. From patient dashboard, click **"Compare"**
+2. View how patient performs vs. similar patients
+
+**What you'll see:**
+- **Anonymized Comparison**: No identifying information
+- **Percentile Ranking**: Where patient stands
+- **Similar Patients**: Same diagnosis, age range, mobility level
+- **Performance Trends**: Improvement vs. cohort average
+
+### 13. Virtual Competition
+
+**Steps:**
+1. From patient dashboard, click **"Competitions"**
+2. View available competitions
+3. Join a competition
+4. Track progress on leaderboard
+
+**API Examples:**
+```bash
+# Get available competitions
+curl http://localhost:5000/api/competitions
+
+# Join a competition
+curl -X POST http://localhost:5000/api/competitions/1/join \
+  -H "Content-Type: application/json" \
+  -d '{"patientId": 4}'
+
+# View leaderboard
+curl http://localhost:5000/api/competitions/1/leaderboard
+```
+
+### 14. Insurance Authorization Reports
+
+**Steps:**
+1. From provider dashboard, select patient
+2. Click **"Generate Insurance Report"**
+3. Select report type (SNF, Home Health, Outpatient PT)
+4. Review auto-generated documentation
+5. Sign and export as PDF
+
+**API Example:**
+```bash
+curl -X POST http://localhost:5000/api/patients/4/insurance-report \
+  -H "Content-Type: application/json" \
+  -d '{"reportType": "snf", "generatedBy": 1}'
+```
+
+### 15. Clinical Documentation
+
+**Steps:**
+1. From provider dashboard, click **"Reports"**
+2. Select report type:
+   - **Shift Summary**: For nursing handoffs
+   - **PT Progress Note**: SOAP format
+3. Select time range and sessions
+4. Generate and download
+
+**API Examples:**
+```bash
+# Generate shift summary PDF
+curl -X POST http://localhost:5000/api/reports/shift-summary \
+  -H "Content-Type: application/json" \
+  -d '{"patientId": 4, "startTime": "2025-12-06T07:00:00Z", "endTime": "2025-12-06T19:00:00Z"}'
+
+# Generate PT progress note
+curl -X POST http://localhost:5000/api/reports/pt-progress-note \
+  -H "Content-Type: application/json" \
+  -d '{"patientId": 4, "sessionIds": [1, 2, 3]}'
+```
+
+### 16. Alert Management
+
+**Steps:**
+1. From provider dashboard, view alert panel
+2. Click on an alert to view details
+3. Acknowledge alert with your provider ID
+4. View alert history
+
+**Alert Types:**
+- **Inactivity**: Patient hasn't exercised in 24+ hours
+- **Protocol Deviation**: Session didn't meet prescription
+- **Fatigue**: Significant fatigue detected during session
+- **Risk Change**: Patient's risk level has changed
+- **Vital Signs**: Abnormal metrics during session
+
+### 17. Bilateral Force Analysis (Tier 2)
+
+**Note:** Full functionality requires bilateral force sensors. With standard sensors, system estimates asymmetry from RPM patterns.
+
+**Steps:**
+1. During a session, view bilateral display
+2. See real-time left/right comparison
+3. View butterfly plot for stroke patients
+
+**API Examples:**
+```bash
+# Get bilateral feedback
+curl http://localhost:5000/api/patients/4/bilateral-feedback
+
+# Check for neurological events
+curl http://localhost:5000/api/patients/4/neurological-check
+
+# Initialize stroke protocol
+curl -X POST http://localhost:5000/api/patients/4/stroke-protocol \
+  -H "Content-Type: application/json" \
+  -d '{"affectedSide": "left", "initiatedBy": 1}'
+```
+
+### 18. Kudos & Social Features
+
+**Steps:**
+1. From patient dashboard, click **"Community"**
+2. View feed of achievements from your unit
+3. Send kudos reactions (clap, muscle, heart)
+4. Send nudges to encourage other patients
+
+**Privacy Controls:**
+- Opt-in only for social features
+- Choose display name and avatar
+- Select visibility level
 
 ---
 
@@ -388,8 +668,8 @@ Bedside-Bike/
 - ✅ HTTPS/WSS in production
 - ✅ SQL injection prevention (parameterized queries)
 - ✅ HIPAA-compliant logging
-- 🔄 Audit trail (Week 3)
-- 🔄 Device authentication (planned)
+- ✅ Patient privacy controls (opt-in social features)
+- ✅ Anonymous competition IDs
 
 ---
 
@@ -401,10 +681,13 @@ npx tsx server/websocket/device-simulator.ts \
   --sessionId=1 --deviceId=121 --patientId=4 --targetDuration=60
 ```
 
-### Manual API Testing
+### API Testing
 ```bash
 # Health check
 curl http://localhost:5000/health
+
+# Detailed health check
+curl http://localhost:5000/health/detailed
 
 # Start session
 curl -X POST http://localhost:5000/api/sessions \
@@ -416,7 +699,7 @@ curl -X POST http://localhost:5000/api/sessions \
 
 ## 📦 **Deployment**
 
-### Azure Web App (Recommended)
+### Azure Web App
 
 ```bash
 # Build for production
@@ -436,20 +719,11 @@ NODE_ENV=production
 
 ---
 
-## 🤝 **Contributing**
-
-See implementation roadmap in `IMPLEMENTATION_PLAN.md` for current development status.
-
-Week 1: ✅ Real-time WebSocket communication
-Week 2: 🔄 Evidence-based protocol engine (in progress)
-Week 3: 🔄 Clinical documentation system
-Week 4: 🔄 Smart alerts & monitoring dashboards
-
----
-
 ## 📄 **License**
 
 Proprietary - Bedside Bike, Inc.
+
+Patent-pending features are protected intellectual property.
 
 ---
 
