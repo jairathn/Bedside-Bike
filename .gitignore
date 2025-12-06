@@ -1,0 +1,22 @@
+node_modules
+dist
+.DS_Store
+server/public
+vite.config.ts.*
+*.tar.gz
+
+# Local SQLite databases
+local.db
+data/sessions.db
+
+# Log files
+logs/*.log
+
+# Environment variables with sensitive data
+.env
+.env.local
+.env.production
+.env.*.local
+
+# Replit state files
+.local/
