@@ -1135,6 +1135,127 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Smart Alert System Routes
+
+  // Get all unacknowledged alerts (nurse monitoring dashboard)
+  app.get("/api/alerts", async (req, res) => {
+    try {
+      const { alertEngine } = await import('./alerts/alert-engine');
+      const alerts = await alertEngine.getAllUnacknowledgedAlerts();
+      res.json(alerts);
+    } catch (error) {
+      console.error("Get alerts error:", error);
+      res.status(500).json({ error: "Failed to get alerts" });
+    }
+  });
+
+  // Get alerts for specific patient
+  app.get("/api/patients/:patientId/alerts", async (req, res) => {
+    try {
+      const patientId = parseInt(req.params.patientId);
+      const includeAcknowledged = req.query.includeAcknowledged === 'true';
+
+      const { alertEngine } = await import('./alerts/alert-engine');
+      const alerts = await alertEngine.getPatientAlerts(patientId, includeAcknowledged);
+
+      res.json(alerts);
+    } catch (error) {
+      console.error("Get patient alerts error:", error);
+      res.status(500).json({ error: "Failed to get patient alerts" });
+    }
+  });
+
+  // Get alert summary statistics
+  app.get("/api/alerts/summary", async (req, res) => {
+    try {
+      const patientId = req.query.patientId ? parseInt(req.query.patientId as string) : undefined;
+
+      const { alertEngine } = await import('./alerts/alert-engine');
+      const summary = await alertEngine.getAlertSummary(patientId);
+
+      res.json(summary);
+    } catch (error) {
+      console.error("Get alert summary error:", error);
+      res.status(500).json({ error: "Failed to get alert summary" });
+    }
+  });
+
+  // Acknowledge an alert
+  app.post("/api/alerts/:alertId/acknowledge", createLimiter, async (req, res) => {
+    try {
+      const alertId = parseInt(req.params.alertId);
+      const { acknowledgedBy } = req.body;
+
+      if (!acknowledgedBy) {
+        return res.status(400).json({ error: "acknowledgedBy (provider ID) is required" });
+      }
+
+      const { alertEngine } = await import('./alerts/alert-engine');
+      const success = await alertEngine.acknowledgeAlert(alertId, acknowledgedBy);
+
+      if (!success) {
+        return res.status(500).json({ error: "Failed to acknowledge alert" });
+      }
+
+      res.json({ success: true, alertId, acknowledgedBy });
+    } catch (error) {
+      console.error("Acknowledge alert error:", error);
+      res.status(500).json({ error: "Failed to acknowledge alert" });
+    }
+  });
+
+  // Check inactivity alerts for all patients (run periodically)
+  app.post("/api/alerts/check-inactivity", createLimiter, async (req, res) => {
+    try {
+      const { alertEngine } = await import('./alerts/alert-engine');
+      const alerts = await alertEngine.checkInactivityAlerts();
+
+      res.json({
+        alertsGenerated: alerts.length,
+        alerts
+      });
+    } catch (error) {
+      console.error("Check inactivity error:", error);
+      res.status(500).json({ error: "Failed to check inactivity" });
+    }
+  });
+
+  // Check protocol compliance for patient
+  app.post("/api/patients/:patientId/alerts/check-compliance", createLimiter, async (req, res) => {
+    try {
+      const patientId = parseInt(req.params.patientId);
+
+      const { alertEngine } = await import('./alerts/alert-engine');
+      const alert = await alertEngine.checkProtocolCompliance(patientId);
+
+      res.json({
+        alert: alert || null,
+        complianceChecked: true
+      });
+    } catch (error) {
+      console.error("Check compliance error:", error);
+      res.status(500).json({ error: "Failed to check protocol compliance" });
+    }
+  });
+
+  // Run all alert checks for a patient
+  app.post("/api/patients/:patientId/alerts/check-all", createLimiter, async (req, res) => {
+    try {
+      const patientId = parseInt(req.params.patientId);
+
+      const { alertEngine } = await import('./alerts/alert-engine');
+      const alerts = await alertEngine.runAllChecks(patientId);
+
+      res.json({
+        alertsGenerated: alerts.length,
+        alerts
+      });
+    } catch (error) {
+      console.error("Run all checks error:", error);
+      res.status(500).json({ error: "Failed to run all alert checks" });
+    }
+  });
+
   // Provider Relationships Routes
   
   // Get all providers for selection

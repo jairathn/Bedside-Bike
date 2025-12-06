@@ -227,49 +227,32 @@ export class DeviceBridgeWebSocket {
 
   /**
    * Check for alert conditions during session update
+   * Uses alert engine for comprehensive alert checking
    */
   private async checkSessionAlerts(update: SessionUpdate): Promise<void> {
-    const alerts: Alert[] = [];
+    try {
+      // Only check alerts when session is completed
+      if (update.status === 'completed') {
+        const { alertEngine } = await import('../alerts/alert-engine');
+        const alerts = await alertEngine.checkSessionAlerts(update.sessionId);
 
-    // Get session target duration
-    const session = await db.select()
-      .from(exerciseSessions)
-      .where(eq(exerciseSessions.id, update.sessionId))
-      .limit(1);
+        // Broadcast all generated alerts via WebSocket
+        for (const alert of alerts) {
+          this.broadcastAlert(alert);
+        }
 
-    if (!session.length) return;
-
-    const targetDuration = session[0].targetDuration || 900; // 15min default
-
-    // Alert: Session paused for too long
-    if (update.status === 'paused' && update.metrics.duration < targetDuration * 0.5) {
-      alerts.push({
-        patientId: update.patientId,
-        type: 'session_paused_long',
-        priority: 'medium',
-        message: `Session paused at ${Math.round(update.metrics.duration / 60)}min (goal: ${Math.round(targetDuration / 60)}min)`,
-        actionRequired: 'Check on patient - possible fatigue or discomfort',
-        triggeredAt: new Date(),
-        metadata: { sessionId: update.sessionId, duration: update.metrics.duration }
+        if (alerts.length > 0) {
+          logger.info('Session alerts generated and broadcast', {
+            sessionId: update.sessionId,
+            alertCount: alerts.length
+          });
+        }
+      }
+    } catch (error: any) {
+      logger.error('Failed to check session alerts', {
+        error: error.message,
+        sessionId: update.sessionId
       });
-    }
-
-    // Alert: Session completed early
-    if (update.status === 'completed' && update.metrics.duration < targetDuration * 0.75) {
-      alerts.push({
-        patientId: update.patientId,
-        type: 'session_incomplete',
-        priority: 'medium',
-        message: `Session completed at ${Math.round(update.metrics.duration / 60)}min (goal: ${Math.round(targetDuration / 60)}min)`,
-        actionRequired: 'Assess reason for early completion',
-        triggeredAt: new Date(),
-        metadata: { sessionId: update.sessionId, duration: update.metrics.duration }
-      });
-    }
-
-    // Broadcast alerts
-    for (const alert of alerts) {
-      this.broadcastAlert(alert);
     }
   }
 
