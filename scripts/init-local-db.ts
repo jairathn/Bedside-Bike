@@ -21,6 +21,7 @@ const dropTables = `
 DROP TABLE IF EXISTS kudos_reactions;
 DROP TABLE IF EXISTS nudge_messages;
 DROP TABLE IF EXISTS feed_items;
+DROP TABLE IF EXISTS alerts;
 DROP TABLE IF EXISTS patient_preferences;
 DROP TABLE IF EXISTS patient_stats;
 DROP TABLE IF EXISTS achievements;
@@ -154,13 +155,22 @@ CREATE TABLE exercise_sessions (
     duration INTEGER NOT NULL,
     avg_power REAL,
     max_power REAL,
+    avg_rpm REAL,
     resistance REAL,
     session_date TEXT NOT NULL,
     start_time INTEGER NOT NULL,
     end_time INTEGER,
     stops_and_starts INTEGER DEFAULT 0,
     is_completed INTEGER DEFAULT 0,
-    created_at INTEGER DEFAULT (unixepoch())
+    -- Real-time tracking fields
+    current_rpm REAL,
+    current_power REAL,
+    distance_meters REAL,
+    duration_seconds INTEGER,
+    current_status TEXT CHECK(current_status IN ('active', 'paused', 'completed')),
+    target_duration INTEGER,
+    created_at INTEGER DEFAULT (unixepoch()),
+    updated_at INTEGER DEFAULT (unixepoch())
 );
 
 -- Device sessions
@@ -211,6 +221,21 @@ CREATE TABLE patient_preferences (
     unit TEXT DEFAULT 'general',
     created_at INTEGER DEFAULT (unixepoch()),
     updated_at INTEGER DEFAULT (unixepoch())
+);
+
+-- Alerts for smart monitoring
+CREATE TABLE alerts (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    patient_id INTEGER NOT NULL REFERENCES users(id),
+    type TEXT NOT NULL,
+    priority TEXT NOT NULL CHECK(priority IN ('low', 'medium', 'high', 'critical')),
+    message TEXT NOT NULL,
+    action_required TEXT NOT NULL,
+    metadata TEXT,
+    triggered_at INTEGER NOT NULL,
+    acknowledged_at INTEGER,
+    acknowledged_by INTEGER REFERENCES users(id),
+    created_at INTEGER DEFAULT (unixepoch())
 );
 
 -- Feed items

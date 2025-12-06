@@ -136,13 +136,22 @@ export const exerciseSessions = sqliteTable("exercise_sessions", {
   duration: integer("duration").notNull(),
   avgPower: real("avg_power"),
   maxPower: real("max_power"),
+  avgRpm: real("avg_rpm"),
   resistance: real("resistance"),
   sessionDate: text("session_date").notNull(), // ISO date string
   startTime: integer("start_time", { mode: 'timestamp' }).notNull(),
   endTime: integer("end_time", { mode: 'timestamp' }),
   stopsAndStarts: integer("stops_and_starts").default(0),
   isCompleted: integer("is_completed", { mode: 'boolean' }).default(false),
+  // Real-time tracking fields (updated via WebSocket)
+  currentRpm: real("current_rpm"),
+  currentPower: real("current_power"),
+  distanceMeters: real("distance_meters"),
+  durationSeconds: integer("duration_seconds"),
+  currentStatus: text("current_status"), // 'active' | 'paused' | 'completed'
+  targetDuration: integer("target_duration"), // Target duration in seconds
   createdAt: integer("created_at", { mode: 'timestamp' }).default(sql`(unixepoch())`),
+  updatedAt: integer("updated_at", { mode: 'timestamp' }).default(sql`(unixepoch())`),
 });
 
 // Achievements
@@ -219,6 +228,21 @@ export const patientPreferences = sqliteTable("patient_preferences", {
   unit: text("unit").default('general'),
   createdAt: integer("created_at", { mode: 'timestamp' }).default(sql`(unixepoch())`),
   updatedAt: integer("updated_at", { mode: 'timestamp' }).default(sql`(unixepoch())`),
+});
+
+// Alerts for smart monitoring system
+export const alerts = sqliteTable("alerts", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  patientId: integer("patient_id").notNull().references(() => users.id),
+  type: text("type").notNull(), // 'session_incomplete', 'no_activity_24h', etc.
+  priority: text("priority").notNull(), // 'low', 'medium', 'high', 'critical'
+  message: text("message").notNull(),
+  actionRequired: text("action_required").notNull(),
+  metadata: text("metadata"), // JSON as text
+  triggeredAt: integer("triggered_at", { mode: 'timestamp' }).notNull(),
+  acknowledgedAt: integer("acknowledged_at", { mode: 'timestamp' }),
+  acknowledgedBy: integer("acknowledged_by").references(() => users.id),
+  createdAt: integer("created_at", { mode: 'timestamp' }).default(sql`(unixepoch())`),
 });
 
 // Validation schemas (reuse from main schema)

@@ -4,6 +4,7 @@ import { registerRoutes } from "./routes";
 import { setupVite, serveStatic, log } from "./vite";
 import { logger, errorLogger } from "./logger";
 import sessionConfig from "./session";
+import DeviceBridgeWebSocket from "./websocket";
 
 const app = express();
 app.use(express.json());
@@ -44,6 +45,13 @@ app.use((req, res, next) => {
 
 (async () => {
   const server = await registerRoutes(app);
+
+  // Initialize WebSocket server for real-time device communication
+  const wsServer = new DeviceBridgeWebSocket(server);
+  logger.info('WebSocket server ready for device and provider connections');
+
+  // Make WebSocket server accessible to routes if needed
+  (app as any).wsServer = wsServer;
 
   // Error logging middleware
   app.use(errorLogger);
