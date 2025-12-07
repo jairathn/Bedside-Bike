@@ -259,6 +259,373 @@ export const clinicalProtocols = sqliteTable("clinical_protocols", {
   updatedAt: integer("updated_at", { mode: 'timestamp' }).default(sql`(unixepoch())`),
 });
 
+// ============================================================================
+// PERSONALIZED PROTOCOL MATCHING SYSTEM - Patent Features
+// ============================================================================
+
+// Patient personalization profiles - stores learned preferences and patterns
+export const patientPersonalizationProfiles = sqliteTable("patient_personalization_profiles", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  patientId: integer("patient_id").notNull().references(() => users.id),
+
+  // Personality type for engagement (10.1 Adaptive Encouragement)
+  personalityType: text("personality_type"), // 'competitive', 'achievement', 'health_focused', 'social'
+  personalityConfidence: real("personality_confidence").default(0), // 0-1 confidence score
+
+  // Circadian patterns (7.2 Context-Aware Recommendations)
+  bestPerformanceWindow: text("best_performance_window"), // 'morning', 'afternoon', 'evening'
+  avgMorningPower: real("avg_morning_power"),
+  avgAfternoonPower: real("avg_afternoon_power"),
+  avgEveningPower: real("avg_evening_power"),
+
+  // Response patterns for interventions
+  respondsToCompetition: integer("responds_to_competition", { mode: 'boolean' }).default(false),
+  respondsToBadges: integer("responds_to_badges", { mode: 'boolean' }).default(false),
+  respondsToHealthMessages: integer("responds_to_health_messages", { mode: 'boolean' }).default(false),
+  respondsToCaregiverSharing: integer("responds_to_caregiver_sharing", { mode: 'boolean' }).default(false),
+
+  // Fatigue patterns (4.1 Fatigue-Triggered Auto-Resistance)
+  avgFatigueOnsetMinutes: real("avg_fatigue_onset_minutes"), // Typical time to fatigue
+  fatigueDecayRate: real("fatigue_decay_rate"), // Power decay rate when fatigued
+  optimalSessionDuration: real("optimal_session_duration"), // Learned optimal duration
+
+  // Progressive overload tracking (4.2)
+  currentProgressionLevel: integer("current_progression_level").default(1),
+  daysAtCurrentLevel: integer("days_at_current_level").default(0),
+  lastProgressionDate: integer("last_progression_date", { mode: 'timestamp' }),
+  consecutiveSuccessfulSessions: integer("consecutive_successful_sessions").default(0),
+
+  // Setback tracking (10.5)
+  inSetbackRecovery: integer("in_setback_recovery", { mode: 'boolean' }).default(false),
+  setbackStartDate: integer("setback_start_date", { mode: 'timestamp' }),
+  preSetbackLevel: integer("pre_setback_level"),
+
+  createdAt: integer("created_at", { mode: 'timestamp' }).default(sql`(unixepoch())`),
+  updatedAt: integer("updated_at", { mode: 'timestamp' }).default(sql`(unixepoch())`),
+});
+
+// Protocol matching criteria - defines detailed matching rules for personalization
+export const protocolMatchingCriteria = sqliteTable("protocol_matching_criteria", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  protocolId: integer("protocol_id").notNull().references(() => clinicalProtocols.id),
+
+  // Patient profile matching criteria
+  minAge: integer("min_age"),
+  maxAge: integer("max_age"),
+  requiredMobilityLevels: text("required_mobility_levels"), // JSON array
+  excludedMobilityLevels: text("excluded_mobility_levels"), // JSON array
+  requiredBaselineFunction: text("required_baseline_function"), // JSON array
+
+  // Clinical matching
+  requiredComorbidities: text("required_comorbidities"), // JSON array - must have at least one
+  excludedComorbidities: text("excluded_comorbidities"), // JSON array - cannot have any
+  requiredProcedures: text("required_procedures"), // JSON array of CPT codes
+
+  // Risk-based matching
+  maxFallRisk: real("max_fall_risk"), // Protocol not suitable above this fall risk
+  maxDeconditioningRisk: real("max_deconditioning_risk"),
+  requiresLowVteRisk: integer("requires_low_vte_risk", { mode: 'boolean' }).default(false),
+
+  // Matching weight and priority
+  matchWeight: real("match_weight").default(1.0), // Weight for scoring
+  matchPriority: integer("match_priority").default(0), // Higher = tried first
+
+  createdAt: integer("created_at", { mode: 'timestamp' }).default(sql`(unixepoch())`),
+});
+
+// Session performance metrics - ML-ready data for training predictive models
+export const sessionPerformanceMetrics = sqliteTable("session_performance_metrics", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  sessionId: integer("session_id").notNull().references(() => exerciseSessions.id),
+  patientId: integer("patient_id").notNull().references(() => users.id),
+
+  // Time-series metrics (sampled every 10 seconds)
+  powerTimeSeries: text("power_time_series"), // JSON array of power readings
+  rpmTimeSeries: text("rpm_time_series"), // JSON array of RPM readings
+
+  // Derived performance metrics
+  powerDecayRate: real("power_decay_rate"), // Rate of power decline (fatigue indicator)
+  cadenceVariability: real("cadence_variability"), // Coefficient of variation
+  peakPowerTime: integer("peak_power_time"), // Seconds into session when peak occurred
+
+  // Bilateral metrics (Tier 2 - prepared for sensor integration)
+  leftForceSeries: text("left_force_series"), // JSON array
+  rightForceSeries: text("right_force_series"), // JSON array
+  bilateralAsymmetry: real("bilateral_asymmetry"), // Percentage asymmetry (>15% = concern)
+  asymmetryTrend: text("asymmetry_trend"), // 'improving', 'stable', 'worsening'
+
+  // Fatigue markers (1.1 Predictive Fall Risk)
+  fatigueOnsetTime: integer("fatigue_onset_time"), // Seconds when fatigue detected
+  fatigueMarkers: text("fatigue_markers"), // JSON: { powerDecline, cadenceIrregularity, forcePatternDegradation }
+
+  // Session quality indicators
+  sessionQualityScore: real("session_quality_score"), // 0-100 overall quality
+  targetAchievement: real("target_achievement"), // % of target duration/power achieved
+  interruptionCount: integer("interruption_count").default(0),
+
+  // Contextual data for predictions
+  timeOfDay: text("time_of_day"), // 'morning', 'afternoon', 'evening', 'night'
+  daysSinceAdmission: integer("days_since_admission"),
+  hoursSinceLastSession: real("hours_since_last_session"),
+  hoursSinceLastMeal: real("hours_since_last_meal"),
+
+  createdAt: integer("created_at", { mode: 'timestamp' }).default(sql`(unixepoch())`),
+});
+
+// Fatigue events - tracks detected fatigue for pattern analysis
+export const fatigueEvents = sqliteTable("fatigue_events", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  patientId: integer("patient_id").notNull().references(() => users.id),
+  sessionId: integer("session_id").references(() => exerciseSessions.id),
+
+  // Detection details
+  detectedAt: integer("detected_at", { mode: 'timestamp' }).notNull(),
+  fatigueType: text("fatigue_type").notNull(), // 'power_decline', 'cadence_irregular', 'force_degradation', 'bilateral_loss'
+  severity: text("severity").notNull(), // 'mild', 'moderate', 'severe'
+
+  // Trigger metrics
+  powerDeclinePercent: real("power_decline_percent"),
+  cadenceCoefficientVariation: real("cadence_coefficient_variation"),
+  bilateralAsymmetryChange: real("bilateral_asymmetry_change"),
+
+  // System response (4.1 Auto-Resistance Reduction)
+  actionTaken: text("action_taken"), // 'resistance_reduced', 'session_ended', 'alert_sent', 'none'
+  resistanceReduction: real("resistance_reduction"), // Amount reduced if applicable
+
+  // Outcome tracking
+  patientContinued: integer("patient_continued", { mode: 'boolean' }),
+  sessionCompletedAfter: integer("session_completed_after", { mode: 'boolean' }),
+
+  createdAt: integer("created_at", { mode: 'timestamp' }).default(sql`(unixepoch())`),
+});
+
+// Medication interactions - tracks medication-exercise interactions (11.2)
+export const medicationInteractions = sqliteTable("medication_interactions", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  patientId: integer("patient_id").notNull().references(() => users.id),
+
+  // Medication details
+  medicationName: text("medication_name").notNull(),
+  medicationClass: text("medication_class").notNull(), // 'beta_blocker', 'diuretic', 'sedative', etc.
+  administrationTime: integer("administration_time", { mode: 'timestamp' }),
+
+  // Exercise performance correlation
+  sessionId: integer("session_id").references(() => exerciseSessions.id),
+  hoursSinceMedication: real("hours_since_medication"),
+
+  // Performance impact
+  powerChangePercent: real("power_change_percent"), // Compared to baseline
+  heartRateImpact: text("heart_rate_impact"), // 'suppressed', 'elevated', 'normal'
+  coordinationImpact: text("coordination_impact"), // 'impaired', 'normal'
+
+  // Alert generated
+  alertGenerated: integer("alert_generated", { mode: 'boolean' }).default(false),
+  alertMessage: text("alert_message"),
+  providerNotified: integer("provider_notified", { mode: 'boolean' }).default(false),
+
+  // Goal adjustment (11.2)
+  goalAdjustmentApplied: integer("goal_adjustment_applied", { mode: 'boolean' }).default(false),
+  adjustmentDetails: text("adjustment_details"), // JSON with adjustment specifics
+
+  createdAt: integer("created_at", { mode: 'timestamp' }).default(sql`(unixepoch())`),
+});
+
+// Contraindication verifications - tracks contraindication checks (11.3)
+export const contraindicationVerifications = sqliteTable("contraindication_verifications", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  patientId: integer("patient_id").notNull().references(() => users.id),
+
+  // Verification details
+  verifiedAt: integer("verified_at", { mode: 'timestamp' }).notNull(),
+  verificationType: text("verification_type").notNull(), // 'pre_session', 'periodic', 'order_change'
+
+  // Contraindication found
+  contraindicationFound: integer("contraindication_found", { mode: 'boolean' }).default(false),
+  contraindicationType: text("contraindication_type"), // 'absolute', 'relative', 'temporal'
+  contraindicationReason: text("contraindication_reason"),
+
+  // Action taken
+  actionTaken: text("action_taken"), // 'device_locked', 'parameters_modified', 'alert_sent', 'cleared'
+  alertPriority: text("alert_priority"), // 'critical', 'warning', 'caution'
+
+  // Override handling
+  providerOverride: integer("provider_override", { mode: 'boolean' }).default(false),
+  overrideBy: integer("override_by").references(() => users.id),
+  overrideReason: text("override_reason"),
+  overrideAt: integer("override_at", { mode: 'timestamp' }),
+
+  createdAt: integer("created_at", { mode: 'timestamp' }).default(sql`(unixepoch())`),
+});
+
+// Multi-modal mobility scores - unified mobility scoring (1.5)
+export const mobilityScores = sqliteTable("mobility_scores", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  patientId: integer("patient_id").notNull().references(() => users.id),
+
+  // Score timestamp
+  scoredAt: integer("scored_at", { mode: 'timestamp' }).notNull(),
+
+  // Component scores (0-100 each)
+  bikeScore: real("bike_score"), // From bedside bike metrics
+  ambulationScore: real("ambulation_score"), // From hallway/room ambulation
+  ptScore: real("pt_score"), // From PT session reports
+  nursingScore: real("nursing_score"), // From nursing mobility assessments
+  adlScore: real("adl_score"), // Activities of daily living
+
+  // Component weights used
+  componentWeights: text("component_weights"), // JSON with weights used
+
+  // Unified mobility score
+  unifiedScore: real("unified_score").notNull(), // Weighted composite 0-100
+  scoreConfidence: real("score_confidence"), // Confidence based on data completeness
+
+  // Standard scale translations
+  barthelIndex: integer("barthel_index"), // 0-100 Barthel Index
+  functionalIndependenceMeasure: integer("functional_independence_measure"), // 18-126 FIM
+
+  // Trend analysis
+  scoreTrend: text("score_trend"), // 'improving', 'stable', 'declining'
+  trendMagnitude: real("trend_magnitude"), // Rate of change
+
+  createdAt: integer("created_at", { mode: 'timestamp' }).default(sql`(unixepoch())`),
+});
+
+// Cohort comparisons - privacy-preserving benchmarking (8.1)
+export const cohortComparisons = sqliteTable("cohort_comparisons", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  patientId: integer("patient_id").notNull().references(() => users.id),
+
+  // Cohort definition
+  cohortId: text("cohort_id").notNull(), // Hashed cohort identifier
+  cohortCriteria: text("cohort_criteria").notNull(), // JSON: { ageRange, diagnosis, mobilityLevel, daysPostAdmission }
+  cohortSize: integer("cohort_size").notNull(),
+
+  // Comparison timestamp
+  comparedAt: integer("compared_at", { mode: 'timestamp' }).notNull(),
+
+  // Performance percentiles
+  durationPercentile: real("duration_percentile"), // 0-100
+  powerPercentile: real("power_percentile"),
+  consistencyPercentile: real("consistency_percentile"),
+  improvementPercentile: real("improvement_percentile"),
+
+  // Comparison summary
+  overallPercentile: real("overall_percentile").notNull(),
+  comparisonMessage: text("comparison_message"), // "You're performing better than 68% of similar patients"
+
+  createdAt: integer("created_at", { mode: 'timestamp' }).default(sql`(unixepoch())`),
+});
+
+// Virtual competitions - async competition system (3.2)
+export const virtualCompetitions = sqliteTable("virtual_competitions", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+
+  // Competition details
+  competitionName: text("competition_name").notNull(),
+  competitionType: text("competition_type").notNull(), // 'daily_distance', 'weekly_duration', 'power_challenge'
+  startDate: integer("start_date", { mode: 'timestamp' }).notNull(),
+  endDate: integer("end_date", { mode: 'timestamp' }).notNull(),
+
+  // Matching criteria for participants
+  matchingCriteria: text("matching_criteria").notNull(), // JSON: { ageRange, baselineCapability }
+
+  // Competition status
+  status: text("status").notNull(), // 'active', 'completed', 'cancelled'
+
+  createdAt: integer("created_at", { mode: 'timestamp' }).default(sql`(unixepoch())`),
+});
+
+// Competition participants - links patients to competitions
+export const competitionParticipants = sqliteTable("competition_participants", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  competitionId: integer("competition_id").notNull().references(() => virtualCompetitions.id),
+  patientId: integer("patient_id").notNull().references(() => users.id),
+
+  // Anonymized display
+  anonymousId: text("anonymous_id").notNull(), // Privacy-preserving identifier
+
+  // Progress tracking
+  currentScore: real("current_score").default(0),
+  currentRank: integer("current_rank"),
+
+  // Milestones achieved
+  milestonesAchieved: text("milestones_achieved"), // JSON array of milestone IDs
+
+  // Engagement metrics
+  sessionsContributed: integer("sessions_contributed").default(0),
+  lastContribution: integer("last_contribution", { mode: 'timestamp' }),
+
+  createdAt: integer("created_at", { mode: 'timestamp' }).default(sql`(unixepoch())`),
+});
+
+// Insurance authorization reports (5.3)
+export const insuranceReports = sqliteTable("insurance_reports", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  patientId: integer("patient_id").notNull().references(() => users.id),
+
+  // Report details
+  reportType: text("report_type").notNull(), // 'snf_authorization', 'home_health', 'outpatient_pt'
+  generatedAt: integer("generated_at", { mode: 'timestamp' }).notNull(),
+  generatedBy: integer("generated_by").references(() => users.id),
+
+  // Functional capacity data
+  functionalCapacityData: text("functional_capacity_data").notNull(), // JSON with objective metrics
+  progressTrajectory: text("progress_trajectory").notNull(), // 'improving', 'plateaued', 'declining'
+  comparisonToThresholds: text("comparison_to_thresholds"), // JSON with threshold comparisons
+
+  // Predictions
+  predictedTimeToIndependence: integer("predicted_time_to_independence"), // Days
+  predictedDischargeDisposition: text("predicted_discharge_disposition"),
+  predictionConfidence: real("prediction_confidence"),
+
+  // Report content
+  reportContent: text("report_content").notNull(), // Full generated report text
+  reportPdf: text("report_pdf"), // Base64 encoded PDF or path
+
+  // Approval workflow
+  clinicianApproved: integer("clinician_approved", { mode: 'boolean' }).default(false),
+  approvedBy: integer("approved_by").references(() => users.id),
+  approvedAt: integer("approved_at", { mode: 'timestamp' }),
+
+  // Submission tracking
+  submittedToInsurance: integer("submitted_to_insurance", { mode: 'boolean' }).default(false),
+  submittedAt: integer("submitted_at", { mode: 'timestamp' }),
+  insuranceResponse: text("insurance_response"),
+
+  createdAt: integer("created_at", { mode: 'timestamp' }).default(sql`(unixepoch())`),
+});
+
+// Fall risk predictions - enhanced fall risk with exercise data (1.1)
+export const fallRiskPredictions = sqliteTable("fall_risk_predictions", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  patientId: integer("patient_id").notNull().references(() => users.id),
+
+  // Prediction timestamp
+  predictedAt: integer("predicted_at", { mode: 'timestamp' }).notNull(),
+
+  // Multi-modal risk score
+  overallFallRisk: real("overall_fall_risk").notNull(), // 0-1 probability
+  riskLevel: text("risk_level").notNull(), // 'low', 'moderate', 'high', 'critical'
+
+  // Contributing factors from exercise
+  bilateralAsymmetryRisk: real("bilateral_asymmetry_risk"), // >15% L-R differential
+  cadenceVariabilityRisk: real("cadence_variability_risk"),
+  powerDecayRisk: real("power_decay_risk"), // Fatigue pattern
+
+  // Temporal factors
+  timeOfDayRisk: real("time_of_day_risk"),
+  medicationScheduleRisk: real("medication_schedule_risk"),
+
+  // Clinical factors
+  clinicalRiskFactors: text("clinical_risk_factors"), // JSON array of contributing factors
+
+  // Alert generated
+  alertGenerated: integer("alert_generated", { mode: 'boolean' }).default(false),
+  alertPriority: text("alert_priority"),
+
+  createdAt: integer("created_at", { mode: 'timestamp' }).default(sql`(unixepoch())`),
+});
+
 // Patient protocol assignments - Track which protocol a patient is following
 export const patientProtocolAssignments = sqliteTable("patient_protocol_assignments", {
   id: integer("id").primaryKey({ autoIncrement: true }),
@@ -415,3 +782,68 @@ export type InsertGoal = InsertPatientGoal;
 export const insertPatientSchema = patientRegistrationSchema;
 export const insertSessionSchema = insertExerciseSessionSchema;
 export const insertGoalSchema = insertPatientGoalSchema;
+
+// ============================================================================
+// PERSONALIZED PROTOCOL MATCHING SYSTEM - Type Exports
+// ============================================================================
+
+// Insert schemas for new tables
+export const insertPatientPersonalizationProfileSchema = createInsertSchema(patientPersonalizationProfiles);
+export const insertProtocolMatchingCriteriaSchema = createInsertSchema(protocolMatchingCriteria);
+export const insertSessionPerformanceMetricsSchema = createInsertSchema(sessionPerformanceMetrics);
+export const insertFatigueEventSchema = createInsertSchema(fatigueEvents);
+export const insertMedicationInteractionSchema = createInsertSchema(medicationInteractions);
+export const insertContraindicationVerificationSchema = createInsertSchema(contraindicationVerifications);
+export const insertMobilityScoreSchema = createInsertSchema(mobilityScores);
+export const insertCohortComparisonSchema = createInsertSchema(cohortComparisons);
+export const insertVirtualCompetitionSchema = createInsertSchema(virtualCompetitions);
+export const insertCompetitionParticipantSchema = createInsertSchema(competitionParticipants);
+export const insertInsuranceReportSchema = createInsertSchema(insuranceReports);
+export const insertFallRiskPredictionSchema = createInsertSchema(fallRiskPredictions);
+
+// Type exports for new tables
+export type PatientPersonalizationProfile = typeof patientPersonalizationProfiles.$inferSelect;
+export type InsertPatientPersonalizationProfile = typeof patientPersonalizationProfiles.$inferInsert;
+
+export type ProtocolMatchingCriteria = typeof protocolMatchingCriteria.$inferSelect;
+export type InsertProtocolMatchingCriteria = typeof protocolMatchingCriteria.$inferInsert;
+
+export type SessionPerformanceMetrics = typeof sessionPerformanceMetrics.$inferSelect;
+export type InsertSessionPerformanceMetrics = typeof sessionPerformanceMetrics.$inferInsert;
+
+export type FatigueEvent = typeof fatigueEvents.$inferSelect;
+export type InsertFatigueEvent = typeof fatigueEvents.$inferInsert;
+
+export type MedicationInteraction = typeof medicationInteractions.$inferSelect;
+export type InsertMedicationInteraction = typeof medicationInteractions.$inferInsert;
+
+export type ContraindicationVerification = typeof contraindicationVerifications.$inferSelect;
+export type InsertContraindicationVerification = typeof contraindicationVerifications.$inferInsert;
+
+export type MobilityScore = typeof mobilityScores.$inferSelect;
+export type InsertMobilityScore = typeof mobilityScores.$inferInsert;
+
+export type CohortComparison = typeof cohortComparisons.$inferSelect;
+export type InsertCohortComparison = typeof cohortComparisons.$inferInsert;
+
+export type VirtualCompetition = typeof virtualCompetitions.$inferSelect;
+export type InsertVirtualCompetition = typeof virtualCompetitions.$inferInsert;
+
+export type CompetitionParticipant = typeof competitionParticipants.$inferSelect;
+export type InsertCompetitionParticipant = typeof competitionParticipants.$inferInsert;
+
+export type InsuranceReport = typeof insuranceReports.$inferSelect;
+export type InsertInsuranceReport = typeof insuranceReports.$inferInsert;
+
+export type FallRiskPrediction = typeof fallRiskPredictions.$inferSelect;
+export type InsertFallRiskPrediction = typeof fallRiskPredictions.$inferInsert;
+
+// Clinical protocol types
+export type ClinicalProtocol = typeof clinicalProtocols.$inferSelect;
+export type InsertClinicalProtocol = typeof clinicalProtocols.$inferInsert;
+
+export type PatientProtocolAssignment = typeof patientProtocolAssignments.$inferSelect;
+export type InsertPatientProtocolAssignment = typeof patientProtocolAssignments.$inferInsert;
+
+export type Alert = typeof alerts.$inferSelect;
+export type InsertAlert = typeof alerts.$inferInsert;
