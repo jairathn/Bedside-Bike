@@ -130,6 +130,19 @@ export default function FatigueMonitorPage() {
           </p>
         </div>
 
+        {/* Mock Data Banner */}
+        {isLiveMode && (
+          <div className="mb-6 p-4 bg-amber-50 border border-amber-200 rounded-lg flex items-center">
+            <AlertTriangle className="w-5 h-5 text-amber-600 mr-3 flex-shrink-0" />
+            <div>
+              <p className="font-medium text-amber-800">Simulated Data Mode</p>
+              <p className="text-sm text-amber-700">
+                Live metrics are simulated for demonstration. Connect to a real Bedside Bike device and Azure database for actual patient data.
+              </p>
+            </div>
+          </div>
+        )}
+
         {/* Patient Selection */}
         <Card className="mb-6">
           <CardContent className="p-4">

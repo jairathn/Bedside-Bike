@@ -189,8 +189,20 @@ export default function BilateralForcePage() {
             Real-time bilateral force visualization and stroke rehabilitation support
           </p>
           <Badge variant="outline" className="mt-2">
-            Tier 2 Feature - Enhanced with Force Sensors
+            Tier 2 Feature - Requires Force Sensors
           </Badge>
+        </div>
+
+        {/* Sensor Integration Banner */}
+        <div className="mb-6 p-4 bg-blue-50 border border-blue-200 rounded-lg flex items-center">
+          <Brain className="w-5 h-5 text-blue-600 mr-3 flex-shrink-0" />
+          <div>
+            <p className="font-medium text-blue-800">Bilateral Force Sensors Required</p>
+            <p className="text-sm text-blue-700">
+              This feature requires bilateral force sensors to be installed on the Bedside Bike pedals.
+              {isLiveMode && " Currently showing simulated data for demonstration purposes."}
+            </p>
+          </div>
         </div>
 
         {/* Patient Selection */}

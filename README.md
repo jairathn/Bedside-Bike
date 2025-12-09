@@ -719,6 +719,159 @@ NODE_ENV=production
 
 ---
 
+## 🔧 **Integration Requirements for Engineers**
+
+### Connecting to Real Bedside Bike Devices
+
+The platform supports real-time data from physical Bedside Bike devices. When no device is connected, the system uses simulated data for demonstration.
+
+#### Hardware Requirements
+
+| Component | Status | Integration Notes |
+|-----------|--------|-------------------|
+| **Basic Bedside Bike** | ✅ Ready | Standard RPM and resistance sensors |
+| **Heart Rate Monitor** | ⚡ Optional | Bluetooth or ANT+ connection |
+| **Bilateral Force Sensors** | 🔜 Tier 2 | Required for stroke rehab features |
+
+#### Device Integration Steps
+
+1. **WebSocket Connection**
+   ```javascript
+   // Device firmware should establish WebSocket connection
+   const ws = new WebSocket('wss://your-server/ws/device-bridge?type=device&deviceId=BB-001');
+
+   // Send metrics every 1 second during active session
+   ws.send(JSON.stringify({
+     type: 'session_update',
+     data: {
+       sessionId: 123,
+       patientId: 4,
+       deviceId: 'BB-001',
+       timestamp: new Date().toISOString(),
+       metrics: {
+         rpm: 45,
+         power: 32,       // Calculated: RPM × (0.1 + resistance × 0.005)
+         distance: 150,
+         duration: 120,
+         heartRate: 88    // Optional
+       },
+       status: 'active'
+     }
+   }));
+   ```
+
+2. **Power Calculation Formula**
+   ```
+   Power (watts) = RPM × (0.1 + Resistance × 0.005)
+   ```
+   Example: 45 RPM at resistance 4 = 45 × (0.1 + 4 × 0.005) = 45 × 0.12 = 5.4W
+
+3. **Bilateral Force Sensors (Tier 2)**
+   ```javascript
+   // When bilateral force sensors are installed
+   metrics: {
+     ...standardMetrics,
+     leftForce: 28.5,    // Newtons
+     rightForce: 26.2,   // Newtons
+     leftAngle: 45,      // Degrees (0-360)
+     rightAngle: 225     // Degrees (0-360)
+   }
+   ```
+
+### Connecting to Azure Database
+
+The platform uses SQLite for local development and Azure SQL for production.
+
+#### Azure SQL Connection
+
+1. **Set Environment Variables**
+   ```env
+   USE_LOCAL_DB=false
+   DATABASE_URL="Server=tcp:beside-bike-server.database.windows.net,1433;Initial Catalog=BedsideBike;Persist Security Info=False;User ID=your-username;Password=your-password;MultipleActiveResultSets=False;Encrypt=True;TrustServerCertificate=False;Connection Timeout=30;"
+   ```
+
+2. **Database Tables Required**
+   The application expects these tables in Azure SQL (schemas in `DatabaseFiles/Tables/`):
+   - `users` - Patient and provider accounts
+   - `exercise_sessions` - Session records
+   - `pedaling_data` - Real-time pedaling metrics
+   - `device_data` - Device telemetry
+   - `device_metadata` - Device configurations
+   - `voltage_monitor` - Power system monitoring
+
+3. **Device Data Adapter**
+   The `server/personalization/device-data-adapter.ts` bridges real device data to the personalization engines:
+   ```typescript
+   import { convertPedalingData, DeviceDataStream } from './personalization';
+
+   // Convert raw device data to standardized metrics
+   const metrics = convertPedalingData(rawPedalingData);
+
+   // Stream session data for real-time analysis
+   const stream = getOrCreateStream(sessionId, patientId);
+   stream.addMetric(metrics);
+   ```
+
+---
+
+## 🎭 **Mock Data & Demonstration Mode**
+
+### What Uses Simulated Data
+
+The platform includes demonstration modes for features requiring hardware not yet installed:
+
+| Feature | Real Data Source | Demo Mode Behavior |
+|---------|-----------------|-------------------|
+| **Live Session Metrics** | Device WebSocket | Simulated RPM/power with realistic patterns |
+| **Fatigue Detection** | Real-time device data | Simulated fatigue progression over time |
+| **Bilateral Force** | Force sensors | Simulated left/right force with random asymmetry |
+| **Patient Sessions** | Azure SQL database | Auto-generated sessions for last 4 days |
+| **Cohort Comparison** | Population data | Simulated cohort percentiles |
+
+### Identifying Mock Data
+
+Pages using simulated data display a **yellow warning banner**:
+
+```
+⚠️ Simulated Data Mode
+Live metrics are simulated for demonstration. Connect to a real Bedside Bike device and Azure database for actual patient data.
+```
+
+### Disabling Mock Data
+
+To use only real data in production:
+
+1. Ensure `USE_LOCAL_DB=false` in environment
+2. Connect to Azure SQL with real patient data
+3. Connect physical devices via WebSocket
+4. The system automatically detects real connections and disables simulation
+
+---
+
+## 🧑‍⚕️ **Provider Dashboard Navigation**
+
+The provider dashboard includes a navigation menu (☰) for accessing all personalization features:
+
+### Clinical Tools
+- **Protocol Matching** (`/protocol-matching`) - AI-powered protocol recommendations
+- **Fatigue Monitor** (`/fatigue-monitor`) - Real-time fatigue detection
+- **Progression Dashboard** (`/progression`) - Progressive overload tracking
+- **Medication Safety** (`/medication-safety`) - Drug-exercise interactions
+
+### Assessment & Scoring
+- **Mobility Scores** (`/mobility-scores`) - Multi-modal scoring system
+- **Bilateral Force** (`/bilateral-force`) - Force symmetry analysis
+
+### Engagement & Reporting
+- **Competitions** (`/competitions`) - Virtual competitions & cohorts
+- **Insurance Reports** (`/insurance-reports`) - Authorization documentation
+
+### Quick Actions
+- **Risk Calculator** - Direct link to risk assessment
+- **Match Protocol** - Context-aware protocol matching for selected patient
+
+---
+
 ## 📄 **License**
 
 Proprietary - Bedside Bike, Inc.
