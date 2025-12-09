@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { useLocation } from "wouter";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/lib/auth.tsx";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -8,7 +9,31 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
-import { Users, LogOut, Target, Activity, Clock, Zap, TrendingUp, Calendar, CheckCircle, Calculator, Lightbulb, ChevronDown, ChevronUp, ChevronLeft, ChevronRight } from "lucide-react";
+import {
+  Users,
+  LogOut,
+  Target,
+  Activity,
+  Clock,
+  Zap,
+  TrendingUp,
+  Calendar,
+  CheckCircle,
+  Calculator,
+  Lightbulb,
+  ChevronDown,
+  ChevronUp,
+  ChevronLeft,
+  ChevronRight,
+  Pill,
+  Trophy,
+  FileText,
+  ArrowLeftRight,
+  AlertTriangle,
+  BarChart3,
+  Menu,
+  X
+} from "lucide-react";
 import { apiRequest } from "@/lib/queryClient";
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar } from 'recharts';
 import { ProviderGoalEditor } from "@/components/provider-goal-editor";
@@ -189,12 +214,41 @@ function DidYouKnowSection() {
   );
 }
 
+// Navigation menu items for personalization features
+const navigationItems = [
+  {
+    category: "Clinical Tools",
+    items: [
+      { name: "Protocol Matching", href: "/protocol-matching", icon: Target, description: "AI-powered protocol recommendations" },
+      { name: "Fatigue Monitor", href: "/fatigue-monitor", icon: Activity, description: "Real-time fatigue detection" },
+      { name: "Progression Dashboard", href: "/progression", icon: TrendingUp, description: "Progressive overload tracking" },
+      { name: "Medication Safety", href: "/medication-safety", icon: Pill, description: "Drug-exercise interactions" },
+    ]
+  },
+  {
+    category: "Assessment & Scoring",
+    items: [
+      { name: "Mobility Scores", href: "/mobility-scores", icon: BarChart3, description: "Multi-modal scoring system" },
+      { name: "Bilateral Force", href: "/bilateral-force", icon: ArrowLeftRight, description: "Force symmetry analysis" },
+    ]
+  },
+  {
+    category: "Engagement & Reporting",
+    items: [
+      { name: "Competitions", href: "/competitions", icon: Trophy, description: "Virtual competitions & cohorts" },
+      { name: "Insurance Reports", href: "/insurance-reports", icon: FileText, description: "Authorization documentation" },
+    ]
+  }
+];
+
 export default function ProviderDashboard() {
   const { user, logout } = useAuth();
   const { toast } = useToast();
   const queryClient = useQueryClient();
+  const [, setLocation] = useLocation();
   const [selectedPatient, setSelectedPatient] = useState<any>(null);
   const [editingGoal, setEditingGoal] = useState<any>(null);
+  const [navMenuOpen, setNavMenuOpen] = useState(false);
 
   // Check if user can edit goals (all provider types can edit)
   const canEditGoals = (user: any) => {
@@ -281,10 +335,18 @@ export default function ProviderDashboard() {
   return (
     <div className="min-h-screen bg-gray-50">
       {/* Header */}
-      <header className="bg-white shadow-sm border-b border-gray-200">
+      <header className="bg-white shadow-sm border-b border-gray-200 sticky top-0 z-40">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between items-center h-16">
             <div className="flex items-center">
+              <Button
+                variant="ghost"
+                size="sm"
+                className="mr-2"
+                onClick={() => setNavMenuOpen(!navMenuOpen)}
+              >
+                {navMenuOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
+              </Button>
               <div className="w-8 h-8 bg-blue-600 rounded-full flex items-center justify-center mr-3">
                 <Users className="text-white" size={16} />
               </div>
@@ -301,6 +363,118 @@ export default function ProviderDashboard() {
           </div>
         </div>
       </header>
+
+      {/* Navigation Sidebar */}
+      <div
+        className={`fixed inset-0 z-30 transition-opacity duration-300 ${
+          navMenuOpen ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none'
+        }`}
+      >
+        {/* Overlay */}
+        <div
+          className="absolute inset-0 bg-black/50"
+          onClick={() => setNavMenuOpen(false)}
+        />
+
+        {/* Sidebar Panel */}
+        <div
+          className={`absolute left-0 top-16 bottom-0 w-80 bg-white shadow-xl transform transition-transform duration-300 overflow-y-auto ${
+            navMenuOpen ? 'translate-x-0' : '-translate-x-full'
+          }`}
+        >
+          <div className="p-4">
+            <h2 className="text-lg font-semibold text-gray-900 mb-4 flex items-center">
+              <Zap className="w-5 h-5 mr-2 text-blue-600" />
+              Personalization Tools
+            </h2>
+
+            {navigationItems.map((category, categoryIndex) => (
+              <div key={categoryIndex} className="mb-6">
+                <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-3">
+                  {category.category}
+                </h3>
+                <div className="space-y-1">
+                  {category.items.map((item, itemIndex) => {
+                    const IconComponent = item.icon;
+                    return (
+                      <button
+                        key={itemIndex}
+                        onClick={() => {
+                          setLocation(item.href);
+                          setNavMenuOpen(false);
+                        }}
+                        className="w-full flex items-start p-3 rounded-lg hover:bg-blue-50 transition-colors text-left group"
+                      >
+                        <div className="flex-shrink-0 w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center mr-3 group-hover:bg-blue-200 transition-colors">
+                          <IconComponent className="w-5 h-5 text-blue-600" />
+                        </div>
+                        <div>
+                          <p className="font-medium text-gray-900 group-hover:text-blue-600 transition-colors">
+                            {item.name}
+                          </p>
+                          <p className="text-xs text-gray-500 mt-0.5">
+                            {item.description}
+                          </p>
+                        </div>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            ))}
+
+            {/* Quick Actions */}
+            <div className="mt-6 pt-6 border-t border-gray-200">
+              <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-3">
+                Quick Actions
+              </h3>
+              <div className="space-y-2">
+                <Button
+                  variant="outline"
+                  className="w-full justify-start"
+                  onClick={() => {
+                    setLocation('/risk-assessment');
+                    setNavMenuOpen(false);
+                  }}
+                >
+                  <Calculator className="w-4 h-4 mr-2" />
+                  Risk Calculator
+                </Button>
+                <Button
+                  variant="outline"
+                  className="w-full justify-start"
+                  onClick={() => {
+                    if (selectedPatient) {
+                      setLocation(`/protocol-matching?patient=${selectedPatient.id}`);
+                    } else {
+                      setLocation('/protocol-matching');
+                    }
+                    setNavMenuOpen(false);
+                  }}
+                >
+                  <Target className="w-4 h-4 mr-2" />
+                  {selectedPatient ? `Match Protocol for ${selectedPatient.firstName}` : 'Match Protocol'}
+                </Button>
+              </div>
+            </div>
+
+            {/* Alert for Patient Selection */}
+            {!selectedPatient && (
+              <div className="mt-6 p-3 bg-amber-50 border border-amber-200 rounded-lg">
+                <div className="flex items-start">
+                  <AlertTriangle className="w-5 h-5 text-amber-600 mr-2 flex-shrink-0 mt-0.5" />
+                  <div>
+                    <p className="text-sm font-medium text-amber-800">No Patient Selected</p>
+                    <p className="text-xs text-amber-700 mt-1">
+                      Select a patient from the dashboard to use patient-specific features.
+                    </p>
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
 
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         {/* Did You Know Section */}

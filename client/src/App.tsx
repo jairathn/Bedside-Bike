@@ -18,6 +18,16 @@ import KudosWall from "@/pages/kudos-wall";
 import ProviderAccessPage from "@/pages/provider-access";
 import AnonymousRiskCalculator from "@/pages/anonymous-risk-calculator";
 
+// Personalization Module Pages
+import ProtocolMatchingPage from "@/pages/personalization/protocol-matching";
+import FatigueMonitorPage from "@/pages/personalization/fatigue-monitor";
+import ProgressionDashboardPage from "@/pages/personalization/progression-dashboard";
+import MedicationSafetyPage from "@/pages/personalization/medication-safety";
+import MobilityScoresPage from "@/pages/personalization/mobility-scores";
+import CompetitionCenterPage from "@/pages/personalization/competition-center";
+import InsuranceReportsPage from "@/pages/personalization/insurance-reports";
+import BilateralForcePage from "@/pages/personalization/bilateral-force";
+
 function Router() {
   const [location, setLocation] = useLocation();
   const { user, isLoading, setUser } = useAuth();
@@ -70,6 +80,17 @@ function Router() {
       <Route path="/provider-access" component={user ? ProviderAccessPage : () => <AuthPage onAuthSuccess={handleAuthSuccess} />} />
       <Route path="/provider-dashboard" component={user?.userType === 'provider' ? ProviderDashboard : () => <AuthPage onAuthSuccess={handleAuthSuccess} />} />
       <Route path="/anonymous-risk-calculator" component={AnonymousRiskCalculator} />
+
+      {/* Personalization Module Routes (Provider Only) */}
+      <Route path="/protocol-matching" component={user?.userType === 'provider' ? ProtocolMatchingPage : () => <AuthPage onAuthSuccess={handleAuthSuccess} />} />
+      <Route path="/fatigue-monitor" component={user?.userType === 'provider' ? FatigueMonitorPage : () => <AuthPage onAuthSuccess={handleAuthSuccess} />} />
+      <Route path="/progression" component={user?.userType === 'provider' ? ProgressionDashboardPage : () => <AuthPage onAuthSuccess={handleAuthSuccess} />} />
+      <Route path="/medication-safety" component={user?.userType === 'provider' ? MedicationSafetyPage : () => <AuthPage onAuthSuccess={handleAuthSuccess} />} />
+      <Route path="/mobility-scores" component={user?.userType === 'provider' ? MobilityScoresPage : () => <AuthPage onAuthSuccess={handleAuthSuccess} />} />
+      <Route path="/competitions" component={user ? CompetitionCenterPage : () => <AuthPage onAuthSuccess={handleAuthSuccess} />} />
+      <Route path="/insurance-reports" component={user?.userType === 'provider' ? InsuranceReportsPage : () => <AuthPage onAuthSuccess={handleAuthSuccess} />} />
+      <Route path="/bilateral-force" component={user?.userType === 'provider' ? BilateralForcePage : () => <AuthPage onAuthSuccess={handleAuthSuccess} />} />
+
       <Route component={NotFound} />
     </Switch>
   );

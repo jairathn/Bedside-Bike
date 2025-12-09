@@ -256,7 +256,8 @@ export default function DashboardPage() {
                     {showProgress ? <ChevronDown className="w-5 h-5" /> : <ChevronRight className="w-5 h-5" />}
                   </div>
                 </CardContent>
-              </CollapsibleTrigger>
+              </Card>
+            </CollapsibleTrigger>
               <CollapsibleContent>
                 <div className="mt-3 space-y-4">
                   <Card>
@@ -289,7 +290,6 @@ export default function DashboardPage() {
                 </div>
               </CollapsibleContent>
             </Collapsible>
-          )}
         </div>
 
         {/* Simple Action Buttons */}
