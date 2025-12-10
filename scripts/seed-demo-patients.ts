@@ -84,8 +84,7 @@ const hospitalPatient = db.prepare(`
   hospitalPatientDOB,
   'patient',
   hospitalAdmissionDate.toISOString().split('T')[0],
-  1,
-  Date.now()
+  1
 ) as any;
 
 // Create comprehensive patient profile
@@ -94,9 +93,8 @@ db.prepare(`
     user_id, age, sex, weight_kg, height_cm,
     level_of_care, mobility_status, cognitive_status, baseline_function,
     admission_diagnosis, comorbidities, medications, devices,
-    incontinent, albumin_low, on_vte_prophylaxis, days_immobile,
-    created_at
-  ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    incontinent, albumin_low, on_vte_prophylaxis, days_immobile
+  ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 `).run(
   hospitalPatient.id,
   70, // age
@@ -120,8 +118,7 @@ db.prepare(`
   0,
   0,
   1,
-  5, // days immobile
-  Date.now()
+  5 // days immobile
 );
 
 // Create risk assessment
@@ -158,15 +155,14 @@ if (copdProtocol) {
     INSERT INTO patient_protocol_assignments (
       patient_id, protocol_id, assigned_by, current_phase,
       start_date, status
-    ) VALUES (?, ?, ?, ?, ?, ?, ?)
+    ) VALUES (?, ?, ?, ?, ?, ?)
   `).run(
     hospitalPatient.id,
     copdProtocol.id,
     providerId,
     'Initial',
     Math.floor(hospitalAdmissionDate.getTime() / 1000),
-    'active',
-    Date.now()
+    'active'
   );
 }
 
@@ -215,13 +211,13 @@ db.prepare(`
     patient_id, provider_id, goal_type, target_value, current_value,
     unit, label, subtitle, period, is_active
   ) VALUES
-  (?, ?, 'duration', '600', '0', 'seconds', 'Daily mobility target', 'COPD protocol - 10min sessions', 'daily', 1, ?),
-  (?, ?, 'power', '15', '0', 'watts', 'Power output goal', 'Low intensity for respiratory recovery', 'session', 1, ?),
-  (?, ?, 'sessions', '2', '0', 'sessions', 'Exercise frequency', 'BID sessions for optimal benefit', 'daily', 1, ?)
+  (?, ?, 'duration', '600', '0', 'seconds', 'Daily mobility target', 'COPD protocol - 10min sessions', 'daily', 1),
+  (?, ?, 'power', '15', '0', 'watts', 'Power output goal', 'Low intensity for respiratory recovery', 'session', 1),
+  (?, ?, 'sessions', '2', '0', 'sessions', 'Exercise frequency', 'BID sessions for optimal benefit', 'daily', 1)
 `).run(
-  hospitalPatient.id, providerId, Date.now(),
-  hospitalPatient.id, providerId, Date.now(),
-  hospitalPatient.id, providerId, Date.now()
+  hospitalPatient.id, providerId,
+  hospitalPatient.id, providerId,
+  hospitalPatient.id, providerId
 );
 
 // Create patient stats
@@ -238,16 +234,15 @@ db.prepare(`
   (hospitalSessionCount * 5.5 * 60) / 5, // per day
   5,
   hospitalSessionCount * 50 + 250, // sessions + time bonus
-  2,
-  Date.now()
+  2
 );
 
 // Assign to Heidi Kissane
 db.prepare(`
   INSERT INTO provider_patients (
     patient_id, provider_id, permission_granted, granted_at, is_active
-  ) VALUES (?, ?, ?, ?, ?, ?)
-`).run(hospitalPatient.id, providerId, 1, Date.now(), 1, Date.now());
+  ) VALUES (?, ?, ?, ?, ?)
+`).run(hospitalPatient.id, providerId, 1, Date.now(), 1);
 
 console.log(`✅ Hospital Patient: ${hospitalPatient.first_name} ${hospitalPatient.last_name} (ID: ${hospitalPatient.id})`);
 
@@ -270,8 +265,7 @@ const rehabPatient = db.prepare(`
   rehabPatientDOB,
   'patient',
   rehabAdmissionDate.toISOString().split('T')[0],
-  1,
-  Date.now()
+  1
 ) as any;
 
 // Create comprehensive patient profile
@@ -280,9 +274,8 @@ db.prepare(`
     user_id, age, sex, weight_kg, height_cm,
     level_of_care, mobility_status, cognitive_status, baseline_function,
     admission_diagnosis, comorbidities, medications, devices,
-    incontinent, albumin_low, on_vte_prophylaxis, days_immobile,
-    created_at
-  ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    incontinent, albumin_low, on_vte_prophylaxis, days_immobile
+  ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 `).run(
   rehabPatient.id,
   82, // age
@@ -307,8 +300,7 @@ db.prepare(`
   0,
   0,
   1,
-  12, // days immobile
-  Date.now()
+  12 // days immobile
 );
 
 // Create risk assessment
@@ -344,15 +336,14 @@ if (hipProtocol) {
     INSERT INTO patient_protocol_assignments (
       patient_id, protocol_id, assigned_by, current_phase,
       start_date, status
-    ) VALUES (?, ?, ?, ?, ?, ?, ?)
+    ) VALUES (?, ?, ?, ?, ?, ?)
   `).run(
     rehabPatient.id,
     hipProtocol.id,
     providerId,
     'Advanced', // Advanced phase
     Math.floor(rehabAdmissionDate.getTime() / 1000),
-    'active',
-    Date.now()
+    'active'
   );
 }
 
@@ -401,13 +392,13 @@ db.prepare(`
     patient_id, provider_id, goal_type, target_value, current_value,
     unit, label, subtitle, period, is_active
   ) VALUES
-  (?, ?, 'duration', '900', '0', 'seconds', 'Daily mobility target', 'Hip protocol - 15min sessions', 'daily', 1, ?),
-  (?, ?, 'power', '30', '0', 'watts', 'Power output goal', 'Progressive loading for strength', 'session', 1, ?),
-  (?, ?, 'sessions', '2', '0', 'sessions', 'Exercise frequency', 'BID sessions for recovery', 'daily', 1, ?)
+  (?, ?, 'duration', '900', '0', 'seconds', 'Daily mobility target', 'Hip protocol - 15min sessions', 'daily', 1),
+  (?, ?, 'power', '30', '0', 'watts', 'Power output goal', 'Progressive loading for strength', 'session', 1),
+  (?, ?, 'sessions', '2', '0', 'sessions', 'Exercise frequency', 'BID sessions for recovery', 'daily', 1)
 `).run(
-  rehabPatient.id, providerId, Date.now(),
-  rehabPatient.id, providerId, Date.now(),
-  rehabPatient.id, providerId, Date.now()
+  rehabPatient.id, providerId,
+  rehabPatient.id, providerId,
+  rehabPatient.id, providerId
 );
 
 // Create patient stats
@@ -424,16 +415,15 @@ db.prepare(`
   (rehabSessionCount * 11 * 60) / 12,
   12,
   rehabSessionCount * 50 + 600,
-  3,
-  Date.now()
+  3
 );
 
 // Assign to Heidi Kissane
 db.prepare(`
   INSERT INTO provider_patients (
     patient_id, provider_id, permission_granted, granted_at, is_active
-  ) VALUES (?, ?, ?, ?, ?, ?)
-`).run(rehabPatient.id, providerId, 1, Date.now(), 1, Date.now());
+  ) VALUES (?, ?, ?, ?, ?)
+`).run(rehabPatient.id, providerId, 1, Date.now(), 1);
 
 console.log(`✅ Inpatient Rehab Patient: ${rehabPatient.first_name} ${rehabPatient.last_name} (ID: ${rehabPatient.id})`);
 
@@ -456,8 +446,7 @@ const snfPatient = db.prepare(`
   snfPatientDOB,
   'patient',
   snfAdmissionDate.toISOString().split('T')[0],
-  1,
-  Date.now()
+  1
 ) as any;
 
 // Create comprehensive patient profile
@@ -466,9 +455,8 @@ db.prepare(`
     user_id, age, sex, weight_kg, height_cm,
     level_of_care, mobility_status, cognitive_status, baseline_function,
     admission_diagnosis, comorbidities, medications, devices,
-    incontinent, albumin_low, on_vte_prophylaxis, days_immobile,
-    created_at
-  ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    incontinent, albumin_low, on_vte_prophylaxis, days_immobile
+  ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 `).run(
   snfPatient.id,
   65, // age
@@ -493,8 +481,7 @@ db.prepare(`
   0,
   1,
   1,
-  17, // days immobile
-  Date.now()
+  17 // days immobile
 );
 
 // Create risk assessment
@@ -530,15 +517,14 @@ if (icuProtocol) {
     INSERT INTO patient_protocol_assignments (
       patient_id, protocol_id, assigned_by, current_phase,
       start_date, status
-    ) VALUES (?, ?, ?, ?, ?, ?, ?)
+    ) VALUES (?, ?, ?, ?, ?, ?)
   `).run(
     snfPatient.id,
     icuProtocol.id,
     providerId,
     'Progressive', // Progressive phase
     Math.floor(snfAdmissionDate.getTime() / 1000),
-    'active',
-    Date.now()
+    'active'
   );
 }
 
@@ -606,13 +592,13 @@ db.prepare(`
     patient_id, provider_id, goal_type, target_value, current_value,
     unit, label, subtitle, period, is_active
   ) VALUES
-  (?, ?, 'duration', '600', '0', 'seconds', 'Daily mobility target', 'ICU recovery - 10min sessions', 'daily', 1, ?),
-  (?, ?, 'power', '15', '0', 'watts', 'Power output goal', 'Low intensity for CHF management', 'session', 1, ?),
-  (?, ?, 'sessions', '2', '0', 'sessions', 'Exercise frequency', 'BID for deconditioning prevention', 'daily', 1, ?)
+  (?, ?, 'duration', '600', '0', 'seconds', 'Daily mobility target', 'ICU recovery - 10min sessions', 'daily', 1),
+  (?, ?, 'power', '15', '0', 'watts', 'Power output goal', 'Low intensity for CHF management', 'session', 1),
+  (?, ?, 'sessions', '2', '0', 'sessions', 'Exercise frequency', 'BID for deconditioning prevention', 'daily', 1)
 `).run(
-  snfPatient.id, providerId, Date.now(),
-  snfPatient.id, providerId, Date.now(),
-  snfPatient.id, providerId, Date.now()
+  snfPatient.id, providerId,
+  snfPatient.id, providerId,
+  snfPatient.id, providerId
 );
 
 // Create patient stats
@@ -629,16 +615,15 @@ db.prepare(`
   (snfSessionCount * 7 * 60) / 17,
   4, // Broken by setback
   snfSessionCount * 50 + 350,
-  2,
-  Date.now()
+  2
 );
 
 // Assign to Heidi Kissane
 db.prepare(`
   INSERT INTO provider_patients (
     patient_id, provider_id, permission_granted, granted_at, is_active
-  ) VALUES (?, ?, ?, ?, ?, ?)
-`).run(snfPatient.id, providerId, 1, Date.now(), 1, Date.now());
+  ) VALUES (?, ?, ?, ?, ?)
+`).run(snfPatient.id, providerId, 1, Date.now(), 1);
 
 console.log(`✅ SNF Patient: ${snfPatient.first_name} ${snfPatient.last_name} (ID: ${snfPatient.id})`);
 
