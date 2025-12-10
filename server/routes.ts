@@ -1273,19 +1273,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Get provider relationships for current user
   app.get("/api/provider-relationships", async (req, res) => {
     try {
-      // Development mode: Use patient ID 4 for testing while maintaining auth structure
-      // Production: This would be secured with isAuthenticated middleware
-      const isDevelopment = process.env.NODE_ENV === 'development';
-      
-      if (isDevelopment) {
-        // Development testing with known patient ID
-        const relationships = await storage.getProviderPatientRelationships(4);
-        res.json(relationships);
-      } else {
-        // Production: For now, use patient ID 4 like development until proper auth is set up
-        const relationships = await storage.getProviderPatientRelationships(4);
-        res.json(relationships);
+      // Get patient ID from query parameter
+      const patientId = parseInt(req.query.patientId as string);
+
+      if (!patientId || isNaN(patientId)) {
+        return res.status(400).json({ error: "Valid patient ID is required" });
       }
+
+      const relationships = await storage.getProviderPatientRelationships(patientId);
+      res.json(relationships);
     } catch (error) {
       console.error("Get relationships error:", error);
       res.status(500).json({ error: "Failed to get provider relationships" });
@@ -1307,61 +1303,38 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Grant provider access
   app.post("/api/provider-relationships", async (req, res) => {
     try {
-      // Development mode: Use patient ID 4 for testing while maintaining auth structure
-      // Production: This would be secured with isAuthenticated middleware
-      const isDevelopment = process.env.NODE_ENV === 'development';
-      
-      if (isDevelopment) {
-        // Development testing with known patient ID
-        const { providerId } = req.body;
-        
-        // Check for existing relationship
-        const existingRelationship = await db.select()
-          .from(providerPatients)
-          .where(
-            and(
-              eq(providerPatients.patientId, 4),
-              eq(providerPatients.providerId, providerId),
-              eq(providerPatients.isActive, true)
-            )
-          )
-          .limit(1);
-        
-        if (existingRelationship.length > 0) {
-          return res.status(400).json({ error: "Provider already has access to this patient" });
-        }
-        
-        const relationship = await storage.createProviderPatientRelationship({
-          patientId: 4,
-          providerId
-        });
-        res.json(relationship);
-      } else {
-        // Production: For now, use patient ID 4 like development until proper auth is set up
-        const { providerId } = req.body;
-        
-        // Check for existing relationship
-        const existingRelationship = await db.select()
-          .from(providerPatients)
-          .where(
-            and(
-              eq(providerPatients.patientId, 4),
-              eq(providerPatients.providerId, providerId),
-              eq(providerPatients.isActive, true)
-            )
-          )
-          .limit(1);
-        
-        if (existingRelationship.length > 0) {
-          return res.status(400).json({ error: "Provider already has access to this patient" });
-        }
-        
-        const relationship = await storage.createProviderPatientRelationship({
-          patientId: 4,
-          providerId
-        });
-        res.json(relationship);
+      // Get patient ID from request body (sent from frontend based on logged-in user)
+      const { providerId, patientId } = req.body;
+
+      if (!providerId) {
+        return res.status(400).json({ error: "Provider ID is required" });
       }
+
+      if (!patientId) {
+        return res.status(400).json({ error: "Patient ID is required" });
+      }
+
+      // Check for existing relationship
+      const existingRelationship = await db.select()
+        .from(providerPatients)
+        .where(
+          and(
+            eq(providerPatients.patientId, patientId),
+            eq(providerPatients.providerId, providerId),
+            eq(providerPatients.isActive, true)
+          )
+        )
+        .limit(1);
+
+      if (existingRelationship.length > 0) {
+        return res.status(400).json({ error: "Provider already has access to this patient" });
+      }
+
+      const relationship = await storage.createProviderPatientRelationship({
+        patientId,
+        providerId
+      });
+      res.json(relationship);
     } catch (error) {
       console.error("Grant access error:", error);
       res.status(500).json({ error: "Failed to grant provider access" });
@@ -1371,38 +1344,24 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Revoke provider access
   app.delete("/api/provider-relationships/:id", async (req, res) => {
     try {
-      // Development mode: Allow revocation for testing while maintaining auth structure
-      // Production: This would be secured with isAuthenticated middleware
-      const isDevelopment = process.env.NODE_ENV === 'development';
       const relationshipId = parseInt(req.params.id);
-      
-      if (isDevelopment) {
-        // Development testing: Verify relationship belongs to patient ID 4
-        const relationship = await db.select()
-          .from(providerPatients)
-          .where(eq(providerPatients.id, relationshipId))
-          .limit(1);
-        
-        if (!relationship[0] || relationship[0].patientId !== 4) {
-          return res.status(403).json({ error: "Unauthorized: Cannot revoke access for another patient" });
-        }
-        
-        await storage.deleteProviderPatientRelationship(relationshipId);
-        res.json({ success: true });
-      } else {
-        // Production: For now, use patient ID 4 like development until proper auth is set up
-        const relationship = await db.select()
-          .from(providerPatients)
-          .where(eq(providerPatients.id, relationshipId))
-          .limit(1);
-        
-        if (!relationship[0] || relationship[0].patientId !== 4) {
-          return res.status(403).json({ error: "Unauthorized: Cannot revoke access for another patient" });
-        }
-        
-        await storage.deleteProviderPatientRelationship(relationshipId);
-        res.json({ success: true });
+
+      if (isNaN(relationshipId)) {
+        return res.status(400).json({ error: "Valid relationship ID is required" });
       }
+
+      // Verify relationship exists
+      const relationship = await db.select()
+        .from(providerPatients)
+        .where(eq(providerPatients.id, relationshipId))
+        .limit(1);
+
+      if (!relationship[0]) {
+        return res.status(404).json({ error: "Provider relationship not found" });
+      }
+
+      await storage.deleteProviderPatientRelationship(relationshipId);
+      res.json({ success: true });
     } catch (error) {
       console.error("Revoke access error:", error);
       res.status(500).json({ error: "Failed to revoke provider access" });
