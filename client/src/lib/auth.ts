@@ -1,4 +1,5 @@
 import { Patient } from "@shared/schema";
+import { useState, useEffect } from "react";
 
 export interface AuthState {
   patient: Patient | null;
@@ -147,3 +148,25 @@ export class AuthService {
 }
 
 export const authService = AuthService.getInstance();
+
+/**
+ * React hook for authentication state
+ * Provides patient info and authentication status
+ */
+export function useAuth(): AuthState {
+  const [patient, setPatient] = useState<Patient | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+
+  useEffect(() => {
+    // Load patient from localStorage on mount
+    const storedPatient = authService.getStoredPatient();
+    setPatient(storedPatient);
+    setIsLoading(false);
+  }, []);
+
+  return {
+    patient,
+    isAuthenticated: authService.isSessionValid(patient),
+    isLoading,
+  };
+}
