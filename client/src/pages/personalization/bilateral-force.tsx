@@ -57,12 +57,24 @@ interface ButterflyPlotData {
 }
 
 export default function BilateralForcePage() {
-  const { user } = useAuth();
+  const { user, isLoading: authLoading } = useAuth();
   const { toast } = useToast();
   const [selectedPatientId, setSelectedPatientId] = useState<number | null>(null);
   const [selectedSessionId, setSelectedSessionId] = useState<number | null>(null);
   const [isLiveMode, setIsLiveMode] = useState(false);
   const [liveData, setLiveData] = useState<Array<{ time: number; left: number; right: number; asymmetry: number }>>([]);
+
+  // Show loading state while auth initializes
+  if (authLoading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-16 w-16 border-b-2 border-indigo-600 mx-auto"></div>
+          <p className="mt-4 text-gray-600">Loading...</p>
+        </div>
+      </div>
+    );
+  }
 
   // Get patients
   const { data: patients = [] } = useQuery({
