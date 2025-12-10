@@ -60,18 +60,6 @@ export default function ProtocolMatchingPage() {
     "Obesity", "Stroke History", "Parkinson's", "Dementia"
   ];
 
-  // Show loading state while auth initializes
-  if (authLoading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-16 w-16 border-b-2 border-indigo-600 mx-auto"></div>
-          <p className="mt-4 text-gray-600">Loading...</p>
-        </div>
-      </div>
-    );
-  }
-
   // Get patients for provider
   const { data: patients = [], isLoading: patientsLoading, error: patientsError } = useQuery({
     queryKey: [`/api/providers/${user?.id}/patients`],
@@ -201,6 +189,18 @@ export default function ProtocolMatchingPage() {
       default: return <Activity className="w-4 h-4" />;
     }
   };
+
+  // Show loading state while auth initializes - AFTER all hooks
+  if (authLoading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-16 w-16 border-b-2 border-indigo-600 mx-auto"></div>
+          <p className="mt-4 text-gray-600">Loading...</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-gray-50 p-6">
