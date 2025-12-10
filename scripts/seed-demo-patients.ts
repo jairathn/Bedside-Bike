@@ -31,6 +31,34 @@ snfAdmissionDate.setDate(today.getDate() - 17);
 
 console.log('🏥 Seeding comprehensive demo patients...\n');
 
+// Delete existing demo patients if they exist
+console.log('Cleaning up existing demo patients...');
+const demoEmails = [
+  'hospital.patient@bedside-bike.local',
+  'rehab.patient@bedside-bike.local',
+  'snf.patient@bedside-bike.local'
+];
+
+for (const email of demoEmails) {
+  const existingPatient = db.prepare('SELECT id FROM users WHERE email = ?').get(email) as any;
+  if (existingPatient) {
+    // Delete in reverse order of foreign key dependencies
+    db.prepare('DELETE FROM feed_reactions WHERE feed_item_id IN (SELECT id FROM feed_items WHERE patient_id = ?)').run(existingPatient.id);
+    db.prepare('DELETE FROM feed_items WHERE patient_id = ?').run(existingPatient.id);
+    db.prepare('DELETE FROM kudos_preferences WHERE patient_id = ?').run(existingPatient.id);
+    db.prepare('DELETE FROM provider_patients WHERE patient_id = ?').run(existingPatient.id);
+    db.prepare('DELETE FROM patient_stats WHERE patient_id = ?').run(existingPatient.id);
+    db.prepare('DELETE FROM patient_goals WHERE patient_id = ?').run(existingPatient.id);
+    db.prepare('DELETE FROM exercise_sessions WHERE patient_id = ?').run(existingPatient.id);
+    db.prepare('DELETE FROM patient_protocol_assignments WHERE patient_id = ?').run(existingPatient.id);
+    db.prepare('DELETE FROM risk_assessments WHERE patient_id = ?').run(existingPatient.id);
+    db.prepare('DELETE FROM patient_profiles WHERE user_id = ?').run(existingPatient.id);
+    db.prepare('DELETE FROM users WHERE id = ?').run(existingPatient.id);
+    console.log(`  Deleted existing patient: ${email}`);
+  }
+}
+console.log('✅ Cleanup complete\n');
+
 // Get Heidi Kissane's provider ID
 const heidi = db.prepare('SELECT id FROM users WHERE email = ?').get('heidikissane@hospital.com') as any;
 if (!heidi) {
