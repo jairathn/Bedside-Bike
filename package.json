@@ -13,6 +13,7 @@
     "db:init": "tsx scripts/init-local-db.ts",
     "db:seed": "tsx scripts/seed-protocols.ts && tsx scripts/seed-protocol-criteria.ts",
     "db:seed-demo": "tsx scripts/seed-demo-patients.ts",
+    "db:clean-all-demo": "tsx scripts/clean-all-demo-patients.ts",
     "db:reset": "tsx scripts/init-local-db.ts && tsx scripts/seed-protocols.ts && tsx scripts/seed-protocol-criteria.ts && tsx scripts/seed-demo-patients.ts",
     "db:verify": "tsx scripts/verify-protocols.ts"
   },
