@@ -157,15 +157,15 @@ if (copdProtocol) {
   db.prepare(`
     INSERT INTO patient_protocol_assignments (
       patient_id, protocol_id, assigned_by, current_phase,
-      start_date, is_active, assigned_at
+      start_date, status, created_at
     ) VALUES (?, ?, ?, ?, ?, ?, ?)
   `).run(
     hospitalPatient.id,
     copdProtocol.id,
     providerId,
-    0,
-    hospitalAdmissionDate.toISOString().split('T')[0],
-    1,
+    'Initial',
+    Math.floor(hospitalAdmissionDate.getTime() / 1000),
+    'active',
     Date.now()
   );
 }
@@ -342,15 +342,15 @@ if (hipProtocol) {
   db.prepare(`
     INSERT INTO patient_protocol_assignments (
       patient_id, protocol_id, assigned_by, current_phase,
-      start_date, is_active, assigned_at
+      start_date, status, created_at
     ) VALUES (?, ?, ?, ?, ?, ?, ?)
   `).run(
     rehabPatient.id,
     hipProtocol.id,
     providerId,
-    2, // Advanced phase
-    rehabAdmissionDate.toISOString().split('T')[0],
-    1,
+    'Advanced', // Advanced phase
+    Math.floor(rehabAdmissionDate.getTime() / 1000),
+    'active',
     Date.now()
   );
 }
@@ -530,15 +530,15 @@ if (icuProtocol) {
   db.prepare(`
     INSERT INTO patient_protocol_assignments (
       patient_id, protocol_id, assigned_by, current_phase,
-      start_date, is_active, assigned_at
+      start_date, status, created_at
     ) VALUES (?, ?, ?, ?, ?, ?, ?)
   `).run(
     snfPatient.id,
     icuProtocol.id,
     providerId,
-    1, // Progressive phase
-    snfAdmissionDate.toISOString().split('T')[0],
-    1,
+    'Progressive', // Progressive phase
+    Math.floor(snfAdmissionDate.getTime() / 1000),
+    'active',
     Date.now()
   );
 }
