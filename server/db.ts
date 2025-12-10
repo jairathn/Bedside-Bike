@@ -12,8 +12,17 @@ if (USE_LOCAL_DB) {
   // SQLite for local development
   const Database = await import('better-sqlite3').then(m => m.default);
   const { drizzle } = await import('drizzle-orm/better-sqlite3');
+  const path = await import('path');
+  const { fileURLToPath } = await import('url');
 
-  const sqlite = new Database('local.db');
+  // Get absolute path to local.db in project root
+  const __filename = fileURLToPath(import.meta.url);
+  const __dirname = path.dirname(__filename);
+  const dbPath = path.join(__dirname, '..', 'local.db');
+
+  console.log('📁 Database file:', dbPath);
+
+  const sqlite = new Database(dbPath);
 
   // Enable foreign keys
   sqlite.pragma('foreign_keys = ON');
