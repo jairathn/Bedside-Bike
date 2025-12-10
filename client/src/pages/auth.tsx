@@ -278,33 +278,18 @@ export default function Auth({ onAuthSuccess }: AuthProps) {
   });
 
   const fillDemoPatient = (patient: typeof demoPatients[0]) => {
-    // Fill form fields directly
-    const firstNameInput = document.getElementById('firstName') as HTMLInputElement;
-    const lastNameInput = document.getElementById('lastName') as HTMLInputElement;
-    const dobInput = document.getElementById('dateOfBirth') as HTMLInputElement;
+    // Update state - controlled inputs will automatically update
+    setPatientCredentials({
+      firstName: patient.firstName,
+      lastName: patient.lastName,
+      dateOfBirth: patient.dob
+    });
 
-    if (firstNameInput && lastNameInput && dobInput) {
-      firstNameInput.value = patient.firstName;
-      lastNameInput.value = patient.lastName;
-      dobInput.value = patient.dob;
-
-      // Trigger onChange events to update state
-      firstNameInput.dispatchEvent(new Event('input', { bubbles: true }));
-      lastNameInput.dispatchEvent(new Event('input', { bubbles: true }));
-      dobInput.dispatchEvent(new Event('input', { bubbles: true }));
-
-      // Update patient credentials state
-      setPatientCredentials({
-        firstName: patient.firstName,
-        lastName: patient.lastName,
-        dateOfBirth: patient.dob
-      });
-
-      toast({
-        title: "Demo patient loaded",
-        description: `${patient.name}'s credentials have been filled in`,
-      });
-    }
+    toast({
+      title: "Demo patient loaded",
+      description: `${patient.name}'s credentials have been filled in. Click "Sign In to Dashboard" to login.`,
+      duration: 5000,
+    });
   };
 
   const handleLogin = (formData: FormData) => {
@@ -476,6 +461,7 @@ export default function Auth({ onAuthSuccess }: AuthProps) {
                                 id="firstName"
                                 name="firstName"
                                 placeholder="John"
+                                value={patientCredentials.firstName}
                                 onChange={(e) => {
                                 const value = e.target.value;
                                 console.log('First name changed:', value);
@@ -489,6 +475,7 @@ export default function Auth({ onAuthSuccess }: AuthProps) {
                                 id="lastName"
                                 name="lastName"
                                 placeholder="Doe"
+                                value={patientCredentials.lastName}
                                 onChange={(e) => {
                                 const value = e.target.value;
                                 console.log('Last name changed:', value);
@@ -504,6 +491,7 @@ export default function Auth({ onAuthSuccess }: AuthProps) {
                               id="dateOfBirth"
                               name="dateOfBirth"
                               type="date"
+                              value={patientCredentials.dateOfBirth}
                               onChange={(e) => {
                                 const value = e.target.value;
                                 console.log('Date of birth changed:', value);
