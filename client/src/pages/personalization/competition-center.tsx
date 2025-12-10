@@ -65,7 +65,7 @@ interface CohortComparison {
 }
 
 export default function CompetitionCenterPage() {
-  const { user } = useAuth();
+  const { user, isLoading: authLoading } = useAuth();
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const [selectedPatientId, setSelectedPatientId] = useState<number | null>(null);
@@ -77,6 +77,18 @@ export default function CompetitionCenterPage() {
     endDate: '',
     targetMetric: 'total_distance',
   });
+
+  // Show loading state while auth initializes
+  if (authLoading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-16 w-16 border-b-2 border-indigo-600 mx-auto"></div>
+          <p className="mt-4 text-gray-600">Loading...</p>
+        </div>
+      </div>
+    );
+  }
 
   // Get patients
   const { data: patients = [] } = useQuery({

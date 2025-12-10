@@ -261,6 +261,19 @@ export default function ProviderDashboard() {
     enabled: !!user && user.userType === 'provider',
   });
 
+  // Debug logging for provider dashboard
+  useEffect(() => {
+    console.log('🏥 Provider Dashboard Debug:', {
+      user: user ? { id: user.id, userType: user.userType, email: user.email } : 'NO USER',
+      queryEnabled: !!user && user.userType === 'provider',
+      patients: patients,
+      patientsCount: patients?.length || 0,
+      patientsLoading,
+      selectedPatient: selectedPatient ? { id: selectedPatient.id, name: `${selectedPatient.firstName} ${selectedPatient.lastName}` } : 'NONE',
+      queryKey: `/api/providers/${user?.id}/patients`
+    });
+  }, [user, patients, patientsLoading, selectedPatient]);
+
   // Get selected patient's goals
   const { data: patientGoals = [] } = useQuery({
     queryKey: [`/api/patients/${selectedPatient?.id}/goals`],

@@ -46,7 +46,7 @@ interface PatientProfile {
 }
 
 export default function ProtocolMatchingPage() {
-  const { user } = useAuth();
+  const { user, isLoading: authLoading } = useAuth();
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const [selectedPatientId, setSelectedPatientId] = useState<number | null>(null);
@@ -60,6 +60,18 @@ export default function ProtocolMatchingPage() {
     "Obesity", "Stroke History", "Parkinson's", "Dementia"
   ];
 
+  // Show loading state while auth initializes
+  if (authLoading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-16 w-16 border-b-2 border-indigo-600 mx-auto"></div>
+          <p className="mt-4 text-gray-600">Loading...</p>
+        </div>
+      </div>
+    );
+  }
+
   // Get patients for provider
   const { data: patients = [], isLoading: patientsLoading, error: patientsError } = useQuery({
     queryKey: [`/api/providers/${user?.id}/patients`],
@@ -69,6 +81,7 @@ export default function ProtocolMatchingPage() {
   // Debug logging
   useEffect(() => {
     console.log('🔍 Protocol Matching Debug:', {
+      authLoading,
       user: user ? { id: user.id, userType: user.userType, email: user.email } : 'NO USER',
       queryEnabled: !!user && user.userType === 'provider',
       patients: patients,
@@ -77,7 +90,7 @@ export default function ProtocolMatchingPage() {
       patientsError,
       queryKey: `/api/providers/${user?.id}/patients`
     });
-  }, [user, patients, patientsLoading, patientsError]);
+  }, [authLoading, user, patients, patientsLoading, patientsError]);
 
   // Get patient's personalization profile
   const { data: patientProfile } = useQuery({
