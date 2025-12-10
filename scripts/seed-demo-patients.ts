@@ -184,26 +184,27 @@ for (let day = 0; day < 5; day++) {
     startTime.setHours(9 + sessionNum * 7); // 9am and 4pm
     const endTime = new Date(startTime.getTime() + duration * 1000);
 
+    const startTimeUnix = Math.floor(startTime.getTime() / 1000);
+    const endTimeUnix = Math.floor(endTime.getTime() / 1000);
+
     db.prepare(`
       INSERT INTO exercise_sessions (
         patient_id, session_date, start_time, end_time, duration,
         avg_power, max_power, avg_rpm, resistance, stops_and_starts,
-        is_completed, session_notes, created_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        is_completed
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(
       hospitalPatient.id,
       sessionDate.toISOString().split('T')[0],
-      startTime.toISOString(),
-      endTime.toISOString(),
+      startTimeUnix,
+      endTimeUnix,
       duration,
       avgPower.toString(),
       (avgPower * 1.3).toString(),
       (35 + day * 2).toString(),
       (1.5 + day * 0.2).toFixed(1),
       Math.max(4 - day, 0),
-      1,
-      day < 2 ? 'Patient fatigued, SpO2 monitored closely' : 'Good tolerance, improving endurance',
-      Date.now()
+      1
     );
   }
 }
@@ -369,29 +370,27 @@ for (let day = 0; day < 12; day++) {
     const startTime = new Date(sessionDate);
     startTime.setHours(10 + sessionNum * 6);
     const endTime = new Date(startTime.getTime() + duration * 1000);
+    const startTimeUnix = Math.floor(startTime.getTime() / 1000);
+    const endTimeUnix = Math.floor(endTime.getTime() / 1000);
 
     db.prepare(`
       INSERT INTO exercise_sessions (
         patient_id, session_date, start_time, end_time, duration,
         avg_power, max_power, avg_rpm, resistance, stops_and_starts,
-        is_completed, session_notes, created_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        is_completed
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(
       rehabPatient.id,
       sessionDate.toISOString().split('T')[0],
-      startTime.toISOString(),
-      endTime.toISOString(),
+      startTimeUnix,
+      endTimeUnix,
       Math.floor(duration),
       avgPower.toFixed(1),
       (avgPower * 1.25).toFixed(1),
       (40 + day * 1.5).toFixed(0),
       (2 + day * 0.15).toFixed(1),
       Math.max(3 - Math.floor(day / 2), 0),
-      1,
-      day < 3 ? 'Pain well-controlled, cautious progression' :
-      day < 7 ? 'Excellent compliance, patient motivated' :
-      'Outstanding progress, nearing discharge goals',
-      Date.now()
+      1
     );
   }
 }
@@ -576,27 +575,27 @@ for (let day = 0; day < 17; day++) {
     const startTime = new Date(sessionDate);
     startTime.setHours(10 + sessionNum * 6);
     const endTime = new Date(startTime.getTime() + duration * 1000);
+    const startTimeUnix = Math.floor(startTime.getTime() / 1000);
+    const endTimeUnix = Math.floor(endTime.getTime() / 1000);
 
     db.prepare(`
       INSERT INTO exercise_sessions (
         patient_id, session_date, start_time, end_time, duration,
         avg_power, max_power, avg_rpm, resistance, stops_and_starts,
-        is_completed, session_notes, created_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        is_completed
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(
       snfPatient.id,
       sessionDate.toISOString().split('T')[0],
-      startTime.toISOString(),
-      endTime.toISOString(),
+      startTimeUnix,
+      endTimeUnix,
       Math.floor(duration),
       avgPower.toFixed(1),
       (avgPower * 1.3).toFixed(1),
       (30 + (isSetback ? 0 : day * 1)).toFixed(0),
       (1.5 + (isSetback ? 0 : day * 0.1)).toFixed(1),
       isSetback ? 6 : Math.max(5 - Math.floor(day / 3), 1),
-      1,
-      notes,
-      Date.now()
+      1
     );
   }
 }
