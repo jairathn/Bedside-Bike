@@ -38,17 +38,25 @@ export default function ProviderAccessPage() {
 
   // Get current provider relationships
   const { data: providerRelationships, refetch: refetchRelationships } = useQuery({
-    queryKey: ['/api/provider-relationships'],
+    queryKey: ['/api/provider-relationships', { patientId: user?.id }],
+    queryFn: async () => {
+      if (!user?.id) return [];
+      return await apiRequest(`/api/provider-relationships?patientId=${user.id}`);
+    },
     enabled: !!user,
   });
 
   // Grant access mutation
   const grantAccessMutation = useMutation({
     mutationFn: async (providerId: string) => {
+      if (!user?.id) {
+        throw new Error('Patient ID is required');
+      }
       return await apiRequest('/api/provider-relationships', {
         method: 'POST',
         body: JSON.stringify({
-          providerId: parseInt(providerId)
+          providerId: parseInt(providerId),
+          patientId: user.id
         }),
       });
     },
@@ -56,8 +64,8 @@ export default function ProviderAccessPage() {
       // Force immediate refresh with delay to ensure backend consistency
       await new Promise(resolve => setTimeout(resolve, 100));
       await refetchRelationships();
-      await queryClient.invalidateQueries({ queryKey: ['/api/provider-relationships'] });
-      
+      await queryClient.invalidateQueries({ queryKey: ['/api/provider-relationships', { patientId: user?.id }] });
+
       toast({
         title: "Access Granted",
         description: "Your provider can now view your progress and adjust your goals",
@@ -85,8 +93,8 @@ export default function ProviderAccessPage() {
       // Force immediate refresh with delay to ensure backend consistency
       await new Promise(resolve => setTimeout(resolve, 100));
       await refetchRelationships();
-      await queryClient.invalidateQueries({ queryKey: ['/api/provider-relationships'] });
-      
+      await queryClient.invalidateQueries({ queryKey: ['/api/provider-relationships', { patientId: user?.id }] });
+
       toast({
         title: "Access Revoked",
         description: "Provider access has been removed",
