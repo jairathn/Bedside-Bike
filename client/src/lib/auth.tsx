@@ -17,13 +17,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
-    // Check for existing session  
+    // Check for existing session
+    console.log('🔄 AuthContext initializing, checking localStorage...');
     const savedUser = localStorage.getItem("user") || localStorage.getItem("patient");
+    console.log('🔄 Found in localStorage:', savedUser ? 'YES' : 'NO');
     if (savedUser) {
       try {
         const userData = JSON.parse(savedUser);
+        console.log('🔄 Parsed user data:', { userType: userData.userType, id: userData.id, email: userData.email });
         setUser(userData);
       } catch (error) {
+        console.log('🔄 Error parsing saved user, clearing localStorage:', error);
         localStorage.removeItem("user");
         localStorage.removeItem("patient");
       }
@@ -63,14 +67,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   const updateUser = (newUser: User | null) => {
+    console.log('📝 AuthContext updateUser called with:', newUser);
     setUser(newUser);
     if (newUser) {
+      console.log('📝 Saving to localStorage:', { userType: newUser.userType, id: newUser.id });
       localStorage.setItem("user", JSON.stringify(newUser));
+      console.log('📝 Saved to localStorage, verifying:', localStorage.getItem("user")?.substring(0, 100));
       // Keep patient field for backward compatibility
       if (newUser.userType === 'patient') {
         localStorage.setItem("patient", JSON.stringify(newUser));
       }
     } else {
+      console.log('📝 Removing from localStorage');
       localStorage.removeItem("user");
       localStorage.removeItem("patient");
     }

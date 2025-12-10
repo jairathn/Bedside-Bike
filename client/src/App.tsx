@@ -58,7 +58,12 @@ function Router() {
   }
 
   const handleAuthSuccess = (userData: any) => {
+    console.log('🎯 handleAuthSuccess called with:', userData);
+    console.log('🎯 User type:', userData?.userType);
+    console.log('🎯 User ID:', userData?.id);
     setUser(userData);
+    console.log('🎯 setUser called, checking localStorage...');
+    console.log('🎯 localStorage user:', localStorage.getItem('user'));
     if (userData.userType === 'provider') {
       setLocation("/provider-dashboard");
     } else {
