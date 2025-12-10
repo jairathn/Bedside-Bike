@@ -13,7 +13,7 @@
  */
 
 import type { Express, Request, Response } from 'express';
-import { createLimiter } from '../rate-limit';
+import rateLimit from 'express-rate-limit';
 import { storage } from '../storage';
 import { db } from '../db';
 import {
@@ -28,14 +28,20 @@ import {
 } from './index';
 
 // Rate limiters for personalization endpoints
-const personalizationLimiter = createLimiter({
+const personalizationLimiter = rateLimit({
   windowMs: 60 * 1000, // 1 minute
-  max: 30 // 30 requests per minute
+  max: 30, // 30 requests per minute
+  standardHeaders: true,
+  legacyHeaders: false,
+  skip: (req) => !req || !req.ip,
 });
 
-const reportLimiter = createLimiter({
+const reportLimiter = rateLimit({
   windowMs: 60 * 1000,
-  max: 10 // 10 reports per minute
+  max: 10, // 10 reports per minute
+  standardHeaders: true,
+  legacyHeaders: false,
+  skip: (req) => !req || !req.ip,
 });
 
 export function registerPersonalizationRoutes(app: Express): void {
