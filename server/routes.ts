@@ -124,8 +124,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Legacy patient login support (name + DOB)
       if (req.body.firstName && req.body.lastName && req.body.dateOfBirth && !req.body.email) {
         const { firstName, lastName, dateOfBirth, deviceNumber } = req.body;
-        
+
+        console.log('=== SERVER LOGIN DEBUG ===');
+        console.log('Received:', { firstName, lastName, dateOfBirth, deviceNumber });
+
         let patient = await storage.getPatientByName(firstName, lastName, dateOfBirth);
+        console.log('Patient found:', patient ? `Yes (ID: ${patient.id}, DOB: ${patient.dateOfBirth})` : 'No');
         
         // If patient doesn't exist, create new one with generated email
         if (!patient) {
