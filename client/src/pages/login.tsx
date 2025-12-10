@@ -16,7 +16,7 @@ export default function LoginPage() {
   const [formData, setFormData] = useState({
     firstName: "Neil",
     lastName: "Jairath",
-    dateOfBirth: "04/01/1996",
+    dateOfBirth: "1996-04-01",
   });
 
   const demoPatients = [
@@ -24,7 +24,7 @@ export default function LoginPage() {
       name: "Robert Martinez",
       firstName: "Robert",
       lastName: "Martinez",
-      dob: "01/01/1955",
+      dob: "1955-01-01",
       description: "70yo, Hospital ICU - COPD + Parkinson's",
       type: "Hospital Patient"
     },
@@ -32,7 +32,7 @@ export default function LoginPage() {
       name: "Dorothy Chen",
       firstName: "Dorothy",
       lastName: "Chen",
-      dob: "01/01/1943",
+      dob: "1943-01-01",
       description: "82yo, Inpatient Rehab - Hip Fracture + Diabetes",
       type: "Rehab Patient"
     },
@@ -40,7 +40,7 @@ export default function LoginPage() {
       name: "James Thompson",
       firstName: "James",
       lastName: "Thompson",
-      dob: "01/01/1960",
+      dob: "1960-01-01",
       description: "65yo, SNF - Sepsis + CHF Recovery",
       type: "SNF Patient"
     }
@@ -141,7 +141,7 @@ export default function LoginPage() {
                     type="text"
                     value={formData.dateOfBirth}
                     onChange={(e) => setFormData(prev => ({ ...prev, dateOfBirth: e.target.value }))}
-                    placeholder="MM/DD/YYYY"
+                    placeholder="YYYY-MM-DD"
                     className="w-full"
                     required
                   />
@@ -184,14 +184,16 @@ export default function LoginPage() {
                       className="w-full text-left p-3 rounded-lg border border-gray-200 hover:border-blue-400 hover:bg-blue-50 transition-all group"
                     >
                       <div className="flex items-start justify-between">
-                        <div>
+                        <div className="flex-1">
                           <p className="font-medium text-gray-900 group-hover:text-blue-700">
                             {patient.name}
                           </p>
                           <p className="text-xs text-gray-500 mt-0.5">{patient.description}</p>
-                          <p className="text-xs text-gray-400 mt-1">DOB: {patient.dob}</p>
+                          <p className="text-xs font-mono text-gray-400 mt-1 bg-gray-50 px-1.5 py-0.5 rounded inline-block">
+                            DOB: {patient.dob}
+                          </p>
                         </div>
-                        <span className="text-xs bg-blue-100 text-blue-700 px-2 py-1 rounded">
+                        <span className="text-xs bg-blue-100 text-blue-700 px-2 py-1 rounded whitespace-nowrap ml-2">
                           {patient.type}
                         </span>
                       </div>
