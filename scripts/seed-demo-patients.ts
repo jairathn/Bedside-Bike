@@ -74,8 +74,8 @@ console.log('Creating Hospital Patient (COPD + Parkinson\'s)...');
 const hospitalPatient = db.prepare(`
   INSERT INTO users (
     email, first_name, last_name, date_of_birth, user_type,
-    admission_date, is_active, created_at
-  ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    admission_date, is_active
+  ) VALUES (?, ?, ?, ?, ?, ?, ?)
   RETURNING *
 `).get(
   'hospital.patient@bedside-bike.local',
@@ -157,7 +157,7 @@ if (copdProtocol) {
   db.prepare(`
     INSERT INTO patient_protocol_assignments (
       patient_id, protocol_id, assigned_by, current_phase,
-      start_date, status, created_at
+      start_date, status
     ) VALUES (?, ?, ?, ?, ?, ?, ?)
   `).run(
     hospitalPatient.id,
@@ -213,7 +213,7 @@ for (let day = 0; day < 5; day++) {
 db.prepare(`
   INSERT INTO patient_goals (
     patient_id, provider_id, goal_type, target_value, current_value,
-    unit, label, subtitle, period, is_active, created_at
+    unit, label, subtitle, period, is_active
   ) VALUES
   (?, ?, 'duration', '600', '0', 'seconds', 'Daily mobility target', 'COPD protocol - 10min sessions', 'daily', 1, ?),
   (?, ?, 'power', '15', '0', 'watts', 'Power output goal', 'Low intensity for respiratory recovery', 'session', 1, ?),
@@ -229,8 +229,8 @@ const hospitalSessionCount = 10; // 5 days × 2 sessions
 db.prepare(`
   INSERT INTO patient_stats (
     patient_id, total_sessions, total_duration, avg_daily_duration,
-    consistency_streak, xp, level, created_at
-  ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    consistency_streak, xp, level
+  ) VALUES (?, ?, ?, ?, ?, ?, ?)
 `).run(
   hospitalPatient.id,
   hospitalSessionCount,
@@ -245,7 +245,7 @@ db.prepare(`
 // Assign to Heidi Kissane
 db.prepare(`
   INSERT INTO provider_patients (
-    patient_id, provider_id, permission_granted, granted_at, is_active, created_at
+    patient_id, provider_id, permission_granted, granted_at, is_active
   ) VALUES (?, ?, ?, ?, ?, ?)
 `).run(hospitalPatient.id, providerId, 1, Date.now(), 1, Date.now());
 
@@ -260,8 +260,8 @@ console.log('\nCreating Inpatient Rehab Patient (Hip Fracture + Diabetes)...');
 const rehabPatient = db.prepare(`
   INSERT INTO users (
     email, first_name, last_name, date_of_birth, user_type,
-    admission_date, is_active, created_at
-  ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    admission_date, is_active
+  ) VALUES (?, ?, ?, ?, ?, ?, ?)
   RETURNING *
 `).get(
   'rehab.patient@bedside-bike.local',
@@ -343,7 +343,7 @@ if (hipProtocol) {
   db.prepare(`
     INSERT INTO patient_protocol_assignments (
       patient_id, protocol_id, assigned_by, current_phase,
-      start_date, status, created_at
+      start_date, status
     ) VALUES (?, ?, ?, ?, ?, ?, ?)
   `).run(
     rehabPatient.id,
@@ -399,7 +399,7 @@ for (let day = 0; day < 12; day++) {
 db.prepare(`
   INSERT INTO patient_goals (
     patient_id, provider_id, goal_type, target_value, current_value,
-    unit, label, subtitle, period, is_active, created_at
+    unit, label, subtitle, period, is_active
   ) VALUES
   (?, ?, 'duration', '900', '0', 'seconds', 'Daily mobility target', 'Hip protocol - 15min sessions', 'daily', 1, ?),
   (?, ?, 'power', '30', '0', 'watts', 'Power output goal', 'Progressive loading for strength', 'session', 1, ?),
@@ -415,8 +415,8 @@ const rehabSessionCount = 24; // 12 days × 2
 db.prepare(`
   INSERT INTO patient_stats (
     patient_id, total_sessions, total_duration, avg_daily_duration,
-    consistency_streak, xp, level, created_at
-  ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    consistency_streak, xp, level
+  ) VALUES (?, ?, ?, ?, ?, ?, ?)
 `).run(
   rehabPatient.id,
   rehabSessionCount,
@@ -431,7 +431,7 @@ db.prepare(`
 // Assign to Heidi Kissane
 db.prepare(`
   INSERT INTO provider_patients (
-    patient_id, provider_id, permission_granted, granted_at, is_active, created_at
+    patient_id, provider_id, permission_granted, granted_at, is_active
   ) VALUES (?, ?, ?, ?, ?, ?)
 `).run(rehabPatient.id, providerId, 1, Date.now(), 1, Date.now());
 
@@ -446,8 +446,8 @@ console.log('\nCreating SNF Patient (Sepsis + CHF with setback)...');
 const snfPatient = db.prepare(`
   INSERT INTO users (
     email, first_name, last_name, date_of_birth, user_type,
-    admission_date, is_active, created_at
-  ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    admission_date, is_active
+  ) VALUES (?, ?, ?, ?, ?, ?, ?)
   RETURNING *
 `).get(
   'snf.patient@bedside-bike.local',
@@ -529,7 +529,7 @@ if (icuProtocol) {
   db.prepare(`
     INSERT INTO patient_protocol_assignments (
       patient_id, protocol_id, assigned_by, current_phase,
-      start_date, status, created_at
+      start_date, status
     ) VALUES (?, ?, ?, ?, ?, ?, ?)
   `).run(
     snfPatient.id,
@@ -604,7 +604,7 @@ for (let day = 0; day < 17; day++) {
 db.prepare(`
   INSERT INTO patient_goals (
     patient_id, provider_id, goal_type, target_value, current_value,
-    unit, label, subtitle, period, is_active, created_at
+    unit, label, subtitle, period, is_active
   ) VALUES
   (?, ?, 'duration', '600', '0', 'seconds', 'Daily mobility target', 'ICU recovery - 10min sessions', 'daily', 1, ?),
   (?, ?, 'power', '15', '0', 'watts', 'Power output goal', 'Low intensity for CHF management', 'session', 1, ?),
@@ -620,8 +620,8 @@ const snfSessionCount = 31; // 17 days minus setback losses
 db.prepare(`
   INSERT INTO patient_stats (
     patient_id, total_sessions, total_duration, avg_daily_duration,
-    consistency_streak, xp, level, created_at
-  ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    consistency_streak, xp, level
+  ) VALUES (?, ?, ?, ?, ?, ?, ?)
 `).run(
   snfPatient.id,
   snfSessionCount,
@@ -636,7 +636,7 @@ db.prepare(`
 // Assign to Heidi Kissane
 db.prepare(`
   INSERT INTO provider_patients (
-    patient_id, provider_id, permission_granted, granted_at, is_active, created_at
+    patient_id, provider_id, permission_granted, granted_at, is_active
   ) VALUES (?, ?, ?, ?, ?, ?)
 `).run(snfPatient.id, providerId, 1, Date.now(), 1, Date.now());
 
