@@ -42,10 +42,7 @@ const demoEmails = [
 for (const email of demoEmails) {
   const existingPatient = db.prepare('SELECT id FROM users WHERE email = ?').get(email) as any;
   if (existingPatient) {
-    // Delete in reverse order of foreign key dependencies
-    db.prepare('DELETE FROM feed_reactions WHERE feed_item_id IN (SELECT id FROM feed_items WHERE patient_id = ?)').run(existingPatient.id);
-    db.prepare('DELETE FROM feed_items WHERE patient_id = ?').run(existingPatient.id);
-    db.prepare('DELETE FROM kudos_preferences WHERE patient_id = ?').run(existingPatient.id);
+    // Delete in reverse order of foreign key dependencies (only core tables that exist)
     db.prepare('DELETE FROM provider_patients WHERE patient_id = ?').run(existingPatient.id);
     db.prepare('DELETE FROM patient_stats WHERE patient_id = ?').run(existingPatient.id);
     db.prepare('DELETE FROM patient_goals WHERE patient_id = ?').run(existingPatient.id);
@@ -649,84 +646,9 @@ console.log(`✅ SNF Patient: ${snfPatient.first_name} ${snfPatient.last_name} (
 // ==========================================
 // CROSS-PATIENT INTERACTIONS
 // ==========================================
-
-console.log('\n🤝 Creating cross-patient interactions (kudos, leaderboard)...');
-
-// Create kudos preferences for all 3 patients
-for (const patient of [hospitalPatient, rehabPatient, snfPatient]) {
-  db.prepare(`
-    INSERT INTO kudos_preferences (
-      patient_id, display_name, avatar_emoji, opt_in_kudos,
-      opt_in_nudges, unit, created_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?)
-  `).run(
-    patient.id,
-    `${patient.first_name} ${patient.last_name.charAt(0)}.`,
-    patient.id === hospitalPatient.id ? '🏥' : patient.id === rehabPatient.id ? '🦴' : '💪',
-    1,
-    1,
-    'General', // unit - simplified since we don't have unit field in users table
-    Date.now()
-  );
-}
-
-// Create feed items (achievements and nudges between patients)
-const feedItems = [
-  // Rehab patient achievement
-  {
-    patientId: rehabPatient.id,
-    type: 'achievement',
-    content: 'Completed 24 sessions in 12 days! 🎉',
-    metadata: JSON.stringify({ achievement_type: 'consistency', sessions: 24 })
-  },
-  // Hospital patient achievement
-  {
-    patientId: hospitalPatient.id,
-    type: 'achievement',
-    content: 'First week complete - 5 days strong! 💪',
-    metadata: JSON.stringify({ achievement_type: 'milestone', days: 5 })
-  },
-  // Nudge from rehab to hospital patient
-  {
-    patientId: rehabPatient.id,
-    type: 'nudge',
-    content: `${rehabPatient.first_name} sent you encouragement: "Keep going! You're doing great!" 🌟`,
-    metadata: JSON.stringify({ from: rehabPatient.id, to: hospitalPatient.id, template: 'encouragement' })
-  },
-  // SNF patient milestone
-  {
-    patientId: snfPatient.id,
-    type: 'achievement',
-    content: 'Bounced back after setback - 4 days strong! 🎯',
-    metadata: JSON.stringify({ achievement_type: 'recovery', streak: 4 })
-  }
-];
-
-for (const item of feedItems) {
-  db.prepare(`
-    INSERT INTO feed_items (
-      patient_id, type, content, metadata, created_at
-    ) VALUES (?, ?, ?, ?, ?)
-  `).run(item.patientId, item.type, item.content, item.metadata, Date.now());
-}
-
-// Create reactions to feed items
-db.prepare(`
-  INSERT INTO feed_reactions (
-    feed_item_id, patient_id, reaction_type, created_at
-  ) VALUES
-  (1, ?, 'fire', ?),
-  (1, ?, 'heart', ?),
-  (2, ?, 'celebrate', ?),
-  (4, ?, 'strong', ?)
-`).run(
-  hospitalPatient.id, Date.now(),
-  snfPatient.id, Date.now(),
-  rehabPatient.id, Date.now(),
-  rehabPatient.id, Date.now()
-);
-
-console.log('✅ Feed items and reactions created');
+// NOTE: Kudos, feed items, and reactions tables don't exist in SQLite schema yet
+// These will be added when those features are implemented
+console.log('\n✅ Skipping cross-patient interactions (tables not yet created)');
 
 db.close();
 
