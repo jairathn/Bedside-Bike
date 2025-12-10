@@ -104,8 +104,8 @@ const hospitalRiskAssessment = db.prepare(`
   INSERT INTO risk_assessments (
     patient_id, deconditioning, vte, falls, pressure,
     mobility_recommendation, los_data, discharge_data, readmission_data,
-    mobility_benefits, created_at
-  ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    created_at
+  ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   RETURNING *
 `).get(
   hospitalPatient.id,
@@ -123,13 +123,6 @@ const hospitalRiskAssessment = db.prepare(`
   JSON.stringify({ predicted_days: 8, confidence: 0.75 }),
   JSON.stringify({ home_likely: 0.45, rehab_likely: 0.40, snf_likely: 0.15 }),
   JSON.stringify({ risk_30day: 0.28 }),
-  JSON.stringify({
-    risk_reductions: {
-      deconditioning: { absolute_reduction_percent: 12 },
-      vte: { absolute_reduction_percent: 4 },
-      falls: { absolute_reduction_percent: 8 }
-    }
-  }),
   Date.now()
 ) as any;
 
@@ -297,8 +290,8 @@ db.prepare(`
   INSERT INTO risk_assessments (
     patient_id, deconditioning, vte, falls, pressure,
     mobility_recommendation, los_data, discharge_data, readmission_data,
-    mobility_benefits, created_at
-  ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    created_at
+  ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 `).run(
   rehabPatient.id,
   JSON.stringify({ probability: 0.62, severity: 'moderate', factors: ['post_surgical', 'age_over_80'] }),
@@ -315,13 +308,6 @@ db.prepare(`
   JSON.stringify({ predicted_days: 18, confidence: 0.82 }),
   JSON.stringify({ home_likely: 0.65, rehab_likely: 0.10, snf_likely: 0.25 }),
   JSON.stringify({ risk_30day: 0.18 }),
-  JSON.stringify({
-    risk_reductions: {
-      deconditioning: { absolute_reduction_percent: 10 },
-      vte: { absolute_reduction_percent: 3 },
-      falls: { absolute_reduction_percent: 9 }
-    }
-  }),
   Date.now()
 );
 
@@ -492,8 +478,8 @@ db.prepare(`
   INSERT INTO risk_assessments (
     patient_id, deconditioning, vte, falls, pressure,
     mobility_recommendation, los_data, discharge_data, readmission_data,
-    mobility_benefits, created_at
-  ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    created_at
+  ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 `).run(
   snfPatient.id,
   JSON.stringify({ probability: 0.88, severity: 'high', factors: ['post_ICU', 'critical_illness_myopathy', 'prolonged_bedrest'] }),
@@ -510,13 +496,6 @@ db.prepare(`
   JSON.stringify({ predicted_days: 25, confidence: 0.68 }),
   JSON.stringify({ home_likely: 0.25, rehab_likely: 0.15, snf_likely: 0.60 }),
   JSON.stringify({ risk_30day: 0.42 }),
-  JSON.stringify({
-    risk_reductions: {
-      deconditioning: { absolute_reduction_percent: 15 },
-      vte: { absolute_reduction_percent: 5 },
-      falls: { absolute_reduction_percent: 7 }
-    }
-  }),
   Date.now()
 );
 
