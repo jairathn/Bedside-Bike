@@ -18,6 +18,7 @@ console.log('🗄️  Initializing local SQLite database...\n');
 
 // Drop all tables (in reverse dependency order)
 const dropTables = `
+DROP TABLE IF EXISTS protocol_matching_criteria;
 DROP TABLE IF EXISTS patient_protocol_assignments;
 DROP TABLE IF EXISTS clinical_protocols;
 DROP TABLE IF EXISTS kudos_reactions;
@@ -268,6 +269,26 @@ CREATE TABLE patient_protocol_assignments (
     notes TEXT,
     created_at INTEGER DEFAULT (unixepoch()),
     updated_at INTEGER DEFAULT (unixepoch())
+);
+
+-- Protocol matching criteria - defines detailed matching rules for personalization
+CREATE TABLE protocol_matching_criteria (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    protocol_id INTEGER NOT NULL REFERENCES clinical_protocols(id),
+    min_age INTEGER,
+    max_age INTEGER,
+    required_mobility_levels TEXT,
+    excluded_mobility_levels TEXT,
+    required_baseline_function TEXT,
+    required_comorbidities TEXT,
+    excluded_comorbidities TEXT,
+    required_procedures TEXT,
+    max_fall_risk REAL,
+    max_deconditioning_risk REAL,
+    requires_low_vte_risk INTEGER DEFAULT 0,
+    match_weight REAL DEFAULT 1.0,
+    match_priority INTEGER DEFAULT 0,
+    created_at INTEGER DEFAULT (unixepoch())
 );
 
 -- Feed items
