@@ -141,6 +141,9 @@ export const morganStream = {
 
 // Log unhandled promise rejections
 process.on('unhandledRejection', (reason: Error, promise: Promise<any>) => {
+  console.error('\n❌ UNHANDLED PROMISE REJECTION:');
+  console.error('Reason:', reason);
+  console.error('Stack:', reason.stack);
   logger.error('Unhandled Promise Rejection', {
     reason: reason.message,
     stack: reason.stack,
