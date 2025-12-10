@@ -7,6 +7,11 @@ import sessionConfig from "./session";
 import DeviceBridgeWebSocket from "./websocket";
 
 const app = express();
+
+// Trust proxy - needed for rate limiting to work correctly in development/production
+// This allows Express to trust the X-Forwarded-* headers
+app.set('trust proxy', true);
+
 app.use(express.json());
 app.use(express.urlencoded({ extended: false }));
 
