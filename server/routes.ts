@@ -296,7 +296,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get("/api/patients/:id/dashboard", async (req, res) => {
     try {
       const patientId = parseInt(req.params.id);
-      
+
+      console.log('=== DASHBOARD REQUEST ===');
+      console.log('Patient ID:', patientId);
+
       const [patient, goals, achievements, stats, sessions, adaptiveGoal] = await Promise.all([
         storage.getPatient(patientId),
         storage.getGoalsByPatient(patientId),
@@ -305,19 +308,31 @@ export async function registerRoutes(app: Express): Promise<Server> {
         storage.getSessionsByPatient(patientId),
         storage.calculateAdaptiveGoal(patientId)
       ]);
-      
+
+      console.log('Patient found:', patient ? `${patient.firstName} ${patient.lastName} (ID: ${patient.id})` : 'NO');
+      console.log('Stats:', stats ? `Sessions: ${stats.totalSessions}, Duration: ${stats.totalDuration}s, Level: ${stats.level}` : 'NO STATS');
+      console.log('Sessions count:', sessions ? sessions.length : 0);
+      console.log('Goals count:', goals ? goals.length : 0);
+
       if (!patient) {
         return res.status(404).json({ error: "Patient not found" });
       }
-      
+
       // Calculate days since start for legacy compatibility
       const startDate = patient.admissionDate || patient.createdAt;
       const daysSinceStart = startDate ? Math.floor((Date.now() - new Date(startDate).getTime()) / (1000 * 60 * 60 * 24)) : 0;
-      
+
       // Recalculate consistency streak based on current sessions
       const currentStreak = calculateCurrentStreak(sessions);
       const updatedStats = stats ? { ...stats, consistencyStreak: currentStreak } : null;
-      
+
+      console.log('Returning dashboard data:', {
+        hasPatient: !!patient,
+        goalsCount: goals?.length,
+        hasStats: !!updatedStats,
+        sessionsCount: sessions?.length
+      });
+
       res.json({
         patient,
         goals,
