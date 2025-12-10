@@ -139,12 +139,12 @@ export default function MobilityScoresPage() {
     return 'bg-red-500';
   };
 
-  const radarData = mobilityScore ? [
-    { subject: 'Bike', value: mobilityScore.componentScores.bikePerformance, fullMark: 100 },
-    { subject: 'Walking', value: mobilityScore.componentScores.ambulation, fullMark: 100 },
-    { subject: 'PT Assessment', value: mobilityScore.componentScores.ptAssessment, fullMark: 100 },
-    { subject: 'Nursing', value: mobilityScore.componentScores.nursingObservation, fullMark: 100 },
-    { subject: 'ADL', value: mobilityScore.componentScores.adlFunction, fullMark: 100 },
+  const radarData = mobilityScore?.componentScores ? [
+    { subject: 'Bike', value: mobilityScore.componentScores.bikePerformance || 0, fullMark: 100 },
+    { subject: 'Walking', value: mobilityScore.componentScores.ambulation || 0, fullMark: 100 },
+    { subject: 'PT Assessment', value: mobilityScore.componentScores.ptAssessment || 0, fullMark: 100 },
+    { subject: 'Nursing', value: mobilityScore.componentScores.nursingObservation || 0, fullMark: 100 },
+    { subject: 'ADL', value: mobilityScore.componentScores.adlFunction || 0, fullMark: 100 },
   ] : [];
 
   return (
