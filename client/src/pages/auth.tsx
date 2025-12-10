@@ -295,14 +295,22 @@ export default function Auth({ onAuthSuccess }: AuthProps) {
   const handleLogin = (formData: FormData) => {
     const data = Object.fromEntries(formData.entries());
 
+    console.log('=== LOGIN DEBUG ===');
+    console.log('Form data:', data);
+    console.log('Patient credentials state:', patientCredentials);
+    console.log('Date from form:', data.dateOfBirth);
+    console.log('Date from state:', patientCredentials.dateOfBirth);
+
     // Support legacy patient login (name + DOB only)
     if (userType === 'patient' && data.firstName && data.lastName && data.dateOfBirth && !data.email) {
-      loginMutation.mutate({
-        firstName: data.firstName,
-        lastName: data.lastName,
-        dateOfBirth: data.dateOfBirth,
-        deviceNumber: data.deviceNumber || null,
-      });
+      const loginPayload = {
+        firstName: data.firstName as string,
+        lastName: data.lastName as string,
+        dateOfBirth: data.dateOfBirth as string,
+        deviceNumber: (data.deviceNumber as string) || null,
+      };
+      console.log('Sending login payload:', loginPayload);
+      loginMutation.mutate(loginPayload);
     } else {
       loginMutation.mutate({
         ...data,
