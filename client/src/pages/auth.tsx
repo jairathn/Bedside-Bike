@@ -6,7 +6,7 @@ import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
-import { Heart, Activity, Shield, UserPlus, LogIn, Lightbulb, ChevronDown, ChevronUp, ChevronLeft, ChevronRight, Calculator } from "lucide-react";
+import { Heart, Activity, Shield, UserPlus, LogIn, Lightbulb, ChevronDown, ChevronUp, ChevronLeft, ChevronRight, Calculator, User } from "lucide-react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 
@@ -157,6 +157,33 @@ function PatientFactoids() {
   );
 }
 
+const demoPatients = [
+  {
+    name: "Robert Martinez",
+    firstName: "Robert",
+    lastName: "Martinez",
+    dob: "1955-01-01",
+    description: "70yo, Hospital ICU - COPD + Parkinson's",
+    type: "Hospital"
+  },
+  {
+    name: "Dorothy Chen",
+    firstName: "Dorothy",
+    lastName: "Chen",
+    dob: "1943-01-01",
+    description: "82yo, Inpatient Rehab - Hip Fracture + Diabetes",
+    type: "Rehab"
+  },
+  {
+    name: "James Thompson",
+    firstName: "James",
+    lastName: "Thompson",
+    dob: "1960-01-01",
+    description: "65yo, SNF - Sepsis + CHF Recovery",
+    type: "SNF"
+  }
+];
+
 export default function Auth({ onAuthSuccess }: AuthProps) {
   const [userType, setUserType] = useState<"patient" | "provider">("patient");
   const [patientCredentials, setPatientCredentials] = useState({
@@ -250,9 +277,39 @@ export default function Auth({ onAuthSuccess }: AuthProps) {
     },
   });
 
+  const fillDemoPatient = (patient: typeof demoPatients[0]) => {
+    // Fill form fields directly
+    const firstNameInput = document.getElementById('firstName') as HTMLInputElement;
+    const lastNameInput = document.getElementById('lastName') as HTMLInputElement;
+    const dobInput = document.getElementById('dateOfBirth') as HTMLInputElement;
+
+    if (firstNameInput && lastNameInput && dobInput) {
+      firstNameInput.value = patient.firstName;
+      lastNameInput.value = patient.lastName;
+      dobInput.value = patient.dob;
+
+      // Trigger onChange events to update state
+      firstNameInput.dispatchEvent(new Event('input', { bubbles: true }));
+      lastNameInput.dispatchEvent(new Event('input', { bubbles: true }));
+      dobInput.dispatchEvent(new Event('input', { bubbles: true }));
+
+      // Update patient credentials state
+      setPatientCredentials({
+        firstName: patient.firstName,
+        lastName: patient.lastName,
+        dateOfBirth: patient.dob
+      });
+
+      toast({
+        title: "Demo patient loaded",
+        description: `${patient.name}'s credentials have been filled in`,
+      });
+    }
+  };
+
   const handleLogin = (formData: FormData) => {
     const data = Object.fromEntries(formData.entries());
-    
+
     // Support legacy patient login (name + DOB only)
     if (userType === 'patient' && data.firstName && data.lastName && data.dateOfBirth && !data.email) {
       loginMutation.mutate({
@@ -482,6 +539,44 @@ export default function Auth({ onAuthSuccess }: AuthProps) {
                             {loginMutation.isPending ? "Signing In..." : "Sign In to Dashboard"}
                           </Button>
                         </form>
+                      </CardContent>
+                    </Card>
+
+                    {/* Demo Patient Credentials */}
+                    <Card className="mt-4 bg-gradient-to-r from-blue-50 to-green-50 border-blue-200">
+                      <CardHeader className="pb-3">
+                        <div className="flex items-center gap-2">
+                          <User className="w-5 h-5 text-blue-600" />
+                          <CardTitle className="text-lg">Demo Patient Accounts</CardTitle>
+                        </div>
+                        <CardDescription>
+                          Click any patient below to auto-fill their credentials
+                        </CardDescription>
+                      </CardHeader>
+                      <CardContent className="space-y-2">
+                        {demoPatients.map((patient) => (
+                          <button
+                            key={patient.name}
+                            type="button"
+                            onClick={() => fillDemoPatient(patient)}
+                            className="w-full text-left p-3 rounded-lg border border-blue-200 bg-white hover:border-blue-400 hover:bg-blue-50 hover:shadow-md transition-all group"
+                          >
+                            <div className="flex items-start justify-between">
+                              <div className="flex-1">
+                                <p className="font-semibold text-gray-900 group-hover:text-blue-700">
+                                  {patient.name}
+                                </p>
+                                <p className="text-xs text-gray-600 mt-1">{patient.description}</p>
+                                <p className="text-xs font-mono text-gray-500 mt-1.5 bg-gray-50 px-2 py-0.5 rounded inline-block">
+                                  DOB: {patient.dob}
+                                </p>
+                              </div>
+                              <span className="text-xs bg-blue-100 text-blue-700 px-2.5 py-1 rounded-full font-medium whitespace-nowrap ml-3">
+                                {patient.type}
+                              </span>
+                            </div>
+                          </button>
+                        ))}
                       </CardContent>
                     </Card>
                   </TabsContent>
