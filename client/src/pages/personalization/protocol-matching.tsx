@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/lib/auth";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -61,10 +61,23 @@ export default function ProtocolMatchingPage() {
   ];
 
   // Get patients for provider
-  const { data: patients = [] } = useQuery({
+  const { data: patients = [], isLoading: patientsLoading, error: patientsError } = useQuery({
     queryKey: [`/api/providers/${user?.id}/patients`],
     enabled: !!user && user.userType === 'provider',
   });
+
+  // Debug logging
+  useEffect(() => {
+    console.log('🔍 Protocol Matching Debug:', {
+      user: user ? { id: user.id, userType: user.userType, email: user.email } : 'NO USER',
+      queryEnabled: !!user && user.userType === 'provider',
+      patients: patients,
+      patientsCount: patients?.length || 0,
+      patientsLoading,
+      patientsError,
+      queryKey: `/api/providers/${user?.id}/patients`
+    });
+  }, [user, patients, patientsLoading, patientsError]);
 
   // Get patient's personalization profile
   const { data: patientProfile } = useQuery({

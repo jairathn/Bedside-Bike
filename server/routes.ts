@@ -1962,25 +1962,45 @@ async function generateRealisticSessionData(patientId: number, daysSinceAdmissio
 // Calculate current streak of consecutive days with sessions
 function calculateCurrentStreak(sessions: any[]): number {
   if (sessions.length === 0) return 0;
-  
-  // Group sessions by date
+
+  // Group sessions by date (unique dates only)
   const sessionDates = new Set(sessions.map(s => s.sessionDate));
-  const sortedDates = Array.from(sessionDates).sort().reverse();
-  
-  let streak = 0;
+  const sortedDates = Array.from(sessionDates).sort().reverse(); // Most recent first
+
   const today = new Date();
-  
-  for (let i = 0; i < sortedDates.length; i++) {
-    const sessionDate = new Date(sortedDates[i]);
-    const daysDiff = Math.floor((today.getTime() - sessionDate.getTime()) / (1000 * 60 * 60 * 24));
-    
-    if (daysDiff === i) {
+  today.setHours(0, 0, 0, 0); // Normalize to start of day
+
+  let streak = 0;
+  let expectedDate = new Date(today);
+
+  for (const dateStr of sortedDates) {
+    const sessionDate = new Date(dateStr);
+    sessionDate.setHours(0, 0, 0, 0); // Normalize to start of day
+
+    // Check if session date matches expected date
+    if (sessionDate.getTime() === expectedDate.getTime()) {
       streak++;
-    } else {
+      // Move expected date back one day
+      expectedDate.setDate(expectedDate.getDate() - 1);
+    } else if (sessionDate.getTime() < expectedDate.getTime()) {
+      // Gap in streak found
       break;
     }
+    // If sessionDate > expectedDate, skip it (future date, shouldn't happen)
   }
-  
+
+  // If we didn't find any sessions today or yesterday, streak is 0
+  // (streak must be current to count)
+  if (streak > 0) {
+    const mostRecentSession = new Date(sortedDates[0]);
+    mostRecentSession.setHours(0, 0, 0, 0);
+    const daysSinceLastSession = Math.floor((today.getTime() - mostRecentSession.getTime()) / (1000 * 60 * 60 * 24));
+    if (daysSinceLastSession > 1) {
+      // Streak is broken if last session was more than yesterday
+      return 0;
+    }
+  }
+
   return streak;
 }
 

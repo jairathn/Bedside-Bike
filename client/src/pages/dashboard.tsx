@@ -699,12 +699,12 @@ export default function DashboardPage() {
                           <div className={`text-2xl font-bold transition-colors ${
                             isAchieved ? 'text-green-600' : 'text-blue-600'
                           }`}>
-                            {goal.goalType === 'duration' && parseFloat(goal.targetValue || '0') > 100 
-                              ? Math.round(parseFloat(goal.targetValue || '0') / 60) 
+                            {(goal.goalType === 'duration' || goal.unit === 'seconds')
+                              ? Math.round(parseFloat(goal.targetValue || '0') / 60)
                               : Math.round(parseFloat(goal.targetValue || '0'))}
                           </div>
                           <div className="text-sm text-gray-600">
-                            {goal.goalType === 'duration' ? 'minutes' : goal.unit}
+                            {(goal.goalType === 'duration' || goal.unit === 'seconds') ? 'minutes' : goal.unit}
                           </div>
                         </div>
                       </div>
