@@ -48,9 +48,9 @@ console.log('Creating Hospital Patient (COPD + Parkinson\'s)...');
 // Create user
 const hospitalPatient = db.prepare(`
   INSERT INTO users (
-    email, firstName, lastName, dateOfBirth, userType,
-    admissionDate, mrn, roomNumber, unit, isActive, createdAt
-  ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    email, first_name, last_name, date_of_birth, user_type,
+    admission_date, is_active, created_at
+  ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
   RETURNING *
 `).get(
   'hospital.patient@bedside-bike.local',
@@ -59,9 +59,6 @@ const hospitalPatient = db.prepare(`
   hospitalPatientDOB,
   'patient',
   hospitalAdmissionDate.toISOString().split('T')[0],
-  'MRN-2025-001',
-  '512A',
-  'Medical ICU',
   1,
   Date.now()
 ) as any;
@@ -69,23 +66,21 @@ const hospitalPatient = db.prepare(`
 // Create comprehensive patient profile
 db.prepare(`
   INSERT INTO patient_profiles (
-    user_id, sex, weight_kg, height_cm, bmi,
+    user_id, age, sex, weight_kg, height_cm,
     level_of_care, mobility_status, cognitive_status, baseline_function,
     admission_diagnosis, comorbidities, medications, devices,
-    incontinent, albumin_low, on_vte_prophylaxis, risk_level,
-    fall_risk_score, deconditioning_risk_score,
-    frailty_index, barthel_index, fim_score, hospital_mobility_score,
+    incontinent, albumin_low, on_vte_prophylaxis, days_immobile,
     created_at
-  ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 `).run(
   hospitalPatient.id,
+  70, // age
   'M',
   78.5,
   172,
-  26.5,
-  'ICU',
-  'bed_bound',
-  'alert_oriented',
+  'icu',
+  'bedbound',
+  'normal',
   'independent',
   'COPD exacerbation with acute respiratory failure',
   JSON.stringify(['COPD', 'Parkinson\'s Disease', 'Hypertension']),
@@ -100,13 +95,7 @@ db.prepare(`
   0,
   0,
   1,
-  'high',
-  65,
-  75,
-  0.35,
-  45,
-  48,
-  12,
+  5, // days immobile
   Date.now()
 );
 
@@ -241,7 +230,7 @@ db.prepare(`
   ) VALUES (?, ?, ?, ?, ?, ?)
 `).run(hospitalPatient.id, providerId, 1, Date.now(), 1, Date.now());
 
-console.log(`✅ Hospital Patient: ${hospitalPatient.firstName} ${hospitalPatient.lastName} (ID: ${hospitalPatient.id})`);
+console.log(`✅ Hospital Patient: ${hospitalPatient.first_name} ${hospitalPatient.last_name} (ID: ${hospitalPatient.id})`);
 
 // ==========================================
 // 2. INPATIENT REHAB - Hip Fracture + Diabetes
@@ -251,9 +240,9 @@ console.log('\nCreating Inpatient Rehab Patient (Hip Fracture + Diabetes)...');
 
 const rehabPatient = db.prepare(`
   INSERT INTO users (
-    email, firstName, lastName, dateOfBirth, userType,
-    admissionDate, mrn, roomNumber, unit, isActive, createdAt
-  ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    email, first_name, last_name, date_of_birth, user_type,
+    admission_date, is_active, created_at
+  ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
   RETURNING *
 `).get(
   'rehab.patient@bedside-bike.local',
@@ -262,9 +251,6 @@ const rehabPatient = db.prepare(`
   rehabPatientDOB,
   'patient',
   rehabAdmissionDate.toISOString().split('T')[0],
-  'MRN-2025-002',
-  '204B',
-  'Inpatient Rehab',
   1,
   Date.now()
 ) as any;
@@ -272,23 +258,21 @@ const rehabPatient = db.prepare(`
 // Create comprehensive patient profile
 db.prepare(`
   INSERT INTO patient_profiles (
-    user_id, sex, weight_kg, height_cm, bmi,
+    user_id, age, sex, weight_kg, height_cm,
     level_of_care, mobility_status, cognitive_status, baseline_function,
     admission_diagnosis, comorbidities, medications, devices,
-    incontinent, albumin_low, on_vte_prophylaxis, risk_level,
-    fall_risk_score, deconditioning_risk_score,
-    frailty_index, barthel_index, fim_score, hospital_mobility_score,
+    incontinent, albumin_low, on_vte_prophylaxis, days_immobile,
     created_at
-  ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 `).run(
   rehabPatient.id,
+  82, // age
   'F',
   68.2,
   160,
-  26.6,
-  'acute_rehab',
-  'requires_walker',
-  'alert_oriented',
+  'rehab',
+  'walking_assist',
+  'normal',
   'requires_assistance',
   'Right hip fracture s/p ORIF',
   JSON.stringify(['Hip Fracture', 'Type 2 Diabetes', 'Osteoporosis', 'Hypertension']),
@@ -304,13 +288,7 @@ db.prepare(`
   0,
   0,
   1,
-  'moderate',
-  45,
-  58,
-  0.42,
-  62,
-  75,
-  28,
+  12, // days immobile
   Date.now()
 );
 
@@ -447,7 +425,7 @@ db.prepare(`
   ) VALUES (?, ?, ?, ?, ?, ?)
 `).run(rehabPatient.id, providerId, 1, Date.now(), 1, Date.now());
 
-console.log(`✅ Inpatient Rehab Patient: ${rehabPatient.firstName} ${rehabPatient.lastName} (ID: ${rehabPatient.id})`);
+console.log(`✅ Inpatient Rehab Patient: ${rehabPatient.first_name} ${rehabPatient.last_name} (ID: ${rehabPatient.id})`);
 
 // ==========================================
 // 3. SNF PATIENT - Sepsis + CHF (with setback)
@@ -457,9 +435,9 @@ console.log('\nCreating SNF Patient (Sepsis + CHF with setback)...');
 
 const snfPatient = db.prepare(`
   INSERT INTO users (
-    email, firstName, lastName, dateOfBirth, userType,
-    admissionDate, mrn, roomNumber, unit, isActive, createdAt
-  ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    email, first_name, last_name, date_of_birth, user_type,
+    admission_date, is_active, created_at
+  ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
   RETURNING *
 `).get(
   'snf.patient@bedside-bike.local',
@@ -468,9 +446,6 @@ const snfPatient = db.prepare(`
   snfPatientDOB,
   'patient',
   snfAdmissionDate.toISOString().split('T')[0],
-  'MRN-2025-003',
-  '118',
-  'Skilled Nursing',
   1,
   Date.now()
 ) as any;
@@ -478,23 +453,21 @@ const snfPatient = db.prepare(`
 // Create comprehensive patient profile
 db.prepare(`
   INSERT INTO patient_profiles (
-    user_id, sex, weight_kg, height_cm, bmi,
+    user_id, age, sex, weight_kg, height_cm,
     level_of_care, mobility_status, cognitive_status, baseline_function,
     admission_diagnosis, comorbidities, medications, devices,
-    incontinent, albumin_low, on_vte_prophylaxis, risk_level,
-    fall_risk_score, deconditioning_risk_score,
-    frailty_index, barthel_index, fim_score, hospital_mobility_score,
+    incontinent, albumin_low, on_vte_prophylaxis, days_immobile,
     created_at
-  ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 `).run(
   snfPatient.id,
+  65, // age
   'M',
   92.5,
   175,
-  30.2,
-  'skilled_nursing',
-  'requires_walker',
-  'mild_confusion',
+  'ward',
+  'walking_assist',
+  'mild_impairment',
   'requires_assistance',
   'Sepsis resolved, recovering from critical illness',
   JSON.stringify(['CHF (EF 35%)', 'Sepsis (resolved)', 'CKD Stage 3', 'Obesity', 'Diabetes Type 2']),
@@ -509,14 +482,8 @@ db.prepare(`
   JSON.stringify(['walker', 'oxygen_prn']),
   0,
   1,
-  0,
-  'high',
-  58,
-  82,
-  0.48,
-  52,
-  58,
-  18,
+  1,
+  17, // days immobile
   Date.now()
 );
 
@@ -670,7 +637,7 @@ db.prepare(`
   ) VALUES (?, ?, ?, ?, ?, ?)
 `).run(snfPatient.id, providerId, 1, Date.now(), 1, Date.now());
 
-console.log(`✅ SNF Patient: ${snfPatient.firstName} ${snfPatient.lastName} (ID: ${snfPatient.id})`);
+console.log(`✅ SNF Patient: ${snfPatient.first_name} ${snfPatient.last_name} (ID: ${snfPatient.id})`);
 
 // ==========================================
 // CROSS-PATIENT INTERACTIONS
@@ -687,11 +654,11 @@ for (const patient of [hospitalPatient, rehabPatient, snfPatient]) {
     ) VALUES (?, ?, ?, ?, ?, ?, ?)
   `).run(
     patient.id,
-    `${patient.firstName} ${patient.lastName.charAt(0)}.`,
+    `${patient.first_name} ${patient.last_name.charAt(0)}.`,
     patient.id === hospitalPatient.id ? '🏥' : patient.id === rehabPatient.id ? '🦴' : '💪',
     1,
     1,
-    patient.unit,
+    'General', // unit - simplified since we don't have unit field in users table
     Date.now()
   );
 }
@@ -716,7 +683,7 @@ const feedItems = [
   {
     patientId: rehabPatient.id,
     type: 'nudge',
-    content: `${rehabPatient.firstName} sent you encouragement: "Keep going! You're doing great!" 🌟`,
+    content: `${rehabPatient.first_name} sent you encouragement: "Keep going! You're doing great!" 🌟`,
     metadata: JSON.stringify({ from: rehabPatient.id, to: hospitalPatient.id, template: 'encouragement' })
   },
   // SNF patient milestone
