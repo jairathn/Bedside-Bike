@@ -12,6 +12,8 @@ export const apiLimiter = rateLimit({
   message: 'Too many requests from this IP, please try again later.',
   standardHeaders: true, // Return rate limit info in `RateLimit-*` headers
   legacyHeaders: false, // Disable `X-RateLimit-*` headers
+  // Skip rate limiting if request object is invalid (prevents startup errors)
+  skip: (req) => !req || !req.ip,
   // Store in memory (for production, consider Redis store)
 });
 
@@ -24,6 +26,8 @@ export const authLimiter = rateLimit({
   message: 'Too many login attempts, please try again after 15 minutes.',
   standardHeaders: true,
   legacyHeaders: false,
+  // Skip rate limiting if request object is invalid (prevents startup errors)
+  skip: (req) => !req || !req.ip,
 });
 
 // Rate limit for risk assessment endpoint
@@ -34,6 +38,8 @@ export const riskAssessmentLimiter = rateLimit({
   message: 'Too many risk assessments, please slow down.',
   standardHeaders: true,
   legacyHeaders: false,
+  // Skip rate limiting if request object is invalid (prevents startup errors)
+  skip: (req) => !req || !req.ip,
 });
 
 // Rate limit for goal/session creation
@@ -44,6 +50,8 @@ export const createLimiter = rateLimit({
   message: 'Too many creation requests, please slow down.',
   standardHeaders: true,
   legacyHeaders: false,
+  // Skip rate limiting if request object is invalid (prevents startup errors)
+  skip: (req) => !req || !req.ip,
 });
 
 // Rate limit for kudos/reactions
@@ -54,4 +62,6 @@ export const kudosLimiter = rateLimit({
   message: 'Too many kudos reactions, please slow down.',
   standardHeaders: true,
   legacyHeaders: false,
+  // Skip rate limiting if request object is invalid (prevents startup errors)
+  skip: (req) => !req || !req.ip,
 });
