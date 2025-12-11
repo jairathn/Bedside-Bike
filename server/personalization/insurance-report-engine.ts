@@ -221,17 +221,26 @@ export class InsuranceReportEngine {
   ): Promise<InsuranceReportData | null> {
     try {
       // Get patient profile
+      logger.info('Starting insurance report data gathering', { patientId });
+
+      logger.info('Querying patient profile...');
       const profile = await db.select()
         .from(patientProfiles)
         .where(eq(patientProfiles.userId, patientId))
         .limit(1);
+      logger.info('Profile query complete', { profileFound: profile.length > 0 });
 
+      logger.info('Querying user...');
       const user = await db.select()
         .from(users)
         .where(eq(users.id, patientId))
         .limit(1);
+      logger.info('User query complete', { userFound: user.length > 0 });
 
-      if (!profile.length) return null;
+      if (!profile.length) {
+        logger.warn('No profile found for insurance report', { patientId });
+        return null;
+      }
 
       // Get recent sessions (last 14 days)
       const cutoffDate = new Date();
@@ -245,7 +254,12 @@ export class InsuranceReportEngine {
         ))
         .orderBy(desc(exerciseSessions.startTime));
 
-      if (sessions.length < 3) return null;  // Need minimum data
+      logger.info('Insurance report session query', { patientId, sessionCount: sessions.length, cutoffDate: cutoffDate.toISOString() });
+
+      if (sessions.length < 3) {
+        logger.warn('Insufficient sessions for insurance report', { patientId, sessionCount: sessions.length });
+        return null;  // Need minimum data
+      }
 
       // Get baseline sessions (first 3)
       const baselineSessions = sessions.slice(-3);
@@ -262,22 +276,30 @@ export class InsuranceReportEngine {
         (s.durationSeconds || s.duration * 60) / 60
       ));
 
-      // Get latest mobility score
-      const latestMobility = await db.select()
-        .from(mobilityScores)
-        .where(eq(mobilityScores.patientId, patientId))
-        .orderBy(desc(mobilityScores.scoredAt))
-        .limit(1);
+      // Get mobility scores (with fallback if table doesn't have all columns yet)
+      let currentMobilityScore = 0;
+      let baselineMobilityScore = 0;
 
-      // Get baseline mobility score (from 14 days ago if available)
-      const baselineMobility = await db.select()
-        .from(mobilityScores)
-        .where(eq(mobilityScores.patientId, patientId))
-        .orderBy(mobilityScores.scoredAt)
-        .limit(1);
+      try {
+        const latestMobility = await db.select()
+          .from(mobilityScores)
+          .where(eq(mobilityScores.patientId, patientId))
+          .orderBy(desc(mobilityScores.scoredAt))
+          .limit(1);
 
-      const currentMobilityScore = latestMobility[0]?.unifiedScore || this.estimateMobilityScore(profile[0]);
-      const baselineMobilityScore = baselineMobility[0]?.unifiedScore || currentMobilityScore * 0.9;
+        const baselineMobility = await db.select()
+          .from(mobilityScores)
+          .where(eq(mobilityScores.patientId, patientId))
+          .orderBy(mobilityScores.scoredAt)
+          .limit(1);
+
+        currentMobilityScore = latestMobility[0]?.unifiedScore || this.estimateMobilityScore(profile[0]);
+        baselineMobilityScore = baselineMobility[0]?.unifiedScore || currentMobilityScore * 0.9;
+      } catch (error) {
+        logger.warn('Mobility scores unavailable, using estimates', { error: error.message });
+        currentMobilityScore = this.estimateMobilityScore(profile[0]);
+        baselineMobilityScore = currentMobilityScore * 0.9;
+      }
 
       // Calculate change
       const changePercent = baselineMobilityScore > 0
@@ -296,12 +318,17 @@ export class InsuranceReportEngine {
       // Calculate bilateral balance (placeholder for Tier 2)
       const bilateralBalance = 85;  // Default good balance
 
-      // Get risk assessment for predictions
-      const riskAssessment = await db.select()
-        .from(riskAssessments)
-        .where(eq(riskAssessments.patientId, patientId))
-        .orderBy(desc(riskAssessments.createdAt))
-        .limit(1);
+      // Get risk assessment for predictions (with fallback if unavailable)
+      let riskAssessment: any[] = [];
+      try {
+        riskAssessment = await db.select()
+          .from(riskAssessments)
+          .where(eq(riskAssessments.patientId, patientId))
+          .orderBy(desc(riskAssessments.createdAt))
+          .limit(1);
+      } catch (error) {
+        logger.warn('Risk assessments unavailable', { error: error.message });
+      }
 
       // Predict time to independence
       const timeToIndependence = this.predictTimeToIndependence(
@@ -350,7 +377,8 @@ export class InsuranceReportEngine {
       };
 
     } catch (error: any) {
-      logger.error('Gather report data failed', { error: error.message, patientId });
+      logger.error('Gather report data failed', { error: error.message, stack: error.stack, patientId });
+      console.error('Full error object:', error);
       return null;
     }
   }
