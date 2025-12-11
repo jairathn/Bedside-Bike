@@ -4,10 +4,12 @@
  * Patent Feature: Personalized Protocol Matching System
  *
  * This system implements personalized medicine approach for exercise protocols by:
- * 1. Multi-factor matching (diagnosis, comorbidities, age, mobility, preferences)
- * 2. Risk-based protocol selection (fall risk, deconditioning risk)
- * 3. Learned patient patterns integration
- * 4. Confidence scoring for recommendations
+ * 1. Using the patient goal calculator to determine baseline energy prescription
+ * 2. Adjusting parameters (resistance, RPM, duration) based on diagnosis
+ * 3. Maintaining constant total daily energy target across all diagnoses
+ * 4. Diagnosis-specific parameter distribution:
+ *    - Cardiac/Pulmonary (CHF, COPD): Higher resistance, lower RPM
+ *    - Orthopedic (TKA, THA): Lower resistance, higher rotations/longer duration
  * 5. Continuous adaptation based on outcomes
  */
 
@@ -80,6 +82,323 @@ export interface MatchingConfig {
   includePersonalization: boolean;
   minimumMatchScore: number;
   maxResults: number;
+}
+
+// ============================================================================
+// DIAGNOSIS-BASED PRESCRIPTION TYPES
+// ============================================================================
+
+/**
+ * Diagnosis categories that determine parameter adjustments
+ */
+export type DiagnosisCategory =
+  | 'cardiac'       // Heart failure, CHF - focus on resistance, lower RPM
+  | 'pulmonary'     // COPD, respiratory - focus on resistance, lower RPM
+  | 'orthopedic'    // TKA, THA - focus on ROM, lower resistance, more rotations
+  | 'neurological'  // Stroke - balanced approach
+  | 'general';      // Default - balanced approach
+
+/**
+ * Personalized mobility prescription based on patient data and diagnosis
+ */
+export interface PersonalizedPrescription {
+  // Core prescription parameters
+  totalDailyEnergy: number;       // Watt-minutes (constant regardless of diagnosis)
+  duration: number;               // Minutes per session
+  sessionsPerDay: number;         // Number of sessions
+  targetPower: number;            // Watts (target average)
+  resistance: number;             // 1-9 scale
+  targetRpm: number;              // Revolutions per minute
+
+  // Diagnosis-based adjustments
+  diagnosisCategory: DiagnosisCategory;
+  adjustmentRationale: string[];  // Why these parameters were chosen
+
+  // Safety parameters from risk assessment
+  fallRisk: number;
+  deconditioningRisk: number;
+
+  // Monitoring recommendations
+  monitoringParams: string[];
+  stopCriteria: string[];
+
+  // Source information
+  baselineFromRiskCalculator: boolean;
+  patientId: number;
+}
+
+/**
+ * Diagnosis adjustment profile - how to redistribute energy for each category
+ */
+interface DiagnosisAdjustmentProfile {
+  category: DiagnosisCategory;
+  resistanceMultiplier: number;   // Multiplier to baseline resistance (>1 = higher, <1 = lower)
+  rpmMultiplier: number;          // Multiplier to baseline RPM
+  durationMultiplier: number;     // Multiplier to baseline duration
+  rationale: string;
+}
+
+// ============================================================================
+// DIAGNOSIS ADJUSTMENT PROFILES
+// ============================================================================
+
+/**
+ * Adjustment profiles for different diagnosis categories.
+ * These define how to redistribute the same total energy across different parameters.
+ *
+ * Key principle: Total energy (watt-minutes) remains CONSTANT.
+ * Power = Resistance × RPM (approximately, for our device)
+ * Energy = Power × Duration × Sessions
+ *
+ * When we increase resistance and decrease RPM, we maintain similar power.
+ * When we decrease resistance and increase duration, we maintain similar energy.
+ */
+const DIAGNOSIS_ADJUSTMENT_PROFILES: Record<DiagnosisCategory, DiagnosisAdjustmentProfile> = {
+  /**
+   * Cardiac (Heart Failure, CHF)
+   * Goal: Build cardiac strength with controlled heart rate
+   * Strategy: Higher resistance, lower RPM to reduce cardiac demand while
+   * maintaining muscle engagement. Same total energy target.
+   */
+  cardiac: {
+    category: 'cardiac',
+    resistanceMultiplier: 1.25,    // 25% higher resistance
+    rpmMultiplier: 0.80,           // 20% lower RPM
+    durationMultiplier: 1.0,       // Same duration
+    rationale: 'Higher resistance with controlled RPM reduces cardiac stress while maintaining muscle conditioning'
+  },
+
+  /**
+   * Pulmonary (COPD, Respiratory)
+   * Goal: Build endurance without excessive ventilatory demand
+   * Strategy: Higher resistance, lower RPM to reduce respiratory rate
+   * while maintaining conditioning. Same total energy target.
+   */
+  pulmonary: {
+    category: 'pulmonary',
+    resistanceMultiplier: 1.20,    // 20% higher resistance
+    rpmMultiplier: 0.85,           // 15% lower RPM
+    durationMultiplier: 1.0,       // Same duration
+    rationale: 'Higher resistance with slower pedaling minimizes respiratory demand while preserving muscle work'
+  },
+
+  /**
+   * Orthopedic (Total Knee, Total Hip, ROM-focused)
+   * Goal: Maximize range of motion and joint mobility
+   * Strategy: Lower resistance, more rotations, longer duration.
+   * Same total energy target achieved through more movement.
+   */
+  orthopedic: {
+    category: 'orthopedic',
+    resistanceMultiplier: 0.70,    // 30% lower resistance
+    rpmMultiplier: 1.15,           // 15% higher RPM (more rotations)
+    durationMultiplier: 1.25,      // 25% longer duration for more total rotations
+    rationale: 'Lower resistance with more rotations maximizes joint ROM and reduces surgical site stress'
+  },
+
+  /**
+   * Neurological (Stroke, TBI)
+   * Goal: Bilateral coordination and motor relearning
+   * Strategy: Moderate parameters with focus on symmetry and control.
+   * Same total energy target with emphasis on quality of movement.
+   */
+  neurological: {
+    category: 'neurological',
+    resistanceMultiplier: 0.90,    // 10% lower resistance for control
+    rpmMultiplier: 0.95,           // 5% lower RPM for coordination
+    durationMultiplier: 1.15,      // 15% longer for motor learning
+    rationale: 'Moderate resistance with controlled pace supports bilateral coordination and motor relearning'
+  },
+
+  /**
+   * General (Default)
+   * Goal: Balanced conditioning and VTE prevention
+   * Strategy: Use baseline parameters from risk calculator directly.
+   */
+  general: {
+    category: 'general',
+    resistanceMultiplier: 1.0,
+    rpmMultiplier: 1.0,
+    durationMultiplier: 1.0,
+    rationale: 'Balanced approach optimized by risk calculator for general conditioning'
+  }
+};
+
+/**
+ * Map diagnosis text/codes to categories
+ */
+const DIAGNOSIS_CATEGORY_MAP: Record<string, DiagnosisCategory> = {
+  // Cardiac
+  'heart failure': 'cardiac',
+  'chf': 'cardiac',
+  'congestive heart failure': 'cardiac',
+  'cardiac': 'cardiac',
+  'i50': 'cardiac',        // ICD-10 Heart failure codes start with I50
+  'cardiomyopathy': 'cardiac',
+  'atrial fibrillation': 'cardiac',
+  'afib': 'cardiac',
+
+  // Pulmonary
+  'copd': 'pulmonary',
+  'chronic obstructive pulmonary disease': 'pulmonary',
+  'respiratory': 'pulmonary',
+  'pneumonia': 'pulmonary',
+  'j44': 'pulmonary',      // ICD-10 COPD codes
+  'j18': 'pulmonary',      // ICD-10 Pneumonia codes
+  'asthma': 'pulmonary',
+  'pulmonary': 'pulmonary',
+
+  // Orthopedic (ROM-focused)
+  'total knee': 'orthopedic',
+  'tka': 'orthopedic',
+  'knee replacement': 'orthopedic',
+  'total hip': 'orthopedic',
+  'tha': 'orthopedic',
+  'hip replacement': 'orthopedic',
+  'knee arthroplasty': 'orthopedic',
+  'hip arthroplasty': 'orthopedic',
+  'z96.64': 'orthopedic',  // ICD-10 Artificial knee joint
+  'z96.65': 'orthopedic',  // ICD-10 Artificial hip joint
+  'm17': 'orthopedic',     // ICD-10 Knee osteoarthritis
+  'm16': 'orthopedic',     // ICD-10 Hip osteoarthritis
+  'joint replacement': 'orthopedic',
+  'arthroplasty': 'orthopedic',
+
+  // Neurological
+  'stroke': 'neurological',
+  'cva': 'neurological',
+  'cerebrovascular': 'neurological',
+  'i63': 'neurological',   // ICD-10 Cerebral infarction
+  'i64': 'neurological',   // ICD-10 Stroke not specified
+  'tbi': 'neurological',
+  'traumatic brain': 'neurological',
+  'hemiplegia': 'neurological',
+  'g81': 'neurological',   // ICD-10 Hemiplegia
+};
+
+/**
+ * Default monitoring parameters by diagnosis category
+ */
+const MONITORING_BY_CATEGORY: Record<DiagnosisCategory, string[]> = {
+  cardiac: [
+    'Heart rate (target <100 bpm)',
+    'Blood pressure (avoid drops >10 mmHg)',
+    'SpO2',
+    'Dyspnea score (0-10)',
+    'Borg RPE (target 11-13)',
+    'Signs of fluid overload'
+  ],
+  pulmonary: [
+    'SpO2 (maintain >90%)',
+    'Respiratory rate (<25/min)',
+    'Dyspnea score (0-10)',
+    'Heart rate',
+    'Accessory muscle use',
+    'Pursed lip breathing pattern'
+  ],
+  orthopedic: [
+    'Pain level (0-10)',
+    'Range of motion (degrees)',
+    'Surgical site assessment',
+    'Edema monitoring',
+    'Blood pressure',
+    'Total rotations completed'
+  ],
+  neurological: [
+    'Blood pressure (avoid >180 mmHg)',
+    'Bilateral pedaling symmetry',
+    'Motor strength (affected vs unaffected)',
+    'Cognitive participation',
+    'Balance and trunk control',
+    'New neurological symptoms'
+  ],
+  general: [
+    'Heart rate',
+    'Blood pressure',
+    'Perceived exertion (RPE)',
+    'SpO2',
+    'Overall tolerance',
+    'Lower extremity assessment'
+  ]
+};
+
+/**
+ * Stop criteria by diagnosis category
+ */
+const STOP_CRITERIA_BY_CATEGORY: Record<DiagnosisCategory, string[]> = {
+  cardiac: [
+    'HR >110 bpm or increase >20 bpm from rest',
+    'SBP decrease >10 mmHg',
+    'SpO2 <90%',
+    'Dyspnea worsening >2 points',
+    'Chest pain, dizziness, or palpitations',
+    'New arrhythmia'
+  ],
+  pulmonary: [
+    'SpO2 <88% or drop >4%',
+    'RR >28/min',
+    'HR >120 bpm',
+    'Severe dyspnea (>7/10)',
+    'Confusion or altered mental status',
+    'Excessive accessory muscle use'
+  ],
+  orthopedic: [
+    'Pain >6/10',
+    'SBP <90 or >180 mmHg',
+    'HR >120 bpm',
+    'Significant increase in edema',
+    'Signs of surgical complications',
+    'Patient request'
+  ],
+  neurological: [
+    'SBP >180 or <100 mmHg',
+    'New neurological symptoms',
+    'Severe headache',
+    'Dizziness or visual changes',
+    'Unable to participate safely',
+    'Excessive spasticity'
+  ],
+  general: [
+    'HR >120 bpm',
+    'SBP <90 or >180 mmHg',
+    'SpO2 <90%',
+    'Chest pain or pressure',
+    'Severe dyspnea',
+    'Patient distress'
+  ]
+};
+
+/**
+ * Default RPM by mobility status (baseline for calculations)
+ */
+const BASELINE_RPM_BY_MOBILITY: Record<string, number> = {
+  bedbound: 25,
+  chair_bound: 30,
+  standing_assist: 35,
+  walking_assist: 40,
+  independent: 45
+};
+
+/**
+ * Convert watts to resistance level (1-9 scale for our device)
+ * Based on 9-inch electromagnetic flywheel: 30-50 lbs force range
+ * Power ≈ Force × RPM × constant
+ */
+function wattsToResistance(watts: number, rpm: number): number {
+  // Simplified model: Power = k * Resistance * RPM
+  // At baseline (resistance 5, ~35 RPM, ~37.5 lbs): ~35W
+  // k ≈ 35 / (5 * 35) = 0.2
+  const k = 0.2;
+  const resistance = watts / (k * rpm);
+  return Math.max(1, Math.min(9, Math.round(resistance)));
+}
+
+/**
+ * Calculate power from resistance and RPM
+ */
+function calculatePower(resistance: number, rpm: number): number {
+  const k = 0.2;
+  return k * resistance * rpm;
 }
 
 // ============================================================================
@@ -213,6 +532,309 @@ export class PersonalizedProtocolMatcher {
         reason: error.message
       };
     }
+  }
+
+  // ==========================================================================
+  // NEW: PERSONALIZED PRESCRIPTION GENERATION
+  // ==========================================================================
+
+  /**
+   * Generate a personalized mobility prescription using the patient goal calculator.
+   *
+   * This is the PRIMARY entry point for getting a patient's exercise prescription.
+   * It replaces the score-based protocol matching with a calculation-based approach:
+   *
+   * 1. Uses the risk calculator to determine baseline energy target (watt-minutes)
+   * 2. Determines diagnosis category from patient data
+   * 3. Applies diagnosis-specific adjustments while maintaining total energy
+   * 4. Returns complete prescription with safety parameters
+   *
+   * @param patientId - The patient to generate prescription for
+   * @param overrides - Optional overrides for diagnosis or risk assessment input
+   * @returns PersonalizedPrescription with all exercise parameters
+   */
+  async generatePersonalizedPrescription(
+    patientId: number,
+    overrides?: {
+      diagnosis?: string;
+      riskAssessmentInput?: Partial<RiskAssessmentInput>;
+    }
+  ): Promise<PersonalizedPrescription | null> {
+    try {
+      // Step 1: Build risk assessment input from patient profile
+      const riskInput = await this.buildRiskAssessmentInput(patientId, overrides?.riskAssessmentInput);
+      if (!riskInput) {
+        logger.warn('Could not build risk assessment input', { patientId });
+        return null;
+      }
+
+      // Step 2: Calculate baseline prescription using the risk calculator
+      const riskResults = calculateRisks(riskInput);
+      const baselineRec = riskResults.mobility_recommendation;
+
+      logger.info('Baseline prescription from risk calculator', {
+        patientId,
+        wattGoal: baselineRec.watt_goal,
+        duration: baselineRec.duration_min_per_session,
+        sessions: baselineRec.sessions_per_day,
+        totalEnergy: baselineRec.total_daily_energy
+      });
+
+      // Step 3: Determine diagnosis category
+      const diagnosis = overrides?.diagnosis || riskInput.admission_diagnosis || '';
+      const diagnosisCategory = this.determineDiagnosisCategory(diagnosis, riskInput);
+
+      // Step 4: Get adjustment profile for this category
+      const adjustmentProfile = DIAGNOSIS_ADJUSTMENT_PROFILES[diagnosisCategory];
+
+      // Step 5: Calculate adjusted parameters while maintaining total energy
+      const adjustedPrescription = this.applyDiagnosisAdjustments(
+        baselineRec,
+        riskInput.mobility_status || 'standing_assist',
+        adjustmentProfile
+      );
+
+      // Step 6: Build complete prescription
+      const prescription: PersonalizedPrescription = {
+        // Core parameters (adjusted based on diagnosis)
+        totalDailyEnergy: baselineRec.total_daily_energy || Math.round(baselineRec.watt_goal * baselineRec.duration_min_per_session * baselineRec.sessions_per_day),
+        duration: adjustedPrescription.duration,
+        sessionsPerDay: adjustedPrescription.sessions,
+        targetPower: adjustedPrescription.power,
+        resistance: adjustedPrescription.resistance,
+        targetRpm: adjustedPrescription.rpm,
+
+        // Diagnosis info
+        diagnosisCategory,
+        adjustmentRationale: [
+          adjustmentProfile.rationale,
+          ...adjustedPrescription.rationale
+        ],
+
+        // Safety parameters
+        fallRisk: riskResults.falls.probability,
+        deconditioningRisk: riskResults.deconditioning.probability,
+
+        // Monitoring recommendations based on diagnosis category
+        monitoringParams: MONITORING_BY_CATEGORY[diagnosisCategory],
+        stopCriteria: STOP_CRITERIA_BY_CATEGORY[diagnosisCategory],
+
+        // Source info
+        baselineFromRiskCalculator: true,
+        patientId
+      };
+
+      logger.info('Generated personalized prescription', {
+        patientId,
+        diagnosisCategory,
+        totalEnergy: prescription.totalDailyEnergy,
+        duration: prescription.duration,
+        resistance: prescription.resistance,
+        rpm: prescription.targetRpm
+      });
+
+      return prescription;
+
+    } catch (error: any) {
+      logger.error('Failed to generate personalized prescription', {
+        error: error.message,
+        patientId
+      });
+      return null;
+    }
+  }
+
+  /**
+   * Build risk assessment input from patient profile data
+   */
+  private async buildRiskAssessmentInput(
+    patientId: number,
+    overrides?: Partial<RiskAssessmentInput>
+  ): Promise<RiskAssessmentInput | null> {
+    try {
+      // Get patient profile
+      const profile = await db.select()
+        .from(patientProfiles)
+        .where(eq(patientProfiles.userId, patientId))
+        .limit(1);
+
+      if (!profile.length) {
+        logger.warn('Patient profile not found for risk assessment', { patientId });
+        return null;
+      }
+
+      const p = profile[0];
+
+      // Get latest risk assessment if available (for additional data)
+      const latestRiskAssessment = await db.select()
+        .from(riskAssessments)
+        .where(eq(riskAssessments.patientId, patientId))
+        .orderBy(desc(riskAssessments.createdAt))
+        .limit(1);
+
+      // Parse comorbidities
+      const comorbidities = JSON.parse(p.comorbidities || '[]');
+
+      // Build the risk assessment input
+      const riskInput: RiskAssessmentInput = {
+        age: p.age,
+        sex: p.sex || 'unknown',
+        mobility_status: p.mobilityStatus || 'standing_assist',
+        cognitive_status: p.cognitiveStatus || 'normal',
+        level_of_care: p.levelOfCare || 'ward',
+        admission_diagnosis: p.admissionDiagnosis || '',
+        baseline_function: p.baselineFunction || 'independent',
+        comorbidities: comorbidities,
+        medications: [],
+        devices: [],
+        weight_kg: p.weightKg || undefined,
+        height_cm: p.heightCm || undefined,
+        days_immobile: p.daysImmobile || 0,
+
+        // Apply any overrides
+        ...overrides
+      };
+
+      return riskInput;
+
+    } catch (error: any) {
+      logger.error('Failed to build risk assessment input', {
+        error: error.message,
+        patientId
+      });
+      return null;
+    }
+  }
+
+  /**
+   * Determine the diagnosis category based on diagnosis text and patient data
+   */
+  private determineDiagnosisCategory(
+    diagnosis: string,
+    riskInput: RiskAssessmentInput
+  ): DiagnosisCategory {
+    const diagLower = diagnosis.toLowerCase();
+
+    // Check diagnosis text against our mapping
+    for (const [key, category] of Object.entries(DIAGNOSIS_CATEGORY_MAP)) {
+      if (diagLower.includes(key.toLowerCase())) {
+        logger.debug('Matched diagnosis category', { diagnosis, matched: key, category });
+        return category;
+      }
+    }
+
+    // Check structured flags from risk input
+    if (riskInput.is_cardiac_admission) return 'cardiac';
+    if (riskInput.is_orthopedic) return 'orthopedic';
+    if (riskInput.is_neuro_admission) return 'neurological';
+
+    // Check admission diagnosis patterns
+    const admitDiag = (riskInput.admission_diagnosis || '').toLowerCase();
+    for (const [key, category] of Object.entries(DIAGNOSIS_CATEGORY_MAP)) {
+      if (admitDiag.includes(key.toLowerCase())) {
+        return category;
+      }
+    }
+
+    // Default to general
+    return 'general';
+  }
+
+  /**
+   * Apply diagnosis-based adjustments while maintaining total energy target
+   *
+   * Key principle: Total Energy = Power × Duration × Sessions
+   * Where Power ≈ k × Resistance × RPM
+   *
+   * When adjusting for diagnosis, we redistribute the same energy:
+   * - Cardiac/Pulmonary: Higher resistance, lower RPM (same power, same energy)
+   * - Orthopedic: Lower resistance, more rotations, longer duration (same energy)
+   */
+  private applyDiagnosisAdjustments(
+    baseline: {
+      watt_goal: number;
+      duration_min_per_session: number;
+      sessions_per_day: number;
+      total_daily_energy?: number;
+    },
+    mobilityStatus: string,
+    adjustmentProfile: DiagnosisAdjustmentProfile
+  ): {
+    duration: number;
+    sessions: number;
+    power: number;
+    resistance: number;
+    rpm: number;
+    rationale: string[];
+  } {
+    const rationale: string[] = [];
+
+    // Get baseline values
+    const baselinePower = baseline.watt_goal;
+    const baselineDuration = baseline.duration_min_per_session;
+    const baselineSessions = baseline.sessions_per_day;
+    const totalEnergy = baseline.total_daily_energy ||
+      (baselinePower * baselineDuration * baselineSessions);
+
+    // Get baseline RPM from mobility status
+    const baselineRpm = BASELINE_RPM_BY_MOBILITY[mobilityStatus] || 35;
+
+    // Calculate baseline resistance from power and RPM
+    const baselineResistance = wattsToResistance(baselinePower, baselineRpm);
+
+    // Apply adjustments
+    const adjustedDuration = Math.round(baselineDuration * adjustmentProfile.durationMultiplier);
+    const adjustedRpm = Math.round(baselineRpm * adjustmentProfile.rpmMultiplier);
+
+    // Calculate adjusted resistance to maintain energy target
+    // If duration changed, we need to adjust power per session to maintain total energy
+    const adjustedSessions = baselineSessions; // Sessions stay the same
+
+    // Energy per session with adjusted duration
+    const targetEnergyPerSession = totalEnergy / adjustedSessions;
+    const targetPower = targetEnergyPerSession / adjustedDuration;
+
+    // Now calculate resistance from target power and adjusted RPM
+    const adjustedResistance = wattsToResistance(targetPower, adjustedRpm);
+
+    // Generate rationale
+    if (adjustmentProfile.resistanceMultiplier > 1) {
+      rationale.push(`Increased resistance to ${adjustedResistance} (from baseline ${baselineResistance}) for ${adjustmentProfile.category} conditioning`);
+    } else if (adjustmentProfile.resistanceMultiplier < 1) {
+      rationale.push(`Reduced resistance to ${adjustedResistance} (from baseline ${baselineResistance}) to prioritize range of motion`);
+    }
+
+    if (adjustmentProfile.rpmMultiplier < 1) {
+      rationale.push(`Reduced target RPM to ${adjustedRpm} (from ${baselineRpm}) to minimize ${adjustmentProfile.category === 'cardiac' ? 'cardiac demand' : 'respiratory demand'}`);
+    } else if (adjustmentProfile.rpmMultiplier > 1) {
+      rationale.push(`Increased target RPM to ${adjustedRpm} (from ${baselineRpm}) for more joint rotations`);
+    }
+
+    if (adjustmentProfile.durationMultiplier > 1) {
+      rationale.push(`Extended duration to ${adjustedDuration} min (from ${baselineDuration} min) for additional ${adjustmentProfile.category === 'orthopedic' ? 'range of motion work' : 'motor learning time'}`);
+    }
+
+    rationale.push(`Total daily energy target maintained at ${Math.round(totalEnergy)} watt-minutes`);
+
+    // Verify energy conservation (should be approximately equal)
+    const actualPower = calculatePower(adjustedResistance, adjustedRpm);
+    const actualEnergy = actualPower * adjustedDuration * adjustedSessions;
+
+    logger.debug('Energy calculation verification', {
+      targetEnergy: totalEnergy,
+      actualEnergy,
+      difference: Math.abs(totalEnergy - actualEnergy),
+      adjustedParams: { resistance: adjustedResistance, rpm: adjustedRpm, duration: adjustedDuration }
+    });
+
+    return {
+      duration: adjustedDuration,
+      sessions: adjustedSessions,
+      power: Math.round(targetPower * 10) / 10,
+      resistance: adjustedResistance,
+      rpm: adjustedRpm,
+      rationale
+    };
   }
 
   /**

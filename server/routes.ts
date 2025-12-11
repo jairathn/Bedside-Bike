@@ -1010,6 +1010,59 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Get personalized prescription using patient goal calculator + diagnosis adjustments
+  // This is the NEW approach that calculates baseline from risk calculator and adjusts for diagnosis
+  app.get("/api/patients/:patientId/personalized-prescription", async (req, res) => {
+    try {
+      const patientId = parseInt(req.params.patientId);
+      const { personalizedProtocolMatcher } = await import('./personalization/personalized-protocol-matcher');
+
+      const prescription = await personalizedProtocolMatcher.generatePersonalizedPrescription(patientId);
+
+      if (!prescription) {
+        return res.status(404).json({
+          error: "Could not generate personalized prescription",
+          suggestion: "Ensure patient profile exists with required data (age, mobility status, diagnosis)"
+        });
+      }
+
+      res.json(prescription);
+    } catch (error) {
+      console.error("Personalized prescription error:", error);
+      res.status(500).json({ error: "Failed to generate personalized prescription" });
+    }
+  });
+
+  // Generate personalized prescription with diagnosis override
+  app.post("/api/patients/:patientId/personalized-prescription", createLimiter, async (req, res) => {
+    try {
+      const patientId = parseInt(req.params.patientId);
+      const { diagnosis, riskAssessmentInput } = req.body;
+
+      const { personalizedProtocolMatcher } = await import('./personalization/personalized-protocol-matcher');
+
+      const prescription = await personalizedProtocolMatcher.generatePersonalizedPrescription(
+        patientId,
+        { diagnosis, riskAssessmentInput }
+      );
+
+      if (!prescription) {
+        return res.status(404).json({
+          error: "Could not generate personalized prescription",
+          suggestion: "Ensure patient profile exists with required data (age, mobility status, diagnosis)"
+        });
+      }
+
+      res.json({
+        ...prescription,
+        message: `Prescription generated for ${prescription.diagnosisCategory} diagnosis category`
+      });
+    } catch (error) {
+      console.error("Personalized prescription error:", error);
+      res.status(500).json({ error: "Failed to generate personalized prescription" });
+    }
+  });
+
   // Check if patient should progress to next phase
   app.get("/api/patients/:patientId/protocol/progression", async (req, res) => {
     try {
