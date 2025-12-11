@@ -57,31 +57,15 @@ export function registerPersonalizationRoutes(app: Express): void {
   app.post('/api/patients/:patientId/protocol-match', personalizationLimiter, async (req: Request, res: Response) => {
     try {
       const patientId = parseInt(req.params.patientId);
-      const { comorbidities, ageGroup, mobilityLevel, preferences } = req.body;
 
-      // Get patient profile
+      // Get patient profile to verify they exist
       const patient = await storage.getPatient(patientId);
       if (!patient) {
         return res.status(404).json({ error: 'Patient not found' });
       }
 
-      // Calculate age from DOB
-      let age: number | undefined;
-      if (patient.dateOfBirth) {
-        const dob = new Date(patient.dateOfBirth);
-        age = Math.floor((Date.now() - dob.getTime()) / (365.25 * 24 * 60 * 60 * 1000));
-      }
-
-      // Find matching protocols
-      const matchingProtocols = await personalizedProtocolMatcher.findMatchingProtocols({
-        diagnosis: req.body.diagnosis,
-        comorbidities: comorbidities || [],
-        age,
-        ageGroup,
-        mobilityLevel: mobilityLevel || 'moderate',
-        personalityType: preferences?.personalityType,
-        motivationFactors: preferences?.motivationFactors
-      });
+      // Find matching protocols using the patient ID
+      const matchingProtocols = await personalizedProtocolMatcher.findMatchingProtocols(patientId);
 
       res.json({
         patientId,

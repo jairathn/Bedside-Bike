@@ -51,14 +51,31 @@ export default function ProtocolMatchingPage() {
   const queryClient = useQueryClient();
   const [selectedPatientId, setSelectedPatientId] = useState<number | null>(null);
   const [diagnosis, setDiagnosis] = useState("");
+  const [customDiagnosis, setCustomDiagnosis] = useState("");
   const [matchResults, setMatchResults] = useState<ProtocolMatch[] | null>(null);
   const [isMatching, setIsMatching] = useState(false);
   const [comorbidities, setComorbidities] = useState<string[]>([]);
+
+  const commonDiagnoses = [
+    "Total Knee Arthroplasty",
+    "Total Hip Arthroplasty",
+    "Hip Fracture",
+    "Stroke/CVA",
+    "COPD Exacerbation",
+    "Heart Failure",
+    "Pneumonia",
+    "Sepsis",
+    "Spinal Fusion",
+    "General Deconditioning",
+    "Other"
+  ];
 
   const commonComorbidities = [
     "Diabetes", "Hypertension", "Heart Failure", "COPD",
     "Obesity", "Stroke History", "Parkinson's", "Dementia"
   ];
+
+  const finalDiagnosis = diagnosis === "Other" ? customDiagnosis : diagnosis;
 
   // Get patients for provider
   const { data: patients = [], isLoading: patientsLoading, error: patientsError } = useQuery({
@@ -141,7 +158,7 @@ export default function ProtocolMatchingPage() {
   });
 
   const handleMatch = () => {
-    if (!selectedPatientId || !diagnosis) {
+    if (!selectedPatientId || !finalDiagnosis) {
       toast({
         title: "Missing Information",
         description: "Please select a patient and enter a diagnosis",
@@ -152,7 +169,7 @@ export default function ProtocolMatchingPage() {
     setIsMatching(true);
     matchProtocolsMutation.mutate({
       patientId: selectedPatientId,
-      diagnosis,
+      diagnosis: finalDiagnosis,
       comorbidities,
     });
     setIsMatching(false);
@@ -257,13 +274,31 @@ export default function ProtocolMatchingPage() {
               <CardContent className="space-y-4">
                 <div>
                   <Label htmlFor="diagnosis">Primary Diagnosis</Label>
-                  <Input
-                    id="diagnosis"
-                    placeholder="e.g., Total Knee Arthroplasty, Hip Fracture..."
-                    value={diagnosis}
-                    onChange={(e) => setDiagnosis(e.target.value)}
-                  />
+                  <Select value={diagnosis} onValueChange={setDiagnosis}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select diagnosis..." />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {commonDiagnoses.map((d) => (
+                        <SelectItem key={d} value={d}>
+                          {d}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                 </div>
+
+                {diagnosis === "Other" && (
+                  <div>
+                    <Label htmlFor="customDiagnosis">Specify Diagnosis</Label>
+                    <Input
+                      id="customDiagnosis"
+                      placeholder="Enter diagnosis..."
+                      value={customDiagnosis}
+                      onChange={(e) => setCustomDiagnosis(e.target.value)}
+                    />
+                  </div>
+                )}
 
                 <div>
                   <Label className="mb-2 block">Comorbidities</Label>
@@ -284,7 +319,7 @@ export default function ProtocolMatchingPage() {
                 <Button
                   className="w-full"
                   onClick={handleMatch}
-                  disabled={!selectedPatientId || !diagnosis || matchProtocolsMutation.isPending}
+                  disabled={!selectedPatientId || !finalDiagnosis || matchProtocolsMutation.isPending}
                 >
                   {matchProtocolsMutation.isPending ? (
                     <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2" />
