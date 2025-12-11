@@ -637,11 +637,7 @@ export function registerPersonalizationRoutes(app: Express): void {
         return res.status(400).json({ error: 'reportType and generatedBy are required' });
       }
 
-      const report = await insuranceReportEngine.generateReport(patientId, {
-        reportType,
-        insuranceType,
-        generatedBy
-      });
+      const report = await insuranceReportEngine.generateReport(patientId, reportType, generatedBy);
 
       res.json(report);
     } catch (error: any) {

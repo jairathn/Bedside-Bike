@@ -58,15 +58,14 @@ export default function ProtocolMatchingPage() {
 
   const commonDiagnoses = [
     "Total Knee Arthroplasty",
-    "Total Hip Arthroplasty",
     "Hip Fracture",
     "Stroke/CVA",
     "COPD Exacerbation",
     "Heart Failure",
-    "Pneumonia",
-    "Sepsis",
-    "Spinal Fusion",
-    "General Deconditioning",
+    "ICU Stay/Critical Illness",
+    "Delirium/Confusion",
+    "Frail Elderly (75+)",
+    "General Medical/Surgical",
     "Other"
   ];
 
