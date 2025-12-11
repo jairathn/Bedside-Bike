@@ -15,9 +15,8 @@ CREATE TABLE mobility_scores (
     unified_score REAL NOT NULL,
     score_confidence REAL,
     barthel_index INTEGER,
-    fim_score INTEGER,
-    data_completeness REAL NOT NULL,
-    trend TEXT CHECK(trend IN ('improving', 'stable', 'declining')),
+    functional_independence_measure INTEGER,
+    score_trend TEXT,
     trend_magnitude REAL,
     created_at INTEGER DEFAULT (unixepoch())
 );
