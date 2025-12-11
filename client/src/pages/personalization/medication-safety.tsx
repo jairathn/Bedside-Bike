@@ -62,14 +62,15 @@ interface ContraindicationVerification {
 }
 
 const commonMedications = [
-  "Metoprolol", "Atenolol", "Carvedilol", // Beta blockers
-  "Warfarin", "Apixaban", "Rivaroxaban", "Heparin", // Anticoagulants
-  "Lisinopril", "Losartan", "Amlodipine", // Blood pressure
-  "Metformin", "Insulin", "Glipizide", // Diabetes
-  "Prednisone", "Dexamethasone", // Steroids
-  "Furosemide", "Hydrochlorothiazide", // Diuretics
-  "Oxycodone", "Morphine", "Gabapentin", // Pain/Sedating
-  "Alprazolam", "Lorazepam", "Zolpidem" // Sedatives
+  "Metoprolol", "Atenolol", // Beta blockers
+  "Warfarin", // Anticoagulants
+  "Lisinopril", "Losartan", // Blood pressure
+  "Metformin", "Insulin", // Diabetes
+  "Furosemide", // Diuretics
+  "Oxycodone", "Lorazepam", // Pain/Sedatives
+  "Carbidopa-Levodopa", // Parkinson's
+  "Atorvastatin", // Statins
+  "Haloperidol" // Antipsychotics
 ];
 
 export default function MedicationSafetyPage() {
