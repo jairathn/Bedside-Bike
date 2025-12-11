@@ -1,7 +1,7 @@
 // Personalization Module Index
 // Export all personalization pages for easy importing
 
-export { default as ProtocolMatchingPage } from './protocol-matching';
+export { default as PersonalizedPrescriptionPage } from './personalized-prescription';
 export { default as FatigueMonitorPage } from './fatigue-monitor';
 export { default as ProgressionDashboardPage } from './progression-dashboard';
 export { default as MedicationSafetyPage } from './medication-safety';
