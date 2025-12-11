@@ -99,13 +99,14 @@ export class PersonalizedProtocolMatcher {
    */
   async findMatchingProtocols(
     patientId: number,
-    config?: Partial<MatchingConfig>
+    config?: Partial<MatchingConfig>,
+    overrides?: { diagnosis?: string; comorbidities?: string[] }
   ): Promise<ProtocolMatch[]> {
     const mergedConfig = { ...this.defaultConfig, ...config };
 
     try {
       // Step 1: Build comprehensive patient match profile
-      const patientProfile = await this.buildPatientMatchProfile(patientId);
+      const patientProfile = await this.buildPatientMatchProfile(patientId, overrides);
       if (!patientProfile) {
         logger.warn('Could not build patient profile for matching', { patientId });
         return [];
@@ -217,7 +218,10 @@ export class PersonalizedProtocolMatcher {
   /**
    * Build comprehensive patient profile for matching
    */
-  private async buildPatientMatchProfile(patientId: number): Promise<PatientMatchProfile | null> {
+  private async buildPatientMatchProfile(
+    patientId: number,
+    overrides?: { diagnosis?: string; comorbidities?: string[] }
+  ): Promise<PatientMatchProfile | null> {
     try {
       // Get patient profile
       const profile = await db.select()
@@ -272,8 +276,10 @@ export class PersonalizedProtocolMatcher {
       }
 
       // Parse comorbidities and diagnosis codes
-      const comorbidities = JSON.parse(p.comorbidities || '[]');
-      const diagnosisCodes = this.extractDiagnosisCodes(p.admissionDiagnosis || '', comorbidities);
+      const baseComorbidities = JSON.parse(p.comorbidities || '[]');
+      const finalDiagnosis = overrides?.diagnosis || p.admissionDiagnosis || undefined;
+      const finalComorbidities = overrides?.comorbidities || baseComorbidities;
+      const diagnosisCodes = this.extractDiagnosisCodes(finalDiagnosis || '', finalComorbidities);
 
       return {
         patientId,
@@ -283,8 +289,8 @@ export class PersonalizedProtocolMatcher {
         cognitiveStatus: p.cognitiveStatus,
         levelOfCare: p.levelOfCare,
         baselineFunction: p.baselineFunction || undefined,
-        admissionDiagnosis: p.admissionDiagnosis || undefined,
-        comorbidities,
+        admissionDiagnosis: finalDiagnosis,
+        comorbidities: finalComorbidities,
         diagnosisCodes,
         riskScores,
         personalization: personalization.length ? {

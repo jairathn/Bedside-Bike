@@ -105,10 +105,10 @@ export default function ProtocolMatchingPage() {
 
   // Match protocols mutation
   const matchProtocolsMutation = useMutation({
-    mutationFn: async (patientId: number) => {
-      return await apiRequest(`/api/patients/${patientId}/protocol-match`, {
+    mutationFn: async (data: { patientId: number; diagnosis?: string; comorbidities?: string[] }) => {
+      return await apiRequest(`/api/patients/${data.patientId}/protocol-match`, {
         method: 'POST',
-        body: JSON.stringify({}),
+        body: JSON.stringify({ diagnosis: data.diagnosis, comorbidities: data.comorbidities }),
       });
     },
     onSuccess: (data) => {
@@ -164,7 +164,7 @@ export default function ProtocolMatchingPage() {
       return;
     }
     setIsMatching(true);
-    matchProtocolsMutation.mutate(selectedPatientId);
+    matchProtocolsMutation.mutate({ patientId: selectedPatientId, diagnosis: finalDiagnosis || undefined, comorbidities: comorbidities.length > 0 ? comorbidities : undefined });
     setIsMatching(false);
   };
 
@@ -312,7 +312,7 @@ export default function ProtocolMatchingPage() {
                 <Button
                   className="w-full"
                   onClick={handleMatch}
-                  disabled={!selectedPatientId || matchProtocolsMutation.isPending}
+                  disabled={!selectedPatientId || !finalDiagnosis || matchProtocolsMutation.isPending}
                 >
                   {matchProtocolsMutation.isPending ? (
                     <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2" />
