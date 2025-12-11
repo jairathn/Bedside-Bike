@@ -105,13 +105,10 @@ export default function ProtocolMatchingPage() {
 
   // Match protocols mutation
   const matchProtocolsMutation = useMutation({
-    mutationFn: async (data: { patientId: number; diagnosis: string; comorbidities: string[] }) => {
+    mutationFn: async (data: { patientId: number; diagnosis?: string; comorbidities?: string[] }) => {
       return await apiRequest(`/api/patients/${data.patientId}/protocol-match`, {
         method: 'POST',
-        body: JSON.stringify({
-          diagnosis: data.diagnosis,
-          comorbidities: data.comorbidities,
-        }),
+        body: JSON.stringify({ diagnosis: data.diagnosis, comorbidities: data.comorbidities }),
       });
     },
     onSuccess: (data) => {
@@ -158,20 +155,16 @@ export default function ProtocolMatchingPage() {
   });
 
   const handleMatch = () => {
-    if (!selectedPatientId || !finalDiagnosis) {
+    if (!selectedPatientId) {
       toast({
         title: "Missing Information",
-        description: "Please select a patient and enter a diagnosis",
+        description: "Please select a patient",
         variant: "destructive",
       });
       return;
     }
     setIsMatching(true);
-    matchProtocolsMutation.mutate({
-      patientId: selectedPatientId,
-      diagnosis: finalDiagnosis,
-      comorbidities,
-    });
+    matchProtocolsMutation.mutate({ patientId: selectedPatientId, diagnosis: finalDiagnosis || undefined, comorbidities: comorbidities.length > 0 ? comorbidities : undefined });
     setIsMatching(false);
   };
 

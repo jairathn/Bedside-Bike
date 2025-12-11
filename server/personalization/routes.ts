@@ -57,6 +57,7 @@ export function registerPersonalizationRoutes(app: Express): void {
   app.post('/api/patients/:patientId/protocol-match', personalizationLimiter, async (req: Request, res: Response) => {
     try {
       const patientId = parseInt(req.params.patientId);
+      const { diagnosis, comorbidities } = req.body;
 
       // Get patient profile to verify they exist
       const patient = await storage.getPatient(patientId);
@@ -64,8 +65,9 @@ export function registerPersonalizationRoutes(app: Express): void {
         return res.status(404).json({ error: 'Patient not found' });
       }
 
-      // Find matching protocols using the patient ID
-      const matchingProtocols = await personalizedProtocolMatcher.findMatchingProtocols(patientId);
+      // Find matching protocols using the patient ID and optional overrides
+      const overrides = diagnosis || comorbidities ? { diagnosis, comorbidities } : undefined;
+      const matchingProtocols = await personalizedProtocolMatcher.findMatchingProtocols(patientId, undefined, overrides);
 
       res.json({
         patientId,

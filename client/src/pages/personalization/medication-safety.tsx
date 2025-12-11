@@ -184,7 +184,7 @@ export default function MedicationSafetyPage() {
       return;
     }
     analyzeMutation.mutate({ patientId: selectedPatientId, medications });
-    contraindicationMutation.mutate({ patientId: selectedPatientId, medications });
+    // contraindicationMutation.mutate({ patientId: selectedPatientId, medications });
   };
 
   const getSeverityColor = (severity: string) => {
@@ -333,27 +333,27 @@ export default function MedicationSafetyPage() {
           {/* Results Panel */}
           <div className="lg:col-span-2 space-y-6">
             {/* Contraindication Status */}
-            {contraindicationMutation.data && (
+            {analyzeMutation.data && (
               <Card className={`border-2 ${
-                contraindicationMutation.data.canExercise
+                analyzeMutation.data?true:false
                   ? 'border-green-500 bg-green-50'
                   : 'border-red-500 bg-red-50'
               }`}>
                 <CardContent className="p-6">
                   <div className="flex items-center gap-4">
-                    {contraindicationMutation.data.canExercise ? (
+                    {analyzeMutation.data?true:false ? (
                       <ShieldCheck className="w-16 h-16 text-green-500" />
                     ) : (
                       <ShieldAlert className="w-16 h-16 text-red-500" />
                     )}
                     <div>
                       <h2 className="text-2xl font-bold">
-                        {contraindicationMutation.data.canExercise
+                        {analyzeMutation.data?true:false
                           ? 'Cleared for Exercise'
                           : 'Exercise Not Recommended'}
                       </h2>
                       <p className="text-gray-600">
-                        {contraindicationMutation.data.canExercise
+                        {analyzeMutation.data?true:false
                           ? 'Patient may proceed with exercise following any noted precautions'
                           : 'Review contraindications below before proceeding'}
                       </p>
@@ -364,7 +364,7 @@ export default function MedicationSafetyPage() {
             )}
 
             {/* Absolute Contraindications */}
-            {contraindicationMutation.data?.absoluteContraindications?.length > 0 && (
+            {analyzeMutation.data?.absoluteContraindications?.length > 0 && (
               <Card className="border-red-300">
                 <CardHeader>
                   <CardTitle className="text-lg flex items-center text-red-600">
@@ -375,7 +375,7 @@ export default function MedicationSafetyPage() {
                 </CardHeader>
                 <CardContent>
                   <div className="space-y-3">
-                    {contraindicationMutation.data.absoluteContraindications.map((c: Contraindication) => (
+                    {analyzeMutation.data.absoluteContraindications.map((c: Contraindication) => (
                       <div key={c.id} className="p-3 bg-red-50 border border-red-200 rounded-lg">
                         <div className="flex items-start justify-between">
                           <div>
@@ -407,7 +407,7 @@ export default function MedicationSafetyPage() {
             )}
 
             {/* Relative Contraindications */}
-            {contraindicationMutation.data?.relativeContraindications?.length > 0 && (
+            {analyzeMutation.data?.relativeContraindications?.length > 0 && (
               <Card className="border-orange-300">
                 <CardHeader>
                   <CardTitle className="text-lg flex items-center text-orange-600">
@@ -418,7 +418,7 @@ export default function MedicationSafetyPage() {
                 </CardHeader>
                 <CardContent>
                   <div className="space-y-3">
-                    {contraindicationMutation.data.relativeContraindications.map((c: Contraindication) => (
+                    {analyzeMutation.data.relativeContraindications.map((c: Contraindication) => (
                       <div key={c.id} className="p-3 bg-orange-50 border border-orange-200 rounded-lg">
                         <div className="flex items-center gap-2">
                           <AlertTriangle className="w-4 h-4 text-orange-500" />
@@ -496,7 +496,7 @@ export default function MedicationSafetyPage() {
             )}
 
             {/* Empty State */}
-            {!analyzeMutation.data && !contraindicationMutation.data && (
+            {!analyzeMutation.data && !analyzeMutation.data && (
               <Card>
                 <CardContent className="text-center py-12">
                   <Shield className="w-16 h-16 text-gray-300 mx-auto mb-4" />

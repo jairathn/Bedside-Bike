@@ -140,11 +140,11 @@ export default function MobilityScoresPage() {
   };
 
   const radarData = mobilityScore?.componentScores ? [
-    { subject: 'Bike', value: mobilityScore.componentScores.bikePerformance || 0, fullMark: 100 },
-    { subject: 'Walking', value: mobilityScore.componentScores.ambulation || 0, fullMark: 100 },
-    { subject: 'PT Assessment', value: mobilityScore.componentScores.ptAssessment || 0, fullMark: 100 },
-    { subject: 'Nursing', value: mobilityScore.componentScores.nursingObservation || 0, fullMark: 100 },
-    { subject: 'ADL', value: mobilityScore.componentScores.adlFunction || 0, fullMark: 100 },
+    { subject: 'Bike', value: mobilityScore.components?.bikeScore || 0, fullMark: 100 },
+    { subject: 'Walking', value: mobilityScore.components?.ambulationScore || 0, fullMark: 100 },
+    { subject: 'PT Assessment', value: mobilityScore.components?.ptScore || 0, fullMark: 100 },
+    { subject: 'Nursing', value: mobilityScore.components?.nursingScore || 0, fullMark: 100 },
+    { subject: 'ADL', value: mobilityScore.components?.adlScore || 0, fullMark: 100 },
   ] : [];
 
   return (
@@ -282,7 +282,7 @@ export default function MobilityScoresPage() {
                   <CardContent className="p-4 text-center">
                     <Bike className="w-8 h-8 mx-auto mb-2 text-blue-500" />
                     <div className="text-2xl font-bold">
-                      {mobilityScore?.componentScores.bikePerformance || '--'}
+                      {mobilityScore?.components?.bikeScore || '--'}
                     </div>
                     <div className="text-sm text-gray-600">Bike Performance</div>
                   </CardContent>
@@ -291,7 +291,7 @@ export default function MobilityScoresPage() {
                   <CardContent className="p-4 text-center">
                     <Footprints className="w-8 h-8 mx-auto mb-2 text-green-500" />
                     <div className="text-2xl font-bold">
-                      {mobilityScore?.componentScores.ambulation || '--'}
+                      {mobilityScore?.components?.ambulationScore || '--'}
                     </div>
                     <div className="text-sm text-gray-600">Ambulation</div>
                   </CardContent>
@@ -300,7 +300,7 @@ export default function MobilityScoresPage() {
                   <CardContent className="p-4 text-center">
                     <ClipboardList className="w-8 h-8 mx-auto mb-2 text-purple-500" />
                     <div className="text-2xl font-bold">
-                      {mobilityScore?.componentScores.ptAssessment || '--'}
+                      {mobilityScore?.components?.ptScore || '--'}
                     </div>
                     <div className="text-sm text-gray-600">PT Assessment</div>
                   </CardContent>
@@ -309,7 +309,7 @@ export default function MobilityScoresPage() {
                   <CardContent className="p-4 text-center">
                     <Heart className="w-8 h-8 mx-auto mb-2 text-red-500" />
                     <div className="text-2xl font-bold">
-                      {mobilityScore?.componentScores.nursingObservation || '--'}
+                      {mobilityScore?.components?.nursingScore || '--'}
                     </div>
                     <div className="text-sm text-gray-600">Nursing Obs</div>
                   </CardContent>
@@ -318,7 +318,7 @@ export default function MobilityScoresPage() {
                   <CardContent className="p-4 text-center">
                     <Activity className="w-8 h-8 mx-auto mb-2 text-orange-500" />
                     <div className="text-2xl font-bold">
-                      {mobilityScore?.componentScores.adlFunction || '--'}
+                      {mobilityScore?.components?.adlScore || '--'}
                     </div>
                     <div className="text-sm text-gray-600">ADL Function</div>
                   </CardContent>
