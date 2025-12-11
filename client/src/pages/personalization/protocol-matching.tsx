@@ -105,13 +105,10 @@ export default function ProtocolMatchingPage() {
 
   // Match protocols mutation
   const matchProtocolsMutation = useMutation({
-    mutationFn: async (data: { patientId: number; diagnosis: string; comorbidities: string[] }) => {
-      return await apiRequest(`/api/patients/${data.patientId}/protocol-match`, {
+    mutationFn: async (patientId: number) => {
+      return await apiRequest(`/api/patients/${patientId}/protocol-match`, {
         method: 'POST',
-        body: JSON.stringify({
-          diagnosis: data.diagnosis,
-          comorbidities: data.comorbidities,
-        }),
+        body: JSON.stringify({}),
       });
     },
     onSuccess: (data) => {
@@ -158,20 +155,16 @@ export default function ProtocolMatchingPage() {
   });
 
   const handleMatch = () => {
-    if (!selectedPatientId || !finalDiagnosis) {
+    if (!selectedPatientId) {
       toast({
         title: "Missing Information",
-        description: "Please select a patient and enter a diagnosis",
+        description: "Please select a patient",
         variant: "destructive",
       });
       return;
     }
     setIsMatching(true);
-    matchProtocolsMutation.mutate({
-      patientId: selectedPatientId,
-      diagnosis: finalDiagnosis,
-      comorbidities,
-    });
+    matchProtocolsMutation.mutate(selectedPatientId);
     setIsMatching(false);
   };
 
@@ -319,7 +312,7 @@ export default function ProtocolMatchingPage() {
                 <Button
                   className="w-full"
                   onClick={handleMatch}
-                  disabled={!selectedPatientId || !finalDiagnosis || matchProtocolsMutation.isPending}
+                  disabled={!selectedPatientId || matchProtocolsMutation.isPending}
                 >
                   {matchProtocolsMutation.isPending ? (
                     <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2" />
