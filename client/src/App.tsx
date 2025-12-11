@@ -19,7 +19,7 @@ import ProviderAccessPage from "@/pages/provider-access";
 import AnonymousRiskCalculator from "@/pages/anonymous-risk-calculator";
 
 // Personalization Module Pages
-import ProtocolMatchingPage from "@/pages/personalization/protocol-matching";
+import PersonalizedPrescriptionPage from "@/pages/personalization/personalized-prescription";
 import FatigueMonitorPage from "@/pages/personalization/fatigue-monitor";
 import ProgressionDashboardPage from "@/pages/personalization/progression-dashboard";
 import MedicationSafetyPage from "@/pages/personalization/medication-safety";
@@ -87,7 +87,7 @@ function Router() {
       <Route path="/anonymous-risk-calculator" component={AnonymousRiskCalculator} />
 
       {/* Personalization Module Routes (Provider Only) */}
-      <Route path="/protocol-matching" component={user?.userType === 'provider' ? ProtocolMatchingPage : () => <AuthPage onAuthSuccess={handleAuthSuccess} />} />
+      <Route path="/personalized-prescription" component={user?.userType === 'provider' ? PersonalizedPrescriptionPage : () => <AuthPage onAuthSuccess={handleAuthSuccess} />} />
       <Route path="/fatigue-monitor" component={user?.userType === 'provider' ? FatigueMonitorPage : () => <AuthPage onAuthSuccess={handleAuthSuccess} />} />
       <Route path="/progression" component={user?.userType === 'provider' ? ProgressionDashboardPage : () => <AuthPage onAuthSuccess={handleAuthSuccess} />} />
       <Route path="/medication-safety" component={user?.userType === 'provider' ? MedicationSafetyPage : () => <AuthPage onAuthSuccess={handleAuthSuccess} />} />

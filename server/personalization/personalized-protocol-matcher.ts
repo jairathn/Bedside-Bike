@@ -366,9 +366,11 @@ export class PersonalizedProtocolMatcher {
     // ========================================================================
     maxPossibleScore += 40;
 
-    // Check ICD-10 code match
+    // Check ICD-10 code match (bidirectional prefix matching)
     const codeMatch = patient.diagnosisCodes.some(code =>
-      diagnosisCodes.some((pc: string) => pc === code || code.startsWith(pc))
+      diagnosisCodes.some((pc: string) =>
+        pc === code || code.startsWith(pc) || pc.startsWith(code)
+      )
     );
 
     if (codeMatch) {

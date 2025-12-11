@@ -102,6 +102,38 @@ export default function ProtocolMatchingPage() {
     enabled: !!selectedPatientId,
   });
 
+  // Get patient's basic profile for admission diagnosis
+  const { data: patientBasicProfile } = useQuery({
+    queryKey: [`/api/patients/${selectedPatientId}/profile`],
+    enabled: !!selectedPatientId,
+  });
+
+  // Auto-populate diagnosis from patient's admission diagnosis
+  useEffect(() => {
+    if (patientBasicProfile?.admissionDiagnosis) {
+      const admissionDx = patientBasicProfile.admissionDiagnosis.toLowerCase();
+
+      // Map admission diagnosis to dropdown options
+      if (admissionDx.includes('knee') || admissionDx.includes('tka')) {
+        setDiagnosis("Total Knee Arthroplasty");
+      } else if (admissionDx.includes('hip fracture') || admissionDx.includes('orif')) {
+        setDiagnosis("Hip Fracture");
+      } else if (admissionDx.includes('stroke') || admissionDx.includes('cva')) {
+        setDiagnosis("Stroke/CVA");
+      } else if (admissionDx.includes('copd')) {
+        setDiagnosis("COPD Exacerbation");
+      } else if (admissionDx.includes('heart failure') || admissionDx.includes('chf')) {
+        setDiagnosis("Heart Failure");
+      } else if (admissionDx.includes('icu') || admissionDx.includes('critical')) {
+        setDiagnosis("ICU Stay/Critical Illness");
+      } else if (admissionDx.includes('delirium') || admissionDx.includes('confusion')) {
+        setDiagnosis("Delirium/Confusion");
+      } else {
+        setDiagnosis("General Medical/Surgical");
+      }
+    }
+  }, [patientBasicProfile]);
+
   // Match protocols mutation
   const matchProtocolsMutation = useMutation({
     mutationFn: async (data: { patientId: number; diagnosis?: string; comorbidities?: string[] }) => {

@@ -219,7 +219,7 @@ const navigationItems = [
   {
     category: "Clinical Tools",
     items: [
-      { name: "Protocol Matching", href: "/protocol-matching", icon: Target, description: "AI-powered protocol recommendations" },
+      { name: "Personalized Prescription", href: "/personalized-prescription", icon: Target, description: "Diagnosis-adjusted mobility prescription" },
       { name: "Fatigue Monitor", href: "/fatigue-monitor", icon: Activity, description: "Real-time fatigue detection" },
       { name: "Progression Dashboard", href: "/progression", icon: TrendingUp, description: "Progressive overload tracking" },
       { name: "Medication Safety", href: "/medication-safety", icon: Pill, description: "Drug-exercise interactions" },
@@ -458,15 +458,15 @@ export default function ProviderDashboard() {
                   className="w-full justify-start"
                   onClick={() => {
                     if (selectedPatient) {
-                      setLocation(`/protocol-matching?patient=${selectedPatient.id}`);
+                      setLocation(`/personalized-prescription?patient=${selectedPatient.id}`);
                     } else {
-                      setLocation('/protocol-matching');
+                      setLocation('/personalized-prescription');
                     }
                     setNavMenuOpen(false);
                   }}
                 >
                   <Target className="w-4 h-4 mr-2" />
-                  {selectedPatient ? `Match Protocol for ${selectedPatient.firstName}` : 'Match Protocol'}
+                  {selectedPatient ? `Personalized Rx for ${selectedPatient.firstName}` : 'Personalized Prescription'}
                 </Button>
               </div>
             </div>
