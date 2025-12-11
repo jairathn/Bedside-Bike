@@ -1010,6 +1010,65 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Get personalized prescription using patient goal calculator + diagnosis adjustments
+  // This is the NEW approach that calculates baseline from risk calculator and adjusts for diagnosis
+  app.get("/api/patients/:patientId/personalized-prescription", async (req, res) => {
+    try {
+      const patientId = parseInt(req.params.patientId);
+      const { personalizedProtocolMatcher } = await import('./personalization/personalized-protocol-matcher');
+
+      const prescription = await personalizedProtocolMatcher.generatePersonalizedPrescription(patientId);
+
+      if (!prescription) {
+        return res.status(404).json({
+          error: "Could not generate personalized prescription",
+          suggestion: "Ensure patient profile exists with required data (age, mobility status, diagnosis)"
+        });
+      }
+
+      res.json(prescription);
+    } catch (error) {
+      console.error("Personalized prescription error:", error);
+      res.status(500).json({ error: "Failed to generate personalized prescription" });
+    }
+  });
+
+  // Generate personalized prescription with diagnosis and medication overrides
+  app.post("/api/patients/:patientId/personalized-prescription", createLimiter, async (req, res) => {
+    try {
+      const patientId = parseInt(req.params.patientId);
+      const { diagnosis, medications, riskAssessmentInput } = req.body;
+
+      const { personalizedProtocolMatcher } = await import('./personalization/personalized-protocol-matcher');
+
+      const prescription = await personalizedProtocolMatcher.generatePersonalizedPrescription(
+        patientId,
+        { diagnosis, medications, riskAssessmentInput }
+      );
+
+      if (!prescription) {
+        return res.status(404).json({
+          error: "Could not generate personalized prescription",
+          suggestion: "Ensure patient profile exists with required data (age, mobility status, diagnosis)"
+        });
+      }
+
+      // Build descriptive message
+      const hasMedAdjustments = prescription.medicationCategories?.length > 0 &&
+        prescription.medicationCategories[0] !== 'none';
+      const medCount = hasMedAdjustments ? prescription.medicationCategories.length : 0;
+      const message = `Prescription generated for ${prescription.diagnosisCategoryLabel || prescription.diagnosisCategory}${medCount > 0 ? ` with ${medCount} medication adjustment(s)` : ''}`;
+
+      res.json({
+        ...prescription,
+        message
+      });
+    } catch (error) {
+      console.error("Personalized prescription error:", error);
+      res.status(500).json({ error: "Failed to generate personalized prescription" });
+    }
+  });
+
   // Check if patient should progress to next phase
   app.get("/api/patients/:patientId/protocol/progression", async (req, res) => {
     try {
