@@ -1033,17 +1033,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Generate personalized prescription with diagnosis override
+  // Generate personalized prescription with diagnosis and medication overrides
   app.post("/api/patients/:patientId/personalized-prescription", createLimiter, async (req, res) => {
     try {
       const patientId = parseInt(req.params.patientId);
-      const { diagnosis, riskAssessmentInput } = req.body;
+      const { diagnosis, medications, riskAssessmentInput } = req.body;
 
       const { personalizedProtocolMatcher } = await import('./personalization/personalized-protocol-matcher');
 
       const prescription = await personalizedProtocolMatcher.generatePersonalizedPrescription(
         patientId,
-        { diagnosis, riskAssessmentInput }
+        { diagnosis, medications, riskAssessmentInput }
       );
 
       if (!prescription) {
@@ -1053,9 +1053,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
         });
       }
 
+      // Build descriptive message
+      const hasMedAdjustments = prescription.medicationCategories?.length > 0 &&
+        prescription.medicationCategories[0] !== 'none';
+      const medCount = hasMedAdjustments ? prescription.medicationCategories.length : 0;
+      const message = `Prescription generated for ${prescription.diagnosisCategoryLabel || prescription.diagnosisCategory}${medCount > 0 ? ` with ${medCount} medication adjustment(s)` : ''}`;
+
       res.json({
         ...prescription,
-        message: `Prescription generated for ${prescription.diagnosisCategory} diagnosis category`
+        message
       });
     } catch (error) {
       console.error("Personalized prescription error:", error);
