@@ -15,6 +15,15 @@
 
 import type { RiskAssessmentInput } from "@shared/schema";
 import { addStayPredictions } from './mobility-addons.js';
+import {
+  applyPrescriptionAdjustments,
+  determineDiagnosisCategory,
+  determineMedicationCategories,
+  DIAGNOSIS_CATEGORY_LABELS,
+  type DiagnosisCategory,
+  type MedicationCategory,
+  type AdjustmentResult
+} from './personalization/prescription-adjustments.js';
 // Removed duplicate calculator - using only central risk calculator
 
 // Enumerations & normalizations
@@ -866,29 +875,155 @@ function computeOutcome(outcome: string, p: RiskAssessmentInput, f: Record<strin
   };
 }
 
-export function calculateRisks(p: RiskAssessmentInput): {
+/**
+ * Extended input type that includes specific diagnosis and medication selections
+ * for fine-grained prescription adjustments
+ */
+export interface ExtendedRiskAssessmentInput extends RiskAssessmentInput {
+  // Specific diagnosis selections (from dropdown/checkboxes)
+  selected_diagnoses?: string[];
+  // Specific medication selections (from dropdown/checkboxes)
+  selected_medications?: string[];
+  // Free text for "other" diagnoses
+  other_diagnosis?: string;
+  // Free text for "other" medications
+  other_medications?: string;
+}
+
+export function calculateRisks(p: ExtendedRiskAssessmentInput): {
   deconditioning: ReturnType<typeof computeOutcome>;
   vte: ReturnType<typeof computeOutcome>;
   falls: ReturnType<typeof computeOutcome>;
   pressure: ReturnType<typeof computeOutcome>;
-  mobility_recommendation: ReturnType<typeof estimateWattGoalV2>;
-  input_echo: RiskAssessmentInput;
+  mobility_recommendation: ReturnType<typeof estimateWattGoalV2> & {
+    // Baseline prescription (before adjustments)
+    baseline?: {
+      watt_goal: number;
+      duration_min_per_session: number;
+      sessions_per_day: number;
+      resistance_level: number;
+      total_daily_energy: number;
+    };
+    // Adjusted prescription (after diagnosis/medication adjustments)
+    adjusted?: AdjustmentResult;
+    // Whether adjustments were applied
+    adjustments_applied: boolean;
+    // Primary diagnosis category driving adjustments
+    primary_diagnosis_category?: string;
+    // All diagnosis rationale
+    adjustment_rationale?: string[];
+  };
+  input_echo: ExtendedRiskAssessmentInput;
   los?: any; // Length of stay predictions from addStayPredictions
   discharge?: any; // Discharge disposition predictions
   readmission?: any; // Readmission risk predictions
   personalized_benefit?: any; // Personalized benefits from mobility
 } {
   const f = featureFlags(p);
-  
+
+  // Calculate baseline mobility recommendation
+  const baselineMobilityRec = estimateWattGoalV2(p);
+
+  // Determine diagnosis for adjustment
+  // Priority: selected_diagnoses > admission_diagnosis > inferred from flags
+  let diagnosisForAdjustment = '';
+  if (p.selected_diagnoses && p.selected_diagnoses.length > 0) {
+    diagnosisForAdjustment = p.selected_diagnoses[0]; // Primary diagnosis
+  } else if (p.admission_diagnosis) {
+    diagnosisForAdjustment = p.admission_diagnosis;
+  } else {
+    // Infer from structured flags
+    if (p.is_cardiac_admission) diagnosisForAdjustment = 'Heart Failure';
+    else if (p.is_neuro_admission) diagnosisForAdjustment = 'Stroke/CVA';
+    else if (p.is_orthopedic) diagnosisForAdjustment = 'Total Knee Arthroplasty';
+    else if (p.is_sepsis) diagnosisForAdjustment = 'ICU Stay/Critical Illness';
+    else diagnosisForAdjustment = 'General Medical/Surgical';
+  }
+
+  // Determine medications for adjustment
+  let medicationsForAdjustment: string[] = [];
+  if (p.selected_medications && p.selected_medications.length > 0) {
+    medicationsForAdjustment = p.selected_medications;
+  } else if (p.medications && p.medications.length > 0) {
+    medicationsForAdjustment = p.medications;
+  } else {
+    // Infer from structured flags
+    if (p.on_sedating_medications) medicationsForAdjustment.push('Lorazepam');
+    if (p.on_anticoagulants) medicationsForAdjustment.push('Warfarin');
+    // Note: beta blockers, diuretics, rate control need to be explicitly selected
+  }
+
+  // Calculate baseline values for adjustment
+  const mobilityStatus = p.mobility_status || 'standing_assist';
+  const baselineWatts = baselineMobilityRec.watt_goal;
+  const baselineDuration = baselineMobilityRec.duration_min_per_session;
+  const baselineSessions = baselineMobilityRec.sessions_per_day;
+
+  // Calculate baseline resistance from watts (using approximation)
+  // Power = k × Resistance × RPM, where k ≈ 0.2
+  const baselineRpm = mobilityStatus === 'bedbound' ? 25 :
+                      mobilityStatus === 'chair_bound' ? 30 :
+                      mobilityStatus === 'standing_assist' ? 35 :
+                      mobilityStatus === 'walking_assist' ? 40 : 45;
+  const baselineResistance = Math.max(1, Math.min(9, Math.round(baselineWatts / (0.2 * baselineRpm))));
+
+  // Apply diagnosis and medication adjustments
+  const adjustedPrescription = applyPrescriptionAdjustments(
+    {
+      watt_goal: baselineWatts,
+      duration_min_per_session: baselineDuration,
+      sessions_per_day: baselineSessions,
+      resistance_level: baselineResistance
+    },
+    diagnosisForAdjustment,
+    medicationsForAdjustment,
+    mobilityStatus
+  );
+
+  // Check if adjustments were actually applied (any delta from baseline)
+  const adjustmentsApplied =
+    adjustedPrescription.adjustments.durationDelta !== 0 ||
+    adjustedPrescription.adjustments.powerDelta !== 0 ||
+    adjustedPrescription.adjustments.resistanceDelta !== 0 ||
+    adjustedPrescription.adjustments.rpmDelta !== 0;
+
+  // Create enhanced mobility recommendation with baseline and adjusted values
+  const enhancedMobilityRec = {
+    ...baselineMobilityRec,
+    // Override with adjusted values for the "final" recommendation
+    watt_goal: adjustedPrescription.power,
+    duration_min_per_session: adjustedPrescription.duration,
+    sessions_per_day: adjustedPrescription.sessionsPerDay,
+    resistance_level: adjustedPrescription.resistance,
+    total_daily_energy: adjustedPrescription.totalDailyEnergy,
+    rpm: adjustedPrescription.rpm,
+    // Include baseline for comparison
+    baseline: {
+      watt_goal: baselineWatts,
+      duration_min_per_session: baselineDuration,
+      sessions_per_day: baselineSessions,
+      resistance_level: baselineResistance,
+      total_daily_energy: Math.round(baselineWatts * baselineDuration * baselineSessions)
+    },
+    // Include adjusted prescription with full details
+    adjusted: adjustedPrescription,
+    adjustments_applied: adjustmentsApplied,
+    primary_diagnosis_category: adjustedPrescription.diagnosisCategoryLabel,
+    adjustment_rationale: adjustedPrescription.allRationale,
+    // Monitoring and stop criteria
+    monitoring_params: adjustedPrescription.monitoringParams,
+    stop_criteria: adjustedPrescription.stopCriteria
+  };
+
   const baseResults = {
     deconditioning: computeOutcome("deconditioning", p, f),
     vte: computeOutcome("vte", p, f),
     falls: computeOutcome("falls", p, f),
     pressure: computeOutcome("pressure", p, f),
-    mobility_recommendation: estimateWattGoalV2(p),
+    mobility_recommendation: enhancedMobilityRec,
     input_echo: p,
   };
-  
+
   // Add stay predictions (LOS, discharge, readmission) using robust calculator only
   return addStayPredictions(baseResults);
 }
