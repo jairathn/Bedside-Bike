@@ -51,17 +51,23 @@ export function ProviderGoalEditor({ patientGoals = [], patientId, onUpdateGoals
   });
 
   // Prepare initial patient data for the modal (from database)
+  // Normalize values to match expected schema formats
+  const normalizedSex = patientProfile?.sex ?
+    (patientProfile.sex.toLowerCase() === 'm' || patientProfile.sex.toLowerCase() === 'male' ? 'male' :
+     patientProfile.sex.toLowerCase() === 'f' || patientProfile.sex.toLowerCase() === 'female' ? 'female' :
+     'other') : undefined;
+
   const initialPatientData = patientProfile ? {
     age: patientProfile.age,
-    sex: patientProfile.sex,
+    sex: normalizedSex,
     weight_kg: patientProfile.weightKg,
     height_cm: patientProfile.heightCm,
     level_of_care: patientProfile.levelOfCare,
     mobility_status: patientProfile.mobilityStatus,
     cognitive_status: patientProfile.cognitiveStatus,
     admission_diagnosis: patientProfile.admissionDiagnosis,
-    medications: patientProfile.medications ? JSON.parse(patientProfile.medications) : [],
-    comorbidities: patientProfile.comorbidities ? JSON.parse(patientProfile.comorbidities) : []
+    medications: patientProfile.medications ? (typeof patientProfile.medications === 'string' ? JSON.parse(patientProfile.medications) : patientProfile.medications) : [],
+    comorbidities: patientProfile.comorbidities ? (typeof patientProfile.comorbidities === 'string' ? JSON.parse(patientProfile.comorbidities) : patientProfile.comorbidities) : []
   } : undefined;
 
   // Simple input values - what user sees and types (start empty until risk assessment)
