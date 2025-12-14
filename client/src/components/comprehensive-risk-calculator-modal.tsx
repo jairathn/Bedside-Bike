@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -8,41 +8,110 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Checkbox } from "@/components/ui/checkbox";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
-import { Calculator, User, Pill, Stethoscope, Activity, AlertTriangle, ArrowLeft } from "lucide-react";
+import { ScrollArea } from "@/components/ui/scroll-area";
+import { Calculator, User, Pill, Stethoscope, Activity, AlertTriangle, ArrowLeft, Heart, Bone, Brain, Info } from "lucide-react";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
+
+// Specific diagnosis options matching prescription-adjustments.ts
+const DIAGNOSIS_OPTIONS = [
+  { value: 'Total Knee Arthroplasty', label: 'Total Knee Arthroplasty', category: 'orthopedic' },
+  { value: 'Hip Fracture', label: 'Hip Fracture', category: 'orthopedic' },
+  { value: 'Total Hip Arthroplasty', label: 'Total Hip Arthroplasty', category: 'orthopedic' },
+  { value: 'Stroke/CVA', label: 'Stroke/CVA', category: 'neurological' },
+  { value: 'COPD Exacerbation', label: 'COPD Exacerbation', category: 'pulmonary' },
+  { value: 'Heart Failure', label: 'Heart Failure', category: 'cardiac' },
+  { value: 'ICU Stay/Critical Illness', label: 'ICU Stay/Critical Illness', category: 'icu_recovery' },
+  { value: 'Delirium/Confusion', label: 'Delirium/Confusion', category: 'delirium' },
+  { value: 'Frail Elderly (75+)', label: 'Frail Elderly (75+)', category: 'frail_elderly' },
+  { value: 'General Medical/Surgical', label: 'General Medical/Surgical', category: 'general' },
+] as const;
+
+// Specific medication options matching prescription-adjustments.ts
+const MEDICATION_OPTIONS = [
+  // Beta Blockers
+  { value: 'Metoprolol', label: 'Metoprolol', category: 'beta_blocker', group: 'Beta Blockers' },
+  { value: 'Atenolol', label: 'Atenolol', category: 'beta_blocker', group: 'Beta Blockers' },
+  { value: 'Carvedilol', label: 'Carvedilol', category: 'beta_blocker', group: 'Beta Blockers' },
+  // Rate Control
+  { value: 'Digoxin', label: 'Digoxin', category: 'rate_control', group: 'Rate Control' },
+  { value: 'Diltiazem', label: 'Diltiazem', category: 'rate_control', group: 'Rate Control' },
+  { value: 'Verapamil', label: 'Verapamil', category: 'rate_control', group: 'Rate Control' },
+  // Diuretics
+  { value: 'Furosemide', label: 'Furosemide (Lasix)', category: 'diuretic', group: 'Diuretics' },
+  { value: 'Spironolactone', label: 'Spironolactone', category: 'diuretic', group: 'Diuretics' },
+  { value: 'Hydrochlorothiazide', label: 'Hydrochlorothiazide', category: 'diuretic', group: 'Diuretics' },
+  // Insulin
+  { value: 'Insulin', label: 'Insulin (any type)', category: 'insulin', group: 'Diabetes' },
+  // Anticoagulants
+  { value: 'Warfarin', label: 'Warfarin', category: 'anticoagulant', group: 'Anticoagulants' },
+  { value: 'Apixaban', label: 'Apixaban (Eliquis)', category: 'anticoagulant', group: 'Anticoagulants' },
+  { value: 'Rivaroxaban', label: 'Rivaroxaban (Xarelto)', category: 'anticoagulant', group: 'Anticoagulants' },
+  { value: 'Enoxaparin', label: 'Enoxaparin (Lovenox)', category: 'anticoagulant', group: 'Anticoagulants' },
+  { value: 'Heparin', label: 'Heparin', category: 'anticoagulant', group: 'Anticoagulants' },
+  // Sedating
+  { value: 'Oxycodone', label: 'Oxycodone', category: 'sedating', group: 'Sedating Medications' },
+  { value: 'Morphine', label: 'Morphine', category: 'sedating', group: 'Sedating Medications' },
+  { value: 'Lorazepam', label: 'Lorazepam (Ativan)', category: 'sedating', group: 'Sedating Medications' },
+  { value: 'Quetiapine', label: 'Quetiapine (Seroquel)', category: 'sedating', group: 'Sedating Medications' },
+  { value: 'Haloperidol', label: 'Haloperidol (Haldol)', category: 'sedating', group: 'Sedating Medications' },
+  // Antiparkinsonian
+  { value: 'Carbidopa-Levodopa', label: 'Carbidopa-Levodopa (Sinemet)', category: 'antiparkinsonian', group: 'Parkinson\'s' },
+] as const;
 
 interface ComprehensiveRiskCalculatorModalProps {
   isOpen: boolean;
   onClose: () => void;
   patientId: string;
   onGoalsGenerated: (goals: any[], riskResults: any) => void;
+  // Optional initial patient data for auto-population
+  initialPatientData?: {
+    age?: number;
+    sex?: string;
+    weight_kg?: number;
+    height_cm?: number;
+    level_of_care?: string;
+    mobility_status?: string;
+    cognitive_status?: string;
+    admission_diagnosis?: string;
+    medications?: string[];
+    comorbidities?: string[];
+  };
 }
 
-export function ComprehensiveRiskCalculatorModal({ 
-  isOpen, 
-  onClose, 
-  patientId, 
-  onGoalsGenerated 
+export function ComprehensiveRiskCalculatorModal({
+  isOpen,
+  onClose,
+  patientId,
+  onGoalsGenerated,
+  initialPatientData
 }: ComprehensiveRiskCalculatorModalProps) {
   // Assessment State - MATCHING EXISTING PATIENT SCHEMA
   const [assessmentData, setAssessmentData] = useState({
     // Personal Details - matching schema exactly
     age: 65,
     sex: 'female',
-    weight_kg: undefined,
-    height_cm: undefined,
+    weight_kg: undefined as number | undefined,
+    height_cm: undefined as number | undefined,
     level_of_care: 'ward',
     mobility_status: 'independent',
     cognitive_status: 'normal',
     baseline_function: 'independent',
     admission_diagnosis: '',
-    
+
     // Arrays for structured data
-    medications: [],
-    comorbidities: [],
-    devices: [],
-    
+    medications: [] as string[],
+    comorbidities: [] as string[],
+    devices: [] as string[],
+
+    // NEW: Specific diagnosis selections (checkboxes)
+    selected_diagnoses: [] as string[],
+    other_diagnosis: '',
+
+    // NEW: Specific medication selections (checkboxes)
+    selected_medications: [] as string[],
+    other_medications: '',
+
     // Admission Type - checkboxes
     is_postoperative: false,
     is_trauma_admission: false,
@@ -53,14 +122,14 @@ export function ComprehensiveRiskCalculatorModal({
     is_oncology: false,
     admission_other: false,
     no_admission_type: false,
-    
-    // Current Medications - checkboxes
+
+    // Current Medications - checkboxes (categories)
     on_sedating_medications: false,
     on_anticoagulants: false,
     on_steroids: false,
     no_medications: false,
-    
-    // Medical Conditions - checkboxes  
+
+    // Medical Conditions - checkboxes
     has_diabetes: false,
     has_obesity: false,
     has_parkinson: false,
@@ -70,14 +139,14 @@ export function ComprehensiveRiskCalculatorModal({
     has_stroke_history: false,
     has_vte_history: false,
     no_medical_conditions: false,
-    
+
     // Devices & Lines - checkboxes
     has_foley_catheter: false,
     has_central_line: false,
     has_feeding_tube: false,
     has_ventilator: false,
     no_devices: false,
-    
+
     // Additional Risk Factors - matching schema
     on_vte_prophylaxis: true,
     incontinent: false,
@@ -85,11 +154,73 @@ export function ComprehensiveRiskCalculatorModal({
     days_immobile: 0
   });
 
+  // Auto-populate from initial patient data when modal opens
+  useEffect(() => {
+    if (isOpen && initialPatientData) {
+      setAssessmentData(prev => ({
+        ...prev,
+        age: initialPatientData.age || prev.age,
+        sex: initialPatientData.sex || prev.sex,
+        weight_kg: initialPatientData.weight_kg,
+        height_cm: initialPatientData.height_cm,
+        level_of_care: initialPatientData.level_of_care || prev.level_of_care,
+        mobility_status: initialPatientData.mobility_status || prev.mobility_status,
+        cognitive_status: initialPatientData.cognitive_status || prev.cognitive_status,
+        admission_diagnosis: initialPatientData.admission_diagnosis || prev.admission_diagnosis,
+        medications: initialPatientData.medications || prev.medications,
+        comorbidities: initialPatientData.comorbidities || prev.comorbidities,
+        // Auto-select matching diagnoses from the options
+        selected_diagnoses: initialPatientData.admission_diagnosis ?
+          DIAGNOSIS_OPTIONS
+            .filter(opt => initialPatientData.admission_diagnosis?.toLowerCase().includes(opt.value.toLowerCase()))
+            .map(opt => opt.value) : [],
+        // Auto-select matching medications from the options
+        selected_medications: initialPatientData.medications ?
+          MEDICATION_OPTIONS
+            .filter(opt => initialPatientData.medications?.some(m => m.toLowerCase().includes(opt.value.toLowerCase())))
+            .map(opt => opt.value) : []
+      }));
+    }
+  }, [isOpen, initialPatientData]);
+
   // Conditional admission diagnosis visibility
   const [showAdmissionDiagnosis, setShowAdmissionDiagnosis] = useState(false);
-  
+  const [showOtherMedications, setShowOtherMedications] = useState(false);
+
   const [isCalculating, setIsCalculating] = useState(false);
   const { toast } = useToast();
+
+  // Handle diagnosis checkbox changes
+  const handleDiagnosisChange = (diagnosisValue: string, checked: boolean) => {
+    setAssessmentData(prev => ({
+      ...prev,
+      selected_diagnoses: checked
+        ? [...prev.selected_diagnoses, diagnosisValue]
+        : prev.selected_diagnoses.filter(d => d !== diagnosisValue)
+    }));
+  };
+
+  // Handle medication checkbox changes
+  const handleMedicationChange = (medicationValue: string, checked: boolean) => {
+    setAssessmentData(prev => ({
+      ...prev,
+      selected_medications: checked
+        ? [...prev.selected_medications, medicationValue]
+        : prev.selected_medications.filter(m => m !== medicationValue)
+    }));
+  };
+
+  // Get grouped medications for display
+  const getMedicationGroups = () => {
+    const groups: Record<string, typeof MEDICATION_OPTIONS[number][]> = {};
+    MEDICATION_OPTIONS.forEach(med => {
+      if (!groups[med.group]) {
+        groups[med.group] = [];
+      }
+      groups[med.group].push(med);
+    });
+    return groups;
+  };
 
   // Handle checkbox changes with mutual exclusion logic
   const handleCheckboxChange = (field: keyof typeof assessmentData, checked: boolean, exclusiveGroup?: string[]) => {
@@ -133,9 +264,13 @@ export function ComprehensiveRiskCalculatorModal({
 
     setIsCalculating(true);
     try {
-      // Generate admission diagnosis from selected categories
+      // Generate admission diagnosis from selected categories OR use specific selections
       let diagnosisText = assessmentData.admission_diagnosis || '';
-      if (!diagnosisText && !assessmentData.admission_other) {
+
+      // If specific diagnoses are selected, use those for the diagnosis text
+      if (assessmentData.selected_diagnoses.length > 0) {
+        diagnosisText = assessmentData.selected_diagnoses.join(', ');
+      } else if (!diagnosisText && !assessmentData.admission_other) {
         const selectedTypes = [];
         if (assessmentData.is_postoperative) selectedTypes.push("post-operative");
         if (assessmentData.is_trauma_admission) selectedTypes.push("trauma");
@@ -144,15 +279,31 @@ export function ComprehensiveRiskCalculatorModal({
         if (assessmentData.is_neuro_admission) selectedTypes.push("neurological");
         if (assessmentData.is_orthopedic) selectedTypes.push("orthopedic");
         if (assessmentData.is_oncology) selectedTypes.push("oncology");
-        
+
         diagnosisText = selectedTypes.length > 0 ? selectedTypes.join(", ") + " admission" : "general admission";
       }
+
+      // Add "other" diagnosis if specified
+      if (assessmentData.other_diagnosis) {
+        diagnosisText = diagnosisText ? `${diagnosisText}, ${assessmentData.other_diagnosis}` : assessmentData.other_diagnosis;
+      }
+
+      // Combine selected medications with other medications
+      const allMedications = [
+        ...assessmentData.selected_medications,
+        ...(assessmentData.other_medications ? [assessmentData.other_medications] : [])
+      ];
 
       // Prepare data matching exact schema requirements
       const requestData = {
         patientId: parseInt(patientId),
         ...assessmentData,
         admission_diagnosis: diagnosisText,
+        // NEW: Include specific diagnosis and medication selections
+        selected_diagnoses: assessmentData.selected_diagnoses,
+        selected_medications: allMedications,
+        other_diagnosis: assessmentData.other_diagnosis,
+        other_medications: assessmentData.other_medications,
         // Convert weight/height properly
         weight_kg: assessmentData.weight_kg || null,
         height_cm: assessmentData.height_cm || null
@@ -167,24 +318,60 @@ export function ComprehensiveRiskCalculatorModal({
       });
 
       // Extract therapeutic recommendations and convert to goals
+      // Now using the enhanced recommendation with baseline and adjusted values
       if (response.mobility_recommendation) {
         const recommendation = response.mobility_recommendation;
+
+        // Use adjusted values (which are already applied based on diagnosis/medications)
+        const adjustedDuration = recommendation.duration_min_per_session || 15;
+        const adjustedPower = recommendation.watt_goal || 35;
+        const adjustedResistance = recommendation.resistance_level || 5;
+        const adjustedSessions = recommendation.sessions_per_day || 2;
+        const totalEnergy = recommendation.total_daily_energy ||
+          (adjustedPower * adjustedDuration * adjustedSessions);
+
+        // Check if adjustments were applied
+        const hasAdjustments = recommendation.adjustments_applied || false;
+
         const newGoals = [
           {
             goalType: 'duration',
-            targetValue: (recommendation.session_duration_minutes || 15).toString(),
-            label: 'Evidence-Based Duration',
-            subtitle: 'Based on comprehensive risk profile'
+            targetValue: adjustedDuration.toString(),
+            label: hasAdjustments ? 'Adjusted Duration' : 'Evidence-Based Duration',
+            subtitle: hasAdjustments
+              ? `${recommendation.baseline?.duration_min_per_session || adjustedDuration}→${adjustedDuration} min (${recommendation.primary_diagnosis_category || 'adjusted'})`
+              : `${adjustedDuration} min per session`
           },
           {
             goalType: 'power',
-            targetValue: recommendation.target_watts?.toString() || '35.0',
-            label: 'Evidence-Based Power Target', 
-            subtitle: 'Optimized for clinical outcomes'
+            targetValue: adjustedPower.toString(),
+            label: hasAdjustments ? 'Adjusted Power Target' : 'Evidence-Based Power Target',
+            subtitle: hasAdjustments
+              ? `${recommendation.baseline?.watt_goal || adjustedPower}→${adjustedPower}W (diagnosis-adjusted)`
+              : `${adjustedPower}W average`
+          },
+          {
+            goalType: 'resistance',
+            targetValue: adjustedResistance.toString(),
+            label: 'Resistance Level',
+            subtitle: `Level ${adjustedResistance}`
+          },
+          {
+            goalType: 'sessions',
+            targetValue: adjustedSessions.toString(),
+            label: 'Sessions Per Day',
+            subtitle: `${adjustedSessions} sessions daily`
+          },
+          {
+            goalType: 'energy',
+            targetValue: totalEnergy.toString(),
+            label: 'Total Daily Energy',
+            subtitle: `${totalEnergy} Watt-Minutes`
           }
         ];
 
-        // Pass goals back to provider interface with risk results
+        // Pass goals back to provider interface with full risk results
+        // The response now includes baseline, adjusted, and rationale
         onGoalsGenerated(newGoals, response);
         
         toast({
@@ -433,6 +620,131 @@ export function ComprehensiveRiskCalculatorModal({
                   <Label htmlFor="no_admission">None of the above</Label>
                 </div>
               </div>
+            </CardContent>
+          </Card>
+
+          {/* NEW: Specific Diagnosis Selection for Prescription Adjustments */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Heart className="w-5 h-5 text-rose-500" />
+                Specific Diagnosis
+                <Badge variant="secondary" className="text-xs">For Prescription Adjustments</Badge>
+              </CardTitle>
+              <p className="text-sm text-gray-600">Select the primary diagnosis that most affects mobility prescription. This fine-tunes resistance, RPM, and duration recommendations.</p>
+            </CardHeader>
+            <CardContent>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                {DIAGNOSIS_OPTIONS.map((diagnosis) => (
+                  <div key={diagnosis.value} className="flex items-start space-x-2">
+                    <Checkbox
+                      id={`diag-${diagnosis.value}`}
+                      checked={assessmentData.selected_diagnoses.includes(diagnosis.value)}
+                      onCheckedChange={(checked) => handleDiagnosisChange(diagnosis.value, checked as boolean)}
+                    />
+                    <div className="grid gap-0.5">
+                      <Label htmlFor={`diag-${diagnosis.value}`} className="font-medium cursor-pointer">
+                        {diagnosis.label}
+                      </Label>
+                      <span className="text-xs text-gray-500">
+                        {diagnosis.category === 'orthopedic' && '↓ Resistance, ↑ ROM/rotations'}
+                        {diagnosis.category === 'cardiac' && '↑ Resistance, ↓ RPM (cardiac safe)'}
+                        {diagnosis.category === 'pulmonary' && '↑ Resistance, ↓ RPM (respiratory)'}
+                        {diagnosis.category === 'neurological' && 'Balanced, coordination focus'}
+                        {diagnosis.category === 'icu_recovery' && 'Very gentle, progressive'}
+                        {diagnosis.category === 'delirium' && 'Simplified, shorter sessions'}
+                        {diagnosis.category === 'frail_elderly' && 'Low intensity, safety focus'}
+                        {diagnosis.category === 'general' && 'Standard evidence-based'}
+                      </span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+              {/* Other diagnosis free text */}
+              <div className="mt-4 pt-4 border-t">
+                <Label htmlFor="other_diagnosis" className="text-sm font-medium">Other Diagnosis (optional)</Label>
+                <Input
+                  id="other_diagnosis"
+                  value={assessmentData.other_diagnosis}
+                  onChange={(e) => setAssessmentData({...assessmentData, other_diagnosis: e.target.value})}
+                  placeholder="e.g., Parkinson's disease, Multiple sclerosis"
+                  className="mt-1"
+                />
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* NEW: Specific Medications for Prescription Adjustments */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Pill className="w-5 h-5 text-blue-500" />
+                Specific Medications
+                <Badge variant="secondary" className="text-xs">For Prescription Adjustments</Badge>
+              </CardTitle>
+              <p className="text-sm text-gray-600">Select specific medications that affect exercise prescription. Beta blockers and rate control meds require resistance-focused (not RPM-focused) exercise.</p>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-4">
+                {Object.entries(getMedicationGroups()).map(([group, meds]) => (
+                  <div key={group} className="space-y-2">
+                    <h4 className="text-sm font-semibold text-gray-700">{group}</h4>
+                    <div className="grid grid-cols-2 md:grid-cols-3 gap-2 pl-2">
+                      {meds.map((med) => (
+                        <div key={med.value} className="flex items-center space-x-2">
+                          <Checkbox
+                            id={`med-${med.value}`}
+                            checked={assessmentData.selected_medications.includes(med.value)}
+                            onCheckedChange={(checked) => handleMedicationChange(med.value, checked as boolean)}
+                          />
+                          <Label htmlFor={`med-${med.value}`} className="text-sm cursor-pointer">
+                            {med.label}
+                          </Label>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ))}
+              </div>
+              {/* Other medications free text */}
+              <div className="mt-4 pt-4 border-t">
+                <Label htmlFor="other_medications" className="text-sm font-medium">Other Medications (optional)</Label>
+                <Input
+                  id="other_medications"
+                  value={assessmentData.other_medications}
+                  onChange={(e) => setAssessmentData({...assessmentData, other_medications: e.target.value})}
+                  placeholder="e.g., Gabapentin, Duloxetine"
+                  className="mt-1"
+                />
+              </div>
+              {/* Info box about medication adjustments */}
+              {assessmentData.selected_medications.length > 0 && (
+                <div className="mt-4 p-3 bg-blue-50 border border-blue-200 rounded-lg">
+                  <div className="flex items-start gap-2">
+                    <Info className="w-4 h-4 text-blue-600 mt-0.5" />
+                    <div className="text-sm text-blue-800">
+                      <strong>Medication Adjustments Applied:</strong>
+                      <ul className="mt-1 list-disc pl-4 space-y-0.5">
+                        {assessmentData.selected_medications.some(m => ['Metoprolol', 'Atenolol', 'Carvedilol'].includes(m)) && (
+                          <li>Beta blocker: Focus on resistance, reduce RPM targets (HR blunted)</li>
+                        )}
+                        {assessmentData.selected_medications.some(m => ['Digoxin', 'Diltiazem', 'Verapamil'].includes(m)) && (
+                          <li>Rate control: Focus on resistance, avoid high RPM</li>
+                        )}
+                        {assessmentData.selected_medications.some(m => ['Furosemide', 'Spironolactone', 'Hydrochlorothiazide'].includes(m)) && (
+                          <li>Diuretic: Monitor for fatigue, slightly shorter sessions</li>
+                        )}
+                        {assessmentData.selected_medications.some(m => ['Oxycodone', 'Morphine', 'Lorazepam', 'Quetiapine', 'Haloperidol'].includes(m)) && (
+                          <li>Sedating medication: Reduced intensity, close supervision</li>
+                        )}
+                        {assessmentData.selected_medications.includes('Insulin') && (
+                          <li>Insulin: Glucose monitoring, have snack available</li>
+                        )}
+                      </ul>
+                    </div>
+                  </div>
+                </div>
+              )}
             </CardContent>
           </Card>
 

@@ -6,10 +6,11 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
-import { Target, Zap, Clock, Settings, Save, RotateCcw, Calculator, AlertTriangle, CheckCircle, Shield, History, Calendar, HelpCircle, Brain, Activity, TrendingUp } from "lucide-react";
+import { Target, Zap, Clock, Settings, Save, RotateCcw, Calculator, AlertTriangle, CheckCircle, Shield, History, Calendar, HelpCircle, Brain, Activity, TrendingUp, ArrowRight, Info, Stethoscope, Pill } from "lucide-react";
 import { ComprehensiveRiskCalculatorModal } from "./comprehensive-risk-calculator-modal";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { useAuth } from "@/hooks/use-auth";
+import { apiRequest } from "@/lib/queryClient";
 
 interface Goal {
   id: number;
@@ -34,13 +35,34 @@ interface ProviderGoalEditorProps {
 
 export function ProviderGoalEditor({ patientGoals = [], patientId, onUpdateGoals, onRunRiskCalculator, isLoading = false }: ProviderGoalEditorProps) {
   const { user } = useAuth();
-  
+
   // Get the latest risk assessment for this patient to pre-populate forms
   const { data: latestRiskAssessment } = useQuery({
     queryKey: [`/api/patients/${patientId}/risk-assessment`],
     enabled: !!patientId,
     retry: false // Don't retry if no assessment exists yet
   });
+
+  // NEW: Fetch patient profile from database for auto-population
+  const { data: patientProfile } = useQuery({
+    queryKey: [`/api/patients/${patientId}/profile`],
+    enabled: !!patientId,
+    retry: false
+  });
+
+  // Prepare initial patient data for the modal (from database)
+  const initialPatientData = patientProfile ? {
+    age: patientProfile.age,
+    sex: patientProfile.sex,
+    weight_kg: patientProfile.weightKg,
+    height_cm: patientProfile.heightCm,
+    level_of_care: patientProfile.levelOfCare,
+    mobility_status: patientProfile.mobilityStatus,
+    cognitive_status: patientProfile.cognitiveStatus,
+    admission_diagnosis: patientProfile.admissionDiagnosis,
+    medications: patientProfile.medications ? JSON.parse(patientProfile.medications) : [],
+    comorbidities: patientProfile.comorbidities ? JSON.parse(patientProfile.comorbidities) : []
+  } : undefined;
 
   // Simple input values - what user sees and types (start empty until risk assessment)
   const [inputValues, setInputValues] = useState({
@@ -1092,13 +1114,124 @@ export function ProviderGoalEditor({ patientGoals = [], patientId, onUpdateGoals
               <div>
                 <span className="font-medium text-gray-700">Energy:</span><br/>
                 <span className="text-blue-600 font-semibold">
-                  {Math.round(patientRiskResults.mobility_recommendation.total_daily_energy || 
-                   ((patientRiskResults.mobility_recommendation.watt_goal || 35) * 
-                    (patientRiskResults.mobility_recommendation.duration_min_per_session || 15) * 
+                  {Math.round(patientRiskResults.mobility_recommendation.total_daily_energy ||
+                   ((patientRiskResults.mobility_recommendation.watt_goal || 35) *
+                    (patientRiskResults.mobility_recommendation.duration_min_per_session || 15) *
                     (patientRiskResults.mobility_recommendation.sessions_per_day || 2)))} Watt-Min
                 </span>
               </div>
             </div>
+
+            {/* NEW: Diagnosis/Medication Adjustments Applied Section */}
+            {patientRiskResults.mobility_recommendation.adjustments_applied && (
+              <div className="mt-4 p-4 bg-amber-50 border border-amber-200 rounded-lg">
+                <div className="flex items-start gap-3">
+                  <Stethoscope className="w-5 h-5 text-amber-600 mt-0.5" />
+                  <div className="flex-1">
+                    <h5 className="font-semibold text-amber-800 mb-2">
+                      Prescription Adjustments Applied
+                    </h5>
+                    <div className="text-sm text-amber-700 mb-3">
+                      <strong>Primary Category:</strong> {patientRiskResults.mobility_recommendation.primary_diagnosis_category || 'General'}
+                    </div>
+
+                    {/* Baseline vs Adjusted Comparison */}
+                    {patientRiskResults.mobility_recommendation.baseline && (
+                      <div className="grid grid-cols-2 md:grid-cols-4 gap-2 mb-3 text-xs">
+                        <div className="bg-white p-2 rounded border border-amber-100">
+                          <div className="text-gray-500">Power</div>
+                          <div className="font-medium">
+                            {patientRiskResults.mobility_recommendation.baseline.watt_goal}W
+                            <ArrowRight className="inline w-3 h-3 mx-1" />
+                            <span className="text-amber-700">{patientRiskResults.mobility_recommendation.watt_goal}W</span>
+                          </div>
+                        </div>
+                        <div className="bg-white p-2 rounded border border-amber-100">
+                          <div className="text-gray-500">Duration</div>
+                          <div className="font-medium">
+                            {patientRiskResults.mobility_recommendation.baseline.duration_min_per_session}min
+                            <ArrowRight className="inline w-3 h-3 mx-1" />
+                            <span className="text-amber-700">{patientRiskResults.mobility_recommendation.duration_min_per_session}min</span>
+                          </div>
+                        </div>
+                        <div className="bg-white p-2 rounded border border-amber-100">
+                          <div className="text-gray-500">Resistance</div>
+                          <div className="font-medium">
+                            Lvl {patientRiskResults.mobility_recommendation.baseline.resistance_level}
+                            <ArrowRight className="inline w-3 h-3 mx-1" />
+                            <span className="text-amber-700">Lvl {patientRiskResults.mobility_recommendation.resistance_level}</span>
+                          </div>
+                        </div>
+                        <div className="bg-white p-2 rounded border border-amber-100">
+                          <div className="text-gray-500">RPM Target</div>
+                          <div className="font-medium">
+                            <span className="text-amber-700">{patientRiskResults.mobility_recommendation.rpm || 35} RPM</span>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Adjustment Rationale */}
+                    {patientRiskResults.mobility_recommendation.adjustment_rationale &&
+                     patientRiskResults.mobility_recommendation.adjustment_rationale.length > 0 && (
+                      <div className="text-xs text-amber-800">
+                        <div className="font-medium mb-1">Clinical Rationale:</div>
+                        <ul className="list-disc pl-4 space-y-0.5">
+                          {patientRiskResults.mobility_recommendation.adjustment_rationale.map((rationale: string, idx: number) => (
+                            <li key={idx}>{rationale}</li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
+
+                    {/* Monitoring Parameters */}
+                    {patientRiskResults.mobility_recommendation.monitoring_params &&
+                     patientRiskResults.mobility_recommendation.monitoring_params.length > 0 && (
+                      <Dialog>
+                        <DialogTrigger asChild>
+                          <Button variant="ghost" size="sm" className="mt-2 text-amber-700 hover:text-amber-800 hover:bg-amber-100 p-0">
+                            <Info className="w-4 h-4 mr-1" />
+                            View Monitoring & Stop Criteria
+                          </Button>
+                        </DialogTrigger>
+                        <DialogContent className="max-w-2xl">
+                          <DialogHeader>
+                            <DialogTitle className="flex items-center gap-2">
+                              <Stethoscope className="w-5 h-5 text-amber-600" />
+                              Diagnosis-Specific Monitoring
+                            </DialogTitle>
+                            <DialogDescription>
+                              Recommended monitoring parameters and stop criteria for {patientRiskResults.mobility_recommendation.primary_diagnosis_category || 'this patient'}
+                            </DialogDescription>
+                          </DialogHeader>
+                          <div className="space-y-4 mt-4">
+                            <div>
+                              <h4 className="font-semibold text-gray-900 mb-2">Monitoring Parameters</h4>
+                              <ul className="list-disc pl-5 space-y-1 text-sm text-gray-700">
+                                {patientRiskResults.mobility_recommendation.monitoring_params.map((param: string, idx: number) => (
+                                  <li key={idx}>{param}</li>
+                                ))}
+                              </ul>
+                            </div>
+                            {patientRiskResults.mobility_recommendation.stop_criteria &&
+                             patientRiskResults.mobility_recommendation.stop_criteria.length > 0 && (
+                              <div>
+                                <h4 className="font-semibold text-red-700 mb-2">Stop Criteria</h4>
+                                <ul className="list-disc pl-5 space-y-1 text-sm text-red-600">
+                                  {patientRiskResults.mobility_recommendation.stop_criteria.map((criteria: string, idx: number) => (
+                                    <li key={idx}>{criteria}</li>
+                                  ))}
+                                </ul>
+                              </div>
+                            )}
+                          </div>
+                        </DialogContent>
+                      </Dialog>
+                    )}
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
           )}
         </div>
@@ -1230,6 +1363,7 @@ Cancel & Coordinate
         isOpen={showRiskModal}
         onClose={() => setShowRiskModal(false)}
         patientId={patientId}
+        initialPatientData={initialPatientData}
         onGoalsGenerated={(newGoals, riskResults) => {
           // Convert new goals to the format expected by onUpdateGoals
           const updatedGoals = newGoals.map(goal => ({
@@ -1240,17 +1374,17 @@ Cancel & Coordinate
           }));
           onUpdateGoals(updatedGoals);
           setHasRunRiskCalculator(true);
-          
+
           // Calculate personalized energy target from the fresh risk results
-          const calculatedEnergyTarget = riskResults?.mobility_recommendation ? 
-            (riskResults.mobility_recommendation.watt_goal || 35) * 
-            (riskResults.mobility_recommendation.duration_min_per_session || 15) * 
+          const calculatedEnergyTarget = riskResults?.mobility_recommendation ?
+            (riskResults.mobility_recommendation.watt_goal || 35) *
+            (riskResults.mobility_recommendation.duration_min_per_session || 15) *
             (riskResults.mobility_recommendation.sessions_per_day || 2) : 1050;
 
           // Store risk results for display and update energy target
           setPatientRiskResults(riskResults);
           setTotalEnergyTarget(calculatedEnergyTarget);
-          
+
           // Populate input fields with AI-generated recommendations
           const durationGoal = newGoals.find(g => g.goalType === 'duration');
           const powerGoal = newGoals.find(g => g.goalType === 'power');
@@ -1262,7 +1396,7 @@ Cancel & Coordinate
             resistance: String(riskResults?.mobility_recommendation?.resistance_level || 5),
             sessionsPerDay: String(riskResults?.mobility_recommendation?.sessions_per_day || 2)
           });
-          
+
           setShowRiskModal(false);
         }}
       />
