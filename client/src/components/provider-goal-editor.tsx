@@ -1388,6 +1388,8 @@ Cancel & Coordinate
             (riskResults.mobility_recommendation.sessions_per_day || 2) : 1050;
 
           // Store risk results for display and update energy target
+          console.log('Provider goal editor received riskResults:', riskResults);
+          console.log('mobility_benefits:', riskResults?.mobility_benefits);
           setPatientRiskResults(riskResults);
           setTotalEnergyTarget(calculatedEnergyTarget);
 
