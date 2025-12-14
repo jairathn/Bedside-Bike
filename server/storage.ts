@@ -676,18 +676,21 @@ export class DatabaseStorage implements IStorage {
 
   // Risk Assessment operations
   async createRiskAssessment(assessment: InsertRiskAssessment): Promise<RiskAssessment> {
-    // Extract only the fields we need to avoid Drizzle parameter conflicts
+    // Extract only the fields we need - ensure all values are proper strings
+    // IMPORTANT: Do not include id or createdAt - let DB handle defaults
     const insertData = {
-      patientId: assessment.patientId,
-      deconditioning: assessment.deconditioning,
-      vte: assessment.vte,
-      falls: assessment.falls,
-      pressure: assessment.pressure,
-      mobilityRecommendation: assessment.mobilityRecommendation,
-      losData: assessment.losData || null,
-      dischargeData: assessment.dischargeData || null,
-      readmissionData: assessment.readmissionData || null,
+      patientId: Number(assessment.patientId),
+      deconditioning: String(assessment.deconditioning || '{}'),
+      vte: String(assessment.vte || '{}'),
+      falls: String(assessment.falls || '{}'),
+      pressure: String(assessment.pressure || '{}'),
+      mobilityRecommendation: String(assessment.mobilityRecommendation || '{}'),
+      losData: assessment.losData ? String(assessment.losData) : null,
+      dischargeData: assessment.dischargeData ? String(assessment.dischargeData) : null,
+      readmissionData: assessment.readmissionData ? String(assessment.readmissionData) : null,
     };
+
+    console.log('Inserting risk assessment - patientId:', insertData.patientId);
 
     const [newAssessment] = await db.insert(riskAssessments).values(insertData).returning();
 
