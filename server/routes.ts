@@ -601,7 +601,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const losData = stayPredictions?.length_of_stay;
       const dischargeData = stayPredictions?.discharge_disposition;
       const readmissionData = stayPredictions?.readmission_risk;
-      const mobilityBenefits = stayPredictions?.mobility_benefits; // Include mobility benefits for frontend
+      // mobility_benefits is at the top level, not nested under stay_predictions
+      const mobilityBenefits = (riskResults as any).mobility_benefits;
 
       console.log("Robust calculator predictions:", { losData, dischargeData, readmissionData, mobilityBenefits });
       

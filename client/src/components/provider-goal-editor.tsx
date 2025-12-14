@@ -1042,7 +1042,7 @@ export function ProviderGoalEditor({ patientGoals = [], patientId, onUpdateGoals
                       </h4>
                       <div className="space-y-3 text-gray-700">
                         <p>
-                          <strong>Training Data:</strong> 500,000+ patient outcomes from 200+ peer-reviewed studies
+                          <strong>Training Data:</strong> ~10,000 patient outcomes from clinical mobility studies
                         </p>
                         <p>
                           <strong>Risk Model Accuracy:</strong>
