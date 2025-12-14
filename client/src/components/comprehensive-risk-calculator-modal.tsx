@@ -183,6 +183,39 @@ export function ComprehensiveRiskCalculatorModal({
     }
   }, [isOpen, initialPatientData]);
 
+  // Auto-map specific medications to their category checkboxes
+  useEffect(() => {
+    const selectedMeds = assessmentData.selected_medications;
+
+    // Check if any selected medication belongs to each category
+    const hasAnticoagulant = selectedMeds.some(med =>
+      MEDICATION_OPTIONS.find(opt => opt.value === med)?.category === 'anticoagulant'
+    );
+    const hasSedating = selectedMeds.some(med =>
+      MEDICATION_OPTIONS.find(opt => opt.value === med)?.category === 'sedating'
+    );
+
+    // Auto-update category checkboxes based on specific medication selections
+    setAssessmentData(prev => {
+      const updates: Partial<typeof prev> = {};
+
+      // Only update if the value would change (to avoid infinite loops)
+      if (hasAnticoagulant && !prev.on_anticoagulants) {
+        updates.on_anticoagulants = true;
+        updates.no_medications = false;
+      }
+      if (hasSedating && !prev.on_sedating_medications) {
+        updates.on_sedating_medications = true;
+        updates.no_medications = false;
+      }
+
+      // If no updates needed, return prev to avoid re-render
+      if (Object.keys(updates).length === 0) return prev;
+
+      return { ...prev, ...updates };
+    });
+  }, [assessmentData.selected_medications]);
+
   // Conditional admission diagnosis visibility
   const [showAdmissionDiagnosis, setShowAdmissionDiagnosis] = useState(false);
   const [showOtherMedications, setShowOtherMedications] = useState(false);

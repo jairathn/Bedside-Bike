@@ -605,17 +605,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       console.log("Robust calculator predictions:", { losData, dischargeData, readmissionData, mobilityBenefits });
       
-      // Store the assessment
+      // Store the assessment - serialize all JSON objects to text for database storage
       const assessment = await storage.createRiskAssessment({
         patientId,
-        deconditioning: riskResults.deconditioning,
-        vte: riskResults.vte,
-        falls: riskResults.falls,
-        pressure: riskResults.pressure,
-        mobilityRecommendation: riskResults.mobility_recommendation,
-        losData,
-        dischargeData,
-        readmissionData
+        deconditioning: JSON.stringify(riskResults.deconditioning),
+        vte: JSON.stringify(riskResults.vte),
+        falls: JSON.stringify(riskResults.falls),
+        pressure: JSON.stringify(riskResults.pressure),
+        mobilityRecommendation: JSON.stringify(riskResults.mobility_recommendation),
+        losData: losData ? JSON.stringify(losData) : null,
+        dischargeData: dischargeData ? JSON.stringify(dischargeData) : null,
+        readmissionData: readmissionData ? JSON.stringify(readmissionData) : null
       });
       
       res.json({
