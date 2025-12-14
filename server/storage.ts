@@ -676,11 +676,24 @@ export class DatabaseStorage implements IStorage {
 
   // Risk Assessment operations
   async createRiskAssessment(assessment: InsertRiskAssessment): Promise<RiskAssessment> {
-    const [newAssessment] = await db.insert(riskAssessments).values(assessment).returning();
-    
+    // Extract only the fields we need to avoid Drizzle parameter conflicts
+    const insertData = {
+      patientId: assessment.patientId,
+      deconditioning: assessment.deconditioning,
+      vte: assessment.vte,
+      falls: assessment.falls,
+      pressure: assessment.pressure,
+      mobilityRecommendation: assessment.mobilityRecommendation,
+      losData: assessment.losData || null,
+      dischargeData: assessment.dischargeData || null,
+      readmissionData: assessment.readmissionData || null,
+    };
+
+    const [newAssessment] = await db.insert(riskAssessments).values(insertData).returning();
+
     // Create AI-recommended goals based on the assessment
     await this.createGoalsFromRiskAssessment(assessment.patientId, newAssessment);
-    
+
     return newAssessment;
   }
 
@@ -762,8 +775,16 @@ export class DatabaseStorage implements IStorage {
       .set({ isActive: false, updatedAt: new Date() })
       .where(eq(patientGoals.patientId, patientId));
 
-    // Extract recommendation from the mobility recommendation JSON
-    const recommendation = assessment.mobilityRecommendation as any;
+    // Parse the mobility recommendation from JSON string
+    let recommendation: any = null;
+    try {
+      recommendation = typeof assessment.mobilityRecommendation === 'string'
+        ? JSON.parse(assessment.mobilityRecommendation)
+        : assessment.mobilityRecommendation;
+    } catch (e) {
+      console.error('Failed to parse mobilityRecommendation:', e);
+      return;
+    }
     
     if (recommendation && recommendation.watt_goal && recommendation.duration_min_per_session) {
       const aiGoals = [
