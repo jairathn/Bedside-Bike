@@ -1455,9 +1455,9 @@ export default function RiskAssessment() {
                 <CardContent className="p-6 space-y-4">
                   <div className="text-sm text-gray-700">
                     <p className="mb-4">
-                      <strong>Evidence-Based Risk Prediction:</strong> This advanced clinical decision support system utilizes 
-                      <em>modified</em> validated risk assessment tools, enhanced with mobility-specific algorithms and trained on 
-                      500,000+ patient outcomes from peer-reviewed literature to deliver precise, personalized risk stratification.
+                      <strong>Evidence-Based Risk Prediction:</strong> This advanced clinical decision support system utilizes
+                      <em>modified</em> validated risk assessment tools, enhanced with mobility-specific algorithms and trained on
+                      ~10,000 patient outcomes to deliver precise, personalized risk stratification.
                     </p>
                     
                     <div className="space-y-3">
