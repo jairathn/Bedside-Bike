@@ -952,6 +952,31 @@ export function ProviderGoalEditor({ patientGoals = [], patientId, onUpdateGoals
           </div>
           )}
 
+          {/* Risk Reductions With Mobility - Dedicated Section */}
+          {patientRiskResults.mobility_benefits?.risk_reductions && (
+          <div className="mt-6 p-4 bg-gradient-to-r from-emerald-50 to-green-50 border border-emerald-200 rounded-lg">
+            <div className="text-sm font-semibold text-emerald-800 mb-3 flex items-center gap-2">
+              <TrendingUp className="w-4 h-4" />
+              Predicted Risk Reductions With Mobility
+            </div>
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+              {Object.entries(patientRiskResults.mobility_benefits.risk_reductions).map(([type, reduction]: [string, any]) => (
+                <div key={type} className="bg-white p-3 rounded-lg border border-emerald-100">
+                  <div className="text-xs font-medium text-gray-600 capitalize mb-1">
+                    {type.replace('_', ' ')}
+                  </div>
+                  <div className="text-lg font-bold text-emerald-600">
+                    ↓{reduction.absolute_reduction_percent?.toFixed(1) || 0}%
+                  </div>
+                  <div className="text-xs text-gray-500">
+                    {(reduction.current_risk * 100)?.toFixed(1)}% → {(reduction.reduced_risk * 100)?.toFixed(1)}%
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+          )}
+
           {/* Mobility Prescription Impact */}
           {patientRiskResults.mobility_recommendation && (
           <div className="p-4 bg-gradient-to-r from-blue-50 to-green-50 border border-blue-200 rounded-lg">
@@ -1388,6 +1413,8 @@ Cancel & Coordinate
             (riskResults.mobility_recommendation.sessions_per_day || 2) : 1050;
 
           // Store risk results for display and update energy target
+          console.log('Provider goal editor received riskResults:', riskResults);
+          console.log('mobility_benefits:', riskResults?.mobility_benefits);
           setPatientRiskResults(riskResults);
           setTotalEnergyTarget(calculatedEnergyTarget);
 
