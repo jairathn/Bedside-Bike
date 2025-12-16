@@ -928,9 +928,9 @@ export function ProviderGoalEditor({ patientGoals = [], patientId, onUpdateGoals
               <div className="text-xs text-green-600 mt-1">
                 {patientRiskResults.dischargeData?.disposition_prediction || 'home_possible'}
               </div>
-              {patientRiskResults.dischargeData?.mobility_benefit_percent > 0 && (
+              {(patientRiskResults.mobility_benefits?.stay_improvements?.home_discharge_improvement > 0) && (
                 <div className="text-xs text-blue-600 mt-2 font-medium">
-                  +{patientRiskResults.dischargeData.mobility_benefit_percent}% improvement with mobility
+                  +{(patientRiskResults.mobility_benefits.stay_improvements.home_discharge_improvement * 100).toFixed(1)}% improvement with mobility
                 </div>
               )}
             </div>
