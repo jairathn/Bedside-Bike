@@ -5,6 +5,7 @@ import { setupVite, serveStatic, log } from "./vite";
 import { logger, errorLogger } from "./logger";
 import sessionConfig from "./session";
 import DeviceBridgeWebSocket from "./websocket";
+import { updateRollingDataWindow } from "./rolling-data";
 
 const app = express();
 
@@ -49,6 +50,9 @@ app.use((req, res, next) => {
 });
 
 (async () => {
+  // Auto-update demo patient data to keep dates current
+  await updateRollingDataWindow();
+
   const server = await registerRoutes(app);
 
   // Initialize WebSocket server for real-time device communication
