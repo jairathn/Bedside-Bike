@@ -250,8 +250,8 @@ function bucketMeds(meds: string[], structuredFlags?: { sedating?: boolean; anti
 // These set baseline risk for a healthy independent patient
 const CALIBRATION = {
   deconditioning: { intercept: -2.0 },   // ~12% baseline
-  vte: { intercept: -4.5 },              // ~1.1% baseline (was -4.18 ~1.5%, reduced for accuracy)
-  falls: { intercept: -5.2 },            // ~0.5% baseline (was -5.8 ~0.3%, increased for accuracy)
+  vte: { intercept: -4.5 },              // ~1.1% baseline (reduced from -4.18 for accuracy)
+  falls: { intercept: -5.8 },            // ~0.3% baseline (conservative - mobility weights drive risk)
   pressure: { intercept: -3.66 },        // ~2.5% baseline
 };
 

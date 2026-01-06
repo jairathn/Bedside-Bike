@@ -9,11 +9,12 @@ import { Textarea } from "@/components/ui/textarea";
 import { Separator } from "@/components/ui/separator";
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
-import { 
-  Calculator, ArrowLeft, Activity, TrendingUp, AlertTriangle, 
+import {
+  Calculator, ArrowLeft, Activity, TrendingUp, AlertTriangle,
   Target, Clock, Calendar, Home, Heart
 } from "lucide-react";
 import { useMutation } from "@tanstack/react-query";
+import { DeconditioningInfoModal } from "@/components/deconditioning-info-modal";
 
 interface AnonymousRiskCalculatorProps {}
 
@@ -791,7 +792,10 @@ export default function AnonymousRiskCalculator({}: AnonymousRiskCalculatorProps
                     <CardContent className="p-4 text-center">
                       {getRiskIcon('deconditioning')}
                       <div className="text-2xl font-bold mt-2">{(riskResults.deconditioning?.probability * 100 || 0).toFixed(1)}%</div>
-                      <div className="text-sm font-medium">Deconditioning</div>
+                      <div className="text-sm font-medium flex items-center justify-center gap-1">
+                        Deconditioning
+                        <DeconditioningInfoModal />
+                      </div>
                       <Badge variant="outline" className={`mt-2 text-xs ${getRiskColor(riskResults.deconditioning?.risk_level || 'low')}`}>
                         {(riskResults.deconditioning?.risk_level || 'low').toUpperCase()} RISK
                       </Badge>
