@@ -7,7 +7,7 @@
 import 'dotenv/config';
 import pg from 'pg';
 import { drizzle } from 'drizzle-orm/node-postgres';
-import { eq } from 'drizzle-orm';
+import { eq, and } from 'drizzle-orm';
 import * as schema from '../shared/schema.postgres';
 
 const pool = new pg.Pool({
@@ -26,7 +26,7 @@ const DEMO_PATIENTS = [
     email: 'hospital.patient@bedside-bike.local',
     firstName: 'Robert',
     lastName: 'Martinez',
-    dob: `${currentYear - 70}-01-01`,
+    dob: '1955-01-01', // Matches UI hardcoded DOB
     daysAdmitted: 5,
     age: 70,
     sex: 'M',
@@ -47,7 +47,7 @@ const DEMO_PATIENTS = [
     email: 'rehab.patient@bedside-bike.local',
     firstName: 'Dorothy',
     lastName: 'Chen',
-    dob: `${currentYear - 82}-01-01`,
+    dob: '1943-01-01', // Matches UI hardcoded DOB
     daysAdmitted: 12,
     age: 82,
     sex: 'F',
@@ -68,7 +68,7 @@ const DEMO_PATIENTS = [
     email: 'snf.patient@bedside-bike.local',
     firstName: 'James',
     lastName: 'Thompson',
-    dob: `${currentYear - 65}-01-01`,
+    dob: '1960-01-01', // Matches UI hardcoded DOB
     daysAdmitted: 17,
     age: 65,
     sex: 'M',
@@ -114,18 +114,32 @@ async function seedDemoPatients() {
   for (const patientData of DEMO_PATIENTS) {
     console.log(`Creating ${patientData.firstName} ${patientData.lastName}...`);
 
-    // Delete existing if present
-    const existing = await db.select().from(schema.users).where(eq(schema.users.email, patientData.email));
-    if (existing.length > 0) {
-      const patientId = existing[0].id;
-      await db.delete(schema.providerPatients).where(eq(schema.providerPatients.patientId, patientId));
-      await db.delete(schema.patientStats).where(eq(schema.patientStats.patientId, patientId));
-      await db.delete(schema.patientGoals).where(eq(schema.patientGoals.patientId, patientId));
-      await db.delete(schema.exerciseSessions).where(eq(schema.exerciseSessions.patientId, patientId));
-      await db.delete(schema.riskAssessments).where(eq(schema.riskAssessments.patientId, patientId));
-      await db.delete(schema.patientProfiles).where(eq(schema.patientProfiles.userId, patientId));
-      await db.delete(schema.users).where(eq(schema.users.id, patientId));
-      console.log(`  Cleaned up existing ${patientData.email}`);
+    // Delete existing if present (by email OR by name+DOB)
+    const existingByEmail = await db.select().from(schema.users).where(eq(schema.users.email, patientData.email));
+    const existingByName = await db.select().from(schema.users).where(
+      and(
+        eq(schema.users.firstName, patientData.firstName),
+        eq(schema.users.lastName, patientData.lastName),
+        eq(schema.users.dateOfBirth, patientData.dob)
+      )
+    );
+
+    // Combine and dedupe
+    const allExisting = [...existingByEmail, ...existingByName];
+    const seenIds = new Set<number>();
+
+    for (const existing of allExisting) {
+      if (seenIds.has(existing.id)) continue;
+      seenIds.add(existing.id);
+
+      await db.delete(schema.providerPatients).where(eq(schema.providerPatients.patientId, existing.id));
+      await db.delete(schema.patientStats).where(eq(schema.patientStats.patientId, existing.id));
+      await db.delete(schema.patientGoals).where(eq(schema.patientGoals.patientId, existing.id));
+      await db.delete(schema.exerciseSessions).where(eq(schema.exerciseSessions.patientId, existing.id));
+      await db.delete(schema.riskAssessments).where(eq(schema.riskAssessments.patientId, existing.id));
+      await db.delete(schema.patientProfiles).where(eq(schema.patientProfiles.userId, existing.id));
+      await db.delete(schema.users).where(eq(schema.users.id, existing.id));
+      console.log(`  Cleaned up existing patient ID ${existing.id} (${existing.email})`);
     }
 
     // Calculate admission date
