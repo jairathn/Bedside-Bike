@@ -1,15 +1,36 @@
 /**
  * risk-calculator.ts
- * 
+ *
  * Hospital Immobility Harm Risk & Mobility Goal Calculator
- * Direct TypeScript port from the Python implementation
- * 
+ *
+ * OUTCOME DEFINITIONS:
+ *
+ * 1. IN-HOSPITAL DECONDITIONING (Hospital-Acquired Functional Decline)
+ *    Definition: Measurable loss of physical function during hospitalization
+ *    Characterized by:
+ *      - Decline in muscle strength (>10% loss of grip or lower extremity strength)
+ *      - Reduced mobility (decline in walking distance, gait speed, or transfers)
+ *      - Loss of ability to perform ADLs independently
+ *      - Decreased aerobic/exercise capacity
+ *    Measurement: Barthel Index decline ≥5 points, or 6-minute walk decline >50m
+ *    Risk factors: Prolonged bedrest, age >65, cognitive impairment, malnutrition,
+ *                  critical illness, polypharmacy, pre-existing frailty
+ *    Literature incidence: 30-60% of hospitalized elderly experience some decline
+ *
+ * 2. VENOUS THROMBOEMBOLISM (VTE)
+ *    Definition: Deep vein thrombosis (DVT) or pulmonary embolism (PE)
+ *    Literature incidence: 1-2% general medical; 2-5% surgical; 5-15% ICU
+ *
+ * 3. INPATIENT FALLS
+ *    Definition: Unplanned descent to floor or lower level during hospitalization
+ *    Literature incidence: 3-5 falls per 1000 patient-days; ~30% cause injury
+ *
+ * 4. PRESSURE INJURIES (Pressure Ulcers/Bedsores)
+ *    Definition: Localized skin/tissue damage from prolonged pressure
+ *    Literature incidence: 2-8% in acute care; 10-25% in ICU
+ *
  * Outputs:
- *   - Probability, Odds Ratio (vs. fully-mobile baseline), and Ordinal Risk for:
- *       * In-hospital deconditioning (functional decline)
- *       * Venous thromboembolism (VTE)
- *       * Inpatient falls
- *       * Pressure injuries (pressure sores)
+ *   - Probability, Odds Ratio (vs. fully-mobile baseline), and Risk Level
  *   - Personalized cycling (Watts) recommendation with duration/frequency
  */
 
@@ -225,12 +246,13 @@ function bucketMeds(meds: string[], structuredFlags?: { sedating?: boolean; anti
   return { sedating, on_anticoagulant: anticoag, on_steroids: steroid };
 }
 
-// Calibration & Weights - Direct from Python
+// Calibration & Weights - Empirically tuned intercepts
+// These set baseline risk for a healthy independent patient
 const CALIBRATION = {
-  deconditioning: { intercept: -2.0 },   // ~12%
-  vte: { intercept: -4.18 },             // ~1.5%
-  falls: { intercept: -5.8 },            // ~0.3% baseline (1-11% max range)
-  pressure: { intercept: -3.66 },        // ~2.5%
+  deconditioning: { intercept: -2.0 },   // ~12% baseline
+  vte: { intercept: -4.5 },              // ~1.1% baseline (was -4.18 ~1.5%, reduced for accuracy)
+  falls: { intercept: -5.2 },            // ~0.5% baseline (was -5.8 ~0.3%, increased for accuracy)
+  pressure: { intercept: -3.66 },        // ~2.5% baseline
 };
 
 // Mobility weights (largest driver across outcomes)
@@ -292,12 +314,12 @@ const W_SPECIFIC = {
     days_immobile_ge3: Math.log(1.6),
   },
   vte: {
-    immobile_ge3: Math.log(1.8),     // additive to mobility category
+    immobile_ge3: Math.log(1.5),     // additive to mobility category (reduced from 1.8)
     active_cancer: Math.log(2.0),
-    history_vte: Math.log(3.0),
-    postop: Math.log(1.8),
-    trauma: Math.log(2.2),
-    no_prophylaxis: Math.log(2.5),
+    history_vte: Math.log(2.5),      // reduced from 3.0 - still major but less extreme
+    postop: Math.log(1.6),           // reduced from 1.8
+    trauma: Math.log(1.8),           // reduced from 2.2 - prevents over-estimation
+    no_prophylaxis: Math.log(2.0),   // reduced from 2.5
   },
   falls: {
     sedating_meds: Math.log(1.8),
@@ -306,6 +328,8 @@ const W_SPECIFIC = {
     orthopedic: Math.log(1.5),
     stroke: Math.log(1.6),
     devices: Math.log(1.3),          // lines/tubes/foley
+    parkinson: Math.log(2.5),        // Parkinson's - major falls risk factor
+    neuropathy: Math.log(1.8),       // Peripheral neuropathy - impaired proprioception
   },
   pressure: {
     moisture: Math.log(1.6),         // incontinence, moisture
@@ -517,8 +541,8 @@ function scoreFalls(f: Record<string, any>): { score: number; factors: string[] 
     factors.push("cog_delirium");
   }
 
-  // meds, neuro/ortho, devices
-  const fallsKeys = ["sedating_meds", "stroke", "devices"];
+  // meds, neuro/ortho, devices, movement disorders
+  const fallsKeys = ["sedating_meds", "stroke", "devices", "parkinson", "neuropathy"];
   for (const key of fallsKeys) {
     if (f[key]) {
       const add = W_SPECIFIC.falls[key as keyof typeof W_SPECIFIC.falls] || W_COMMON[key as keyof typeof W_COMMON];
