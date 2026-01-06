@@ -3,6 +3,7 @@ import { createServer, type Server } from "http";
 import { storage } from "./storage";
 // Authentication will be handled by existing auth system
 import { db } from "./db";
+import { updateRollingDataWindow } from "./rolling-data";
 import { patientStats, users, providerPatients, patientGoals, exerciseSessions } from "@shared/schema";
 import { eq, and } from "drizzle-orm";
 import { calculateRisks } from "./risk-calculator";
@@ -121,6 +122,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Patient/Provider Login
   app.post("/api/auth/login", authLimiter, async (req, res) => {
     try {
+      // Update rolling data for demo patients on any login
+      await updateRollingDataWindow();
+
       // Legacy patient login support (name + DOB)
       if (req.body.firstName && req.body.lastName && req.body.dateOfBirth && !req.body.email) {
         const { firstName, lastName, dateOfBirth, deviceNumber } = req.body;
