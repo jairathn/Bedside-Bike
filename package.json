@@ -16,7 +16,8 @@
     "db:clean-all-demo": "tsx scripts/clean-all-demo-patients.ts",
     "db:debug-all": "tsx scripts/debug-all-users.ts",
     "db:reset": "tsx scripts/init-local-db.ts && tsx scripts/seed-protocols.ts && tsx scripts/seed-protocol-criteria.ts && tsx scripts/seed-demo-patients.ts",
-    "db:verify": "tsx scripts/verify-protocols.ts"
+    "db:verify": "tsx scripts/verify-protocols.ts",
+    "db:rolling-update": "tsx scripts/update-rolling-data.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.37.0",
@@ -54,6 +55,7 @@
     "@types/better-sqlite3": "^7.6.13",
     "@types/memoizee": "^0.4.12",
     "@types/pdfkit": "^0.17.4",
+    "@types/pg": "^8.16.0",
     "better-sqlite3": "^12.5.0",
     "better-sqlite3-session-store": "^0.1.0",
     "class-variance-authority": "^0.7.1",
@@ -80,6 +82,7 @@
     "passport": "^0.7.0",
     "passport-local": "^1.0.0",
     "pdfkit": "^0.17.2",
+    "pg": "^8.16.3",
     "react": "^18.3.1",
     "react-day-picker": "^8.10.1",
     "react-dom": "^18.3.1",
