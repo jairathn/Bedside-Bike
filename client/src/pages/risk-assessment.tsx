@@ -11,6 +11,7 @@ import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { ArrowLeft, Calculator, Activity, Target, Brain, Clock, Calendar, Play, TrendingUp, AlertTriangle, Upload } from "lucide-react";
 import { apiRequest } from "@/lib/queryClient";
+import { DeconditioningInfoModal } from "@/components/deconditioning-info-modal";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/use-auth";
@@ -976,7 +977,10 @@ export default function RiskAssessment() {
                 <div className="grid grid-cols-4 gap-4">
                   <div className="text-center">
                     <div className="text-2xl font-bold">{(riskResults.deconditioning?.probability * 100 || 0).toFixed(1)}%</div>
-                    <div className="text-xs">Deconditioning</div>
+                    <div className="text-xs flex items-center justify-center gap-1">
+                      Deconditioning
+                      <DeconditioningInfoModal triggerClassName="text-white/70 hover:text-white" />
+                    </div>
                   </div>
                   <div className="text-center">
                     <div className="text-2xl font-bold">{(riskResults.vte?.probability * 100 || 0).toFixed(1)}%</div>

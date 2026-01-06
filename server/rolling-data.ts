@@ -48,7 +48,18 @@ export async function updateRollingDataWindow(): Promise<void> {
         newAdmissionDate.setDate(today.getDate() - patientConfig.daysAdmitted);
         const newAdmissionDateStr = newAdmissionDate.toISOString().split('T')[0];
 
-        // Check if already up to date
+        // Always ensure risk assessment has non-round probabilities
+        await db
+          .update(pgSchema.riskAssessments)
+          .set({
+            deconditioning: { probability: 0.647, severity: 'moderate' },
+            vte: { probability: 0.352, severity: 'moderate' },
+            falls: { probability: 0.548, severity: 'moderate' },
+            pressure: { probability: 0.403, severity: 'low' }
+          })
+          .where(eq(pgSchema.riskAssessments.patientId, patient.id));
+
+        // Check if dates already up to date
         if (patient.admissionDate === newAdmissionDateStr) continue;
 
         // Get existing sessions to calculate day shift
@@ -128,12 +139,6 @@ export async function updateRollingDataWindow(): Promise<void> {
           })
           .where(eq(pgSchema.patientProfiles.userId, patient.id));
 
-        // Update risk assessment
-        await db
-          .update(pgSchema.riskAssessments)
-          .set({ createdAt: new Date() })
-          .where(eq(pgSchema.riskAssessments.patientId, patient.id));
-
         // Update protocol assignment
         const assignments = await db
           .select()
@@ -175,6 +180,17 @@ export async function updateRollingDataWindow(): Promise<void> {
         const newAdmissionDate = new Date(today);
         newAdmissionDate.setDate(today.getDate() - patientConfig.daysAdmitted);
         const newAdmissionDateStr = newAdmissionDate.toISOString().split('T')[0];
+
+        // Always ensure risk assessment has non-round probabilities
+        sqliteDb.prepare(`UPDATE risk_assessments SET
+          deconditioning = ?, vte = ?, falls = ?, pressure = ?
+          WHERE patient_id = ?`).run(
+          JSON.stringify({ probability: 0.647, severity: 'moderate' }),
+          JSON.stringify({ probability: 0.352, severity: 'moderate' }),
+          JSON.stringify({ probability: 0.548, severity: 'moderate' }),
+          JSON.stringify({ probability: 0.403, severity: 'low' }),
+          patient.id
+        );
 
         if (patient.admission_date === newAdmissionDateStr) continue;
 
@@ -237,9 +253,6 @@ export async function updateRollingDataWindow(): Promise<void> {
         // Update related records
         sqliteDb.prepare('UPDATE patient_profiles SET days_immobile = ?, updated_at = ? WHERE user_id = ?')
           .run(patientConfig.daysAdmitted, Math.floor(Date.now() / 1000), patient.id);
-
-        sqliteDb.prepare('UPDATE risk_assessments SET created_at = ? WHERE patient_id = ?')
-          .run(Math.floor(Date.now() / 1000), patient.id);
 
         const protocolAssignment = sqliteDb.prepare('SELECT * FROM patient_protocol_assignments WHERE patient_id = ?').get(patient.id) as any;
         if (protocolAssignment) {

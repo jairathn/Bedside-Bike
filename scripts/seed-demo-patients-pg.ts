@@ -178,13 +178,13 @@ async function seedDemoPatients() {
       daysImmobile: patientData.daysAdmitted
     });
 
-    // Create risk assessment
+    // Create risk assessment with realistic non-round probabilities
     await db.insert(schema.riskAssessments).values({
       patientId: patient.id,
-      deconditioning: { probability: 0.65, severity: 'moderate' },
-      vte: { probability: 0.35, severity: 'moderate' },
-      falls: { probability: 0.55, severity: 'moderate' },
-      pressure: { probability: 0.40, severity: 'low' },
+      deconditioning: { probability: 0.647, severity: 'moderate' },
+      vte: { probability: 0.352, severity: 'moderate' },
+      falls: { probability: 0.548, severity: 'moderate' },
+      pressure: { probability: 0.403, severity: 'low' },
       mobilityRecommendation: 'Progressive mobilization protocol recommended'
     });
 

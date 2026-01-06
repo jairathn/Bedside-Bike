@@ -10,6 +10,7 @@ import { Separator } from "@/components/ui/separator";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Calculator, Zap, Clock, Settings, TrendingUp, AlertTriangle, CheckCircle } from "lucide-react";
 import { apiRequest } from "@/lib/queryClient";
+import { DeconditioningInfoModal } from "./deconditioning-info-modal";
 import { useToast } from "@/hooks/use-toast";
 
 interface RiskCalculatorModalProps {
@@ -206,8 +207,11 @@ export function RiskCalculatorModal({
                     return (
                       <div key={riskType} className="p-3 border rounded-lg">
                         <div className="flex items-center justify-between mb-2">
-                          <span className="font-medium capitalize">{riskType}</span>
-                          {risk.probability >= 4 ? 
+                          <span className="font-medium capitalize flex items-center gap-1">
+                            {riskType}
+                            {riskType === 'deconditioning' && <DeconditioningInfoModal />}
+                          </span>
+                          {risk.probability >= 4 ?
                             <AlertTriangle className="w-4 h-4 text-orange-500" /> :
                             <CheckCircle className="w-4 h-4 text-green-500" />
                           }

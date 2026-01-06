@@ -730,22 +730,22 @@ export async function registerRoutes(app: Express): Promise<Server> {
           deconditioning: {
             current_risk: deconProb,
             reduced_risk: deconProb * 0.85, // 15% relative reduction
-            absolute_reduction_percent: Math.round(deconProb * 100 * 0.15)
+            absolute_reduction_percent: Math.round(deconProb * 100 * 0.15 * 10) / 10
           },
           vte: {
             current_risk: vteProb,
             reduced_risk: vteProb * 0.90, // 10% relative reduction
-            absolute_reduction_percent: Math.round(vteProb * 100 * 0.10)
+            absolute_reduction_percent: Math.round(vteProb * 100 * 0.10 * 10) / 10
           },
           falls: {
             current_risk: fallsProb,
             reduced_risk: fallsProb * 0.88, // 12% relative reduction
-            absolute_reduction_percent: Math.round(fallsProb * 100 * 0.12)
+            absolute_reduction_percent: Math.round(fallsProb * 100 * 0.12 * 10) / 10
           },
           pressure: {
             current_risk: pressureProb,
             reduced_risk: pressureProb * 0.92, // 8% relative reduction
-            absolute_reduction_percent: Math.round(pressureProb * 100 * 0.08)
+            absolute_reduction_percent: Math.round(pressureProb * 100 * 0.08 * 10) / 10
           }
         };
 

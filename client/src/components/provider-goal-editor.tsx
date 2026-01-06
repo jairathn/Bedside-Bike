@@ -8,6 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { Target, Zap, Clock, Settings, Save, RotateCcw, Calculator, AlertTriangle, CheckCircle, Shield, History, Calendar, HelpCircle, Brain, Activity, TrendingUp, ArrowRight, Info, Stethoscope, Pill } from "lucide-react";
 import { ComprehensiveRiskCalculatorModal } from "./comprehensive-risk-calculator-modal";
+import { DeconditioningInfoModal } from "./deconditioning-info-modal";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { useAuth } from "@/hooks/use-auth";
 import { apiRequest } from "@/lib/queryClient";
@@ -733,13 +734,16 @@ export function ProviderGoalEditor({ patientGoals = [], patientId, onUpdateGoals
                 ? 'bg-yellow-50 border-yellow-200'
                 : 'bg-green-50 border-green-200'
             }`}>
-              <div className={`text-xs font-medium mb-1 ${
-                patientRiskResults.deconditioning?.probability > 0.25 
-                  ? 'text-red-700' 
-                  : patientRiskResults.deconditioning?.probability > 0.15 
+              <div className={`text-xs font-medium mb-1 flex items-center justify-center gap-1 ${
+                patientRiskResults.deconditioning?.probability > 0.25
+                  ? 'text-red-700'
+                  : patientRiskResults.deconditioning?.probability > 0.15
                   ? 'text-yellow-700'
                   : 'text-green-700'
-              }`}>DECONDITIONING</div>
+              }`}>
+                DECONDITIONING
+                <DeconditioningInfoModal />
+              </div>
               <div className={`text-2xl font-bold ${
                 patientRiskResults.deconditioning?.probability > 0.25 
                   ? 'text-red-600' 
