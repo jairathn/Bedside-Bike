@@ -2106,6 +2106,7 @@ async function seedPatientWithMockData() {
 async function generateRecentSessionData(patientId: number, numDays: number) {
   const sessions = [];
   const today = new Date();
+  const usePostgres = process.env.USE_POSTGRES === 'true';
   
   // Generate sessions for the last numDays days
   for (let daysAgo = numDays - 1; daysAgo >= 0; daysAgo--) {
@@ -2131,15 +2132,19 @@ async function generateRecentSessionData(patientId: number, numDays: number) {
       const maxPower = Math.floor(avgPower * (1.3 + Math.random() * 0.2));
       
       // Create proper timestamps
-      const startTime = new Date(sessionDate);
-      startTime.setHours(9 + sessionNum * 5 + Math.floor(Math.random() * 2)); // Morning and afternoon sessions
-      const endTime = new Date(startTime.getTime() + duration * 1000);
+      const startTimeDate = new Date(sessionDate);
+      startTimeDate.setHours(9 + sessionNum * 5 + Math.floor(Math.random() * 2)); // Morning and afternoon sessions
+      const endTimeDate = new Date(startTimeDate.getTime() + duration * 1000);
+
+      // PostgreSQL expects Date objects or ISO strings, SQLite expects Unix timestamps
+      const startTime = usePostgres ? startTimeDate : Math.floor(startTimeDate.getTime() / 1000);
+      const endTime = usePostgres ? endTimeDate : Math.floor(endTimeDate.getTime() / 1000);
 
       sessions.push({
         patientId,
         sessionDate: sessionDate.toISOString().split('T')[0],
-        startTime,
-        endTime,
+        startTime: startTime as any,
+        endTime: endTime as any,
         duration,
         avgPower: avgPower.toString(),
         maxPower: maxPower.toString(),
@@ -2147,15 +2152,24 @@ async function generateRecentSessionData(patientId: number, numDays: number) {
         stopsAndStarts: Math.max(0, 6 - Math.floor(progressFactor * 4)), // 6 down to 2
         isCompleted: true,
         sessionNotes: `Session ${sessionNum + 1}: Good effort, patient showing steady progress`
-      });
+      } as any);
     }
   }
   
   // Create all sessions in database
-  for (const session of sessions) {
-    await storage.createSession(session);
+  if (usePostgres) {
+    // For PostgreSQL, use PostgreSQL schema to avoid SQLite timestamp conversion
+    const pgSchema = await import('@shared/schema.postgres');
+    for (const session of sessions) {
+      await db.insert(pgSchema.exerciseSessions).values(session);
+    }
+  } else {
+    // For SQLite, use storage layer
+    for (const session of sessions) {
+      await storage.createSession(session);
+    }
   }
-  
+
   return sessions;
 }
 
