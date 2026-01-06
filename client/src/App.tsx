@@ -27,6 +27,7 @@ import MobilityScoresPage from "@/pages/personalization/mobility-scores";
 import CompetitionCenterPage from "@/pages/personalization/competition-center";
 import InsuranceReportsPage from "@/pages/personalization/insurance-reports";
 import BilateralForcePage from "@/pages/personalization/bilateral-force";
+import DischargeReadinessPage from "@/pages/personalization/discharge-readiness";
 
 function Router() {
   const [location, setLocation] = useLocation();
@@ -95,6 +96,7 @@ function Router() {
       <Route path="/competitions" component={user ? CompetitionCenterPage : () => <AuthPage onAuthSuccess={handleAuthSuccess} />} />
       <Route path="/insurance-reports" component={user?.userType === 'provider' ? InsuranceReportsPage : () => <AuthPage onAuthSuccess={handleAuthSuccess} />} />
       <Route path="/bilateral-force" component={user?.userType === 'provider' ? BilateralForcePage : () => <AuthPage onAuthSuccess={handleAuthSuccess} />} />
+      <Route path="/discharge-readiness" component={user?.userType === 'provider' ? DischargeReadinessPage : () => <AuthPage onAuthSuccess={handleAuthSuccess} />} />
 
       <Route component={NotFound} />
     </Switch>

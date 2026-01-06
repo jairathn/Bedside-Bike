@@ -1768,6 +1768,212 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // ============================================================================
+  // DISCHARGE READINESS SCORE (Elderly Mobility Scale) ROUTES
+  // ============================================================================
+
+  // Get all EMS assessments for a patient
+  app.get("/api/patients/:patientId/ems-assessments", async (req, res) => {
+    try {
+      const patientId = parseInt(req.params.patientId);
+      const { emsAssessments } = await import("@shared/schema");
+      const assessments = await db.select()
+        .from(emsAssessments)
+        .where(eq(emsAssessments.patientId, patientId))
+        .orderBy(emsAssessments.assessedAt);
+      res.json(assessments);
+    } catch (error) {
+      console.error("Error fetching EMS assessments:", error);
+      res.status(500).json({ error: "Failed to fetch EMS assessments" });
+    }
+  });
+
+  // Get a specific EMS assessment by ID
+  app.get("/api/ems-assessments/:id", async (req, res) => {
+    try {
+      const assessmentId = parseInt(req.params.id);
+      const { emsAssessments } = await import("@shared/schema");
+      const [assessment] = await db.select()
+        .from(emsAssessments)
+        .where(eq(emsAssessments.id, assessmentId))
+        .limit(1);
+
+      if (!assessment) {
+        return res.status(404).json({ error: "EMS assessment not found" });
+      }
+
+      res.json(assessment);
+    } catch (error) {
+      console.error("Error fetching EMS assessment:", error);
+      res.status(500).json({ error: "Failed to fetch EMS assessment" });
+    }
+  });
+
+  // Create a new EMS assessment
+  app.post("/api/patients/:patientId/ems-assessments", createLimiter, async (req, res) => {
+    try {
+      const patientId = parseInt(req.params.patientId);
+      const { emsAssessments } = await import("@shared/schema");
+      const {
+        providerId,
+        lyingToSitting,
+        sittingToLying,
+        sittingToStanding,
+        standing,
+        gait,
+        timedWalk,
+        functionalReach,
+        timedWalkSeconds,
+        functionalReachCm,
+        notes,
+        walkingAidUsed,
+        assessedAt
+      } = req.body;
+
+      // Calculate total score
+      const totalScore = lyingToSitting + sittingToLying + sittingToStanding +
+                        standing + gait + timedWalk + functionalReach;
+
+      // Determine tier based on score
+      let tier: string;
+      if (totalScore > 14) {
+        tier = 'home';
+      } else if (totalScore >= 10) {
+        tier = 'borderline';
+      } else {
+        tier = 'dependent';
+      }
+
+      const [newAssessment] = await db.insert(emsAssessments).values({
+        patientId,
+        providerId: providerId || null,
+        assessedAt: assessedAt ? new Date(assessedAt) : new Date(),
+        lyingToSitting,
+        sittingToLying,
+        sittingToStanding,
+        standing,
+        gait,
+        timedWalk,
+        functionalReach,
+        timedWalkSeconds: timedWalkSeconds || null,
+        functionalReachCm: functionalReachCm || null,
+        totalScore,
+        tier,
+        notes: notes || null,
+        walkingAidUsed: walkingAidUsed || null
+      }).returning();
+
+      res.json(newAssessment);
+    } catch (error) {
+      console.error("Error creating EMS assessment:", error);
+      res.status(500).json({ error: "Failed to create EMS assessment" });
+    }
+  });
+
+  // Update an existing EMS assessment
+  app.patch("/api/ems-assessments/:id", async (req, res) => {
+    try {
+      const assessmentId = parseInt(req.params.id);
+      const { emsAssessments } = await import("@shared/schema");
+      const updates = req.body;
+
+      // If score components are being updated, recalculate total and tier
+      if (updates.lyingToSitting !== undefined || updates.sittingToLying !== undefined ||
+          updates.sittingToStanding !== undefined || updates.standing !== undefined ||
+          updates.gait !== undefined || updates.timedWalk !== undefined ||
+          updates.functionalReach !== undefined) {
+
+        // Get current assessment to fill in missing values
+        const [current] = await db.select()
+          .from(emsAssessments)
+          .where(eq(emsAssessments.id, assessmentId))
+          .limit(1);
+
+        if (!current) {
+          return res.status(404).json({ error: "EMS assessment not found" });
+        }
+
+        const lyingToSitting = updates.lyingToSitting ?? current.lyingToSitting;
+        const sittingToLying = updates.sittingToLying ?? current.sittingToLying;
+        const sittingToStanding = updates.sittingToStanding ?? current.sittingToStanding;
+        const standing = updates.standing ?? current.standing;
+        const gait = updates.gait ?? current.gait;
+        const timedWalk = updates.timedWalk ?? current.timedWalk;
+        const functionalReach = updates.functionalReach ?? current.functionalReach;
+
+        updates.totalScore = lyingToSitting + sittingToLying + sittingToStanding +
+                            standing + gait + timedWalk + functionalReach;
+
+        if (updates.totalScore > 14) {
+          updates.tier = 'home';
+        } else if (updates.totalScore >= 10) {
+          updates.tier = 'borderline';
+        } else {
+          updates.tier = 'dependent';
+        }
+      }
+
+      const [updated] = await db.update(emsAssessments)
+        .set(updates)
+        .where(eq(emsAssessments.id, assessmentId))
+        .returning();
+
+      if (!updated) {
+        return res.status(404).json({ error: "EMS assessment not found" });
+      }
+
+      res.json(updated);
+    } catch (error) {
+      console.error("Error updating EMS assessment:", error);
+      res.status(500).json({ error: "Failed to update EMS assessment" });
+    }
+  });
+
+  // Delete an EMS assessment
+  app.delete("/api/ems-assessments/:id", async (req, res) => {
+    try {
+      const assessmentId = parseInt(req.params.id);
+      const { emsAssessments } = await import("@shared/schema");
+
+      const [deleted] = await db.delete(emsAssessments)
+        .where(eq(emsAssessments.id, assessmentId))
+        .returning();
+
+      if (!deleted) {
+        return res.status(404).json({ error: "EMS assessment not found" });
+      }
+
+      res.json({ success: true, deleted });
+    } catch (error) {
+      console.error("Error deleting EMS assessment:", error);
+      res.status(500).json({ error: "Failed to delete EMS assessment" });
+    }
+  });
+
+  // Get latest EMS assessment for a patient
+  app.get("/api/patients/:patientId/ems-assessment/latest", async (req, res) => {
+    try {
+      const patientId = parseInt(req.params.patientId);
+      const { emsAssessments } = await import("@shared/schema");
+      const { desc } = await import("drizzle-orm");
+
+      const [latest] = await db.select()
+        .from(emsAssessments)
+        .where(eq(emsAssessments.patientId, patientId))
+        .orderBy(desc(emsAssessments.assessedAt))
+        .limit(1);
+
+      if (!latest) {
+        return res.status(404).json({ error: "No EMS assessment found for this patient" });
+      }
+
+      res.json(latest);
+    } catch (error) {
+      console.error("Error fetching latest EMS assessment:", error);
+      res.status(500).json({ error: "Failed to fetch latest EMS assessment" });
+    }
+  });
+
   // Register Personalization Routes (Tier 1 & Tier 2 Patent Features)
   registerPersonalizationRoutes(app);
 

@@ -32,7 +32,8 @@ import {
   AlertTriangle,
   BarChart3,
   Menu,
-  X
+  X,
+  ClipboardCheck
 } from "lucide-react";
 import { apiRequest } from "@/lib/queryClient";
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar } from 'recharts';
@@ -228,6 +229,7 @@ const navigationItems = [
   {
     category: "Assessment & Scoring",
     items: [
+      { name: "Discharge Readiness", href: "/discharge-readiness", icon: ClipboardCheck, description: "Elderly Mobility Scale calculator" },
       { name: "Mobility Scores", href: "/mobility-scores", icon: BarChart3, description: "Multi-modal scoring system" },
       { name: "Bilateral Force", href: "/bilateral-force", icon: ArrowLeftRight, description: "Force symmetry analysis" },
     ]
@@ -468,6 +470,17 @@ export default function ProviderDashboard() {
                   <Target className="w-4 h-4 mr-2" />
                   {selectedPatient ? `Personalized Rx for ${selectedPatient.firstName}` : 'Personalized Prescription'}
                 </Button>
+                <Button
+                  variant="outline"
+                  className="w-full justify-start bg-green-50 border-green-200 hover:bg-green-100"
+                  onClick={() => {
+                    setLocation('/discharge-readiness');
+                    setNavMenuOpen(false);
+                  }}
+                >
+                  <ClipboardCheck className="w-4 h-4 mr-2 text-green-600" />
+                  {selectedPatient ? `Discharge Readiness for ${selectedPatient.firstName}` : 'Discharge Readiness Score'}
+                </Button>
               </div>
             </div>
 
@@ -581,7 +594,7 @@ export default function ProviderDashboard() {
                       <div className="text-center p-4 bg-orange-50 rounded-lg">
                         <TrendingUp className="w-6 h-6 text-orange-600 mx-auto mb-2" />
                         <p className="text-2xl font-bold text-orange-600">
-                          {recentSessions && recentSessions.length > 0 ? 
+                          {recentSessions && recentSessions.length > 0 ?
                             Math.round(recentSessions.reduce((sum, s) => sum + parseFloat(s.avgPower || '0'), 0) / recentSessions.length * 10) / 10 :
                             0
                           }W
@@ -595,6 +608,24 @@ export default function ProviderDashboard() {
                         </p>
                         <p className="text-sm text-gray-600">Active Goals</p>
                       </div>
+                    </div>
+
+                    {/* Quick Assessment Action */}
+                    <div className="flex items-center gap-4 p-4 bg-gradient-to-r from-green-50 to-emerald-50 rounded-lg border border-green-200">
+                      <div className="flex-shrink-0 w-12 h-12 bg-green-500 rounded-full flex items-center justify-center">
+                        <ClipboardCheck className="w-6 h-6 text-white" />
+                      </div>
+                      <div className="flex-1">
+                        <h4 className="font-medium text-gray-900">Discharge Readiness Assessment</h4>
+                        <p className="text-sm text-gray-600">Evaluate mobility using the validated Elderly Mobility Scale</p>
+                      </div>
+                      <Button
+                        className="bg-green-600 hover:bg-green-700"
+                        onClick={() => setLocation('/discharge-readiness')}
+                      >
+                        <ClipboardCheck className="w-4 h-4 mr-2" />
+                        Assess Now
+                      </Button>
                     </div>
                   </CardContent>
                 </Card>

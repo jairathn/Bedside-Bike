@@ -595,6 +595,43 @@ export const insuranceReports = sqliteTable("insurance_reports", {
   createdAt: integer("created_at", { mode: 'timestamp' }).default(sql`(unixepoch())`),
 });
 
+// Elderly Mobility Scale (EMS) / Discharge Readiness Assessments
+export const emsAssessments = sqliteTable("ems_assessments", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  patientId: integer("patient_id").notNull().references(() => users.id),
+  providerId: integer("provider_id").references(() => users.id),
+
+  // Assessment timestamp
+  assessedAt: integer("assessed_at", { mode: 'timestamp' }).notNull(),
+
+  // EMS Component Scores (7 components, max 20 points total)
+  lyingToSitting: integer("lying_to_sitting").notNull(), // 0-2
+  sittingToLying: integer("sitting_to_lying").notNull(), // 0-2
+  sittingToStanding: integer("sitting_to_standing").notNull(), // 0-3
+  standing: integer("standing").notNull(), // 0-3
+  gait: integer("gait").notNull(), // 0-3
+  timedWalk: integer("timed_walk").notNull(), // 0-3
+  functionalReach: integer("functional_reach").notNull(), // 0, 2, or 4
+
+  // Recorded raw values for timed walk and functional reach
+  timedWalkSeconds: real("timed_walk_seconds"), // Actual time in seconds
+  functionalReachCm: real("functional_reach_cm"), // Actual reach in cm
+
+  // Total score (calculated)
+  totalScore: integer("total_score").notNull(), // 0-20
+
+  // Tier classification
+  tier: text("tier").notNull(), // 'home', 'borderline', 'dependent'
+
+  // Clinical notes
+  notes: text("notes"),
+
+  // Walking aid used during assessment
+  walkingAidUsed: text("walking_aid_used"), // 'none', 'stick', 'frame', 'rollator', 'other'
+
+  createdAt: integer("created_at", { mode: 'timestamp' }).default(sql`(unixepoch())`),
+});
+
 // Fall risk predictions - enhanced fall risk with exercise data (1.1)
 export const fallRiskPredictions = sqliteTable("fall_risk_predictions", {
   id: integer("id").primaryKey({ autoIncrement: true }),
@@ -800,6 +837,7 @@ export const insertVirtualCompetitionSchema = createInsertSchema(virtualCompetit
 export const insertCompetitionParticipantSchema = createInsertSchema(competitionParticipants);
 export const insertInsuranceReportSchema = createInsertSchema(insuranceReports);
 export const insertFallRiskPredictionSchema = createInsertSchema(fallRiskPredictions);
+export const insertEmsAssessmentSchema = createInsertSchema(emsAssessments);
 
 // Type exports for new tables
 export type PatientPersonalizationProfile = typeof patientPersonalizationProfiles.$inferSelect;
@@ -837,6 +875,9 @@ export type InsertInsuranceReport = typeof insuranceReports.$inferInsert;
 
 export type FallRiskPrediction = typeof fallRiskPredictions.$inferSelect;
 export type InsertFallRiskPrediction = typeof fallRiskPredictions.$inferInsert;
+
+export type EmsAssessment = typeof emsAssessments.$inferSelect;
+export type InsertEmsAssessment = typeof emsAssessments.$inferInsert;
 
 // Clinical protocol types
 export type ClinicalProtocol = typeof clinicalProtocols.$inferSelect;
