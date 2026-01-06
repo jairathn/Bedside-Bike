@@ -721,21 +721,34 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // If assessment is missing mobility_benefits (legacy assessments), generate them
       if (!assessment.mobility_benefits && assessment.deconditioning && assessment.vte && assessment.falls && assessment.pressure) {
         // Generate mobility benefits based on existing risk data
+        const deconProb = assessment.deconditioning.probability || 0;
+        const vteProb = assessment.vte.probability || 0;
+        const fallsProb = assessment.falls.probability || 0;
+        const pressureProb = assessment.pressure.probability || 0;
+
         const riskReductions = {
           deconditioning: {
-            absolute_reduction_percent: Math.round(assessment.deconditioning.probability * 100 * 0.15) // 15% relative reduction
+            current_risk: deconProb,
+            reduced_risk: deconProb * 0.85, // 15% relative reduction
+            absolute_reduction_percent: Math.round(deconProb * 100 * 0.15)
           },
           vte: {
-            absolute_reduction_percent: Math.round(assessment.vte.probability * 100 * 0.10) // 10% relative reduction  
+            current_risk: vteProb,
+            reduced_risk: vteProb * 0.90, // 10% relative reduction
+            absolute_reduction_percent: Math.round(vteProb * 100 * 0.10)
           },
           falls: {
-            absolute_reduction_percent: Math.round(assessment.falls.probability * 100 * 0.12) // 12% relative reduction
+            current_risk: fallsProb,
+            reduced_risk: fallsProb * 0.88, // 12% relative reduction
+            absolute_reduction_percent: Math.round(fallsProb * 100 * 0.12)
           },
           pressure: {
-            absolute_reduction_percent: Math.round(assessment.pressure.probability * 100 * 0.08) // 8% relative reduction
+            current_risk: pressureProb,
+            reduced_risk: pressureProb * 0.92, // 8% relative reduction
+            absolute_reduction_percent: Math.round(pressureProb * 100 * 0.08)
           }
         };
-        
+
         assessment.mobility_benefits = {
           risk_reductions: riskReductions
         };
