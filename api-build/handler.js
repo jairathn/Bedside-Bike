@@ -13903,7 +13903,7 @@ if (!isVercel) {
   })();
 }
 
-// api/index.ts
+// api/_handler.ts
 async function handler(req, res) {
   const app2 = await getApp();
   return app2(req, res);
