@@ -9,6 +9,9 @@ import { updateRollingDataWindow } from "./rolling-data";
 
 const app = express();
 
+// Check if running on Vercel
+const isVercel = process.env.VERCEL === '1';
+
 // Trust proxy - needed for rate limiting to work correctly in development/production
 // This allows Express to trust the X-Forwarded-* headers
 app.set('trust proxy', true);
@@ -49,18 +52,12 @@ app.use((req, res, next) => {
   next();
 });
 
-(async () => {
+// Initialize app (for both Vercel and standalone)
+async function initializeApp() {
   // Auto-update demo patient data to keep dates current
   await updateRollingDataWindow();
 
-  const server = await registerRoutes(app);
-
-  // Initialize WebSocket server for real-time device communication
-  const wsServer = new DeviceBridgeWebSocket(server);
-  logger.info('WebSocket server ready for device and provider connections');
-
-  // Make WebSocket server accessible to routes if needed
-  (app as any).wsServer = wsServer;
+  await registerRoutes(app);
 
   // Error logging middleware
   app.use(errorLogger);
@@ -73,29 +70,59 @@ app.use((req, res, next) => {
     res.status(status).json({ message });
   });
 
-  // importantly only setup vite in development and after
-  // setting up all the other routes so the catch-all route
-  // doesn't interfere with the other routes
-  if (app.get("env") === "development") {
-    await setupVite(app, server);
-  } else {
+  // Serve static files in production
+  if (!isVercel && app.get("env") !== "development") {
     serveStatic(app);
   }
 
-  // ALWAYS serve the app on port 5000
-  // this serves both the API and the client.
-  // It is the only port that is not firewalled.
-  const port = 5000;
-  server.listen({
-    port,
-    host: "0.0.0.0",
-    reusePort: true,
-  }, () => {
-    log(`serving on port ${port}`);
-    logger.info(`Bedside Bike API server started on port ${port}`, {
+  return app;
+}
+
+// For Vercel: export the app
+let appPromise: Promise<express.Express> | null = null;
+export async function getApp() {
+  if (!appPromise) {
+    appPromise = initializeApp();
+  }
+  return appPromise;
+}
+
+// Export for Vercel serverless
+export default app;
+
+// Standalone server mode (not Vercel)
+if (!isVercel) {
+  (async () => {
+    await initializeApp();
+
+    const http = await import('http');
+    const server = http.createServer(app);
+
+    // Initialize WebSocket server for real-time device communication
+    const wsServer = new DeviceBridgeWebSocket(server);
+    logger.info('WebSocket server ready for device and provider connections');
+
+    // Make WebSocket server accessible to routes if needed
+    (app as any).wsServer = wsServer;
+
+    // Setup Vite in development
+    if (app.get("env") === "development") {
+      await setupVite(app, server);
+    }
+
+    // ALWAYS serve the app on port 5000
+    const port = 5000;
+    server.listen({
       port,
-      environment: process.env.NODE_ENV || 'development',
-      database: process.env.USE_LOCAL_DB === 'true' ? 'SQLite' : 'Azure SQL'
+      host: "0.0.0.0",
+      reusePort: true,
+    }, () => {
+      log(`serving on port ${port}`);
+      logger.info(`Bedside Bike API server started on port ${port}`, {
+        port,
+        environment: process.env.NODE_ENV || 'development',
+        database: process.env.USE_LOCAL_DB === 'true' ? 'SQLite' : 'Azure SQL'
+      });
     });
-  });
-})();
+  })();
+}
