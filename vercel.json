@@ -3,15 +3,10 @@
   "version": 2,
   "buildCommand": "npm run build",
   "outputDirectory": "dist/public",
-  "functions": {
-    "api-build/index.js": {
-      "includeFiles": "api-build/**"
-    }
-  },
   "rewrites": [
     {
       "source": "/api/(.*)",
-      "destination": "/api-build/index.js"
+      "destination": "/api"
     },
     {
       "source": "/(.*)",
