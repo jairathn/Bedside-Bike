@@ -5,7 +5,6 @@
   "outputDirectory": "dist/public",
   "functions": {
     "api-build/index.js": {
-      "runtime": "@vercel/node@3",
       "includeFiles": "api-build/**"
     }
   },
