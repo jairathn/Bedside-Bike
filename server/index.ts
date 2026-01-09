@@ -1,16 +1,14 @@
 import express, { type Request, Response, NextFunction } from "express";
 import session from "express-session";
 import { registerRoutes } from "./routes";
-import { setupVite, serveStatic, log } from "./vite";
 import { logger, errorLogger } from "./logger";
 import sessionConfig from "./session";
-import DeviceBridgeWebSocket from "./websocket";
 import { updateRollingDataWindow } from "./rolling-data";
-
-const app = express();
 
 // Check if running on Vercel
 const isVercel = process.env.VERCEL === '1';
+
+const app = express();
 
 // Trust proxy - needed for rate limiting to work correctly in development/production
 // This allows Express to trust the X-Forwarded-* headers
@@ -95,7 +93,11 @@ if (!isVercel) {
   (async () => {
     await initializeApp();
 
+    // Dynamic imports to avoid bundling Vite/Rollup for serverless
     const http = await import('http');
+    const { setupVite, serveStatic, log } = await import('./vite');
+    const { default: DeviceBridgeWebSocket } = await import('./websocket');
+
     const server = http.createServer(app);
 
     // Initialize WebSocket server for real-time device communication
@@ -105,9 +107,11 @@ if (!isVercel) {
     // Make WebSocket server accessible to routes if needed
     (app as any).wsServer = wsServer;
 
-    // Setup Vite in development
+    // Setup Vite in development, serve static in production
     if (app.get("env") === "development") {
       await setupVite(app, server);
+    } else {
+      serveStatic(app);
     }
 
     // ALWAYS serve the app on port 5000
