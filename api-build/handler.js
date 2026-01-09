@@ -1,5 +1,11 @@
 var __defProp = Object.defineProperty;
 var __getOwnPropNames = Object.getOwnPropertyNames;
+var __require = /* @__PURE__ */ ((x) => typeof require !== "undefined" ? require : typeof Proxy !== "undefined" ? new Proxy(x, {
+  get: (a, b) => (typeof require !== "undefined" ? require : a)[b]
+}) : x)(function(x) {
+  if (typeof require !== "undefined") return require.apply(this, arguments);
+  throw Error('Dynamic require of "' + x + '" is not supported');
+});
 var __esm = (fn, res) => function __init() {
   return fn && (res = (0, fn[__getOwnPropNames(fn)[0]])(fn = 0)), res;
 };
@@ -13440,41 +13446,42 @@ init_logger();
 // server/session.ts
 init_logger();
 import session from "express-session";
-import connectSqlite3 from "connect-sqlite3";
-var SQLiteStore = connectSqlite3(session);
+var isVercel = process.env.VERCEL === "1";
 var SESSION_SECRET = process.env.SESSION_SECRET || "bedside-bike-development-secret-change-in-production";
 if (!process.env.SESSION_SECRET && process.env.NODE_ENV === "production") {
   logger.warn("No SESSION_SECRET environment variable set! Using default (insecure for production)");
 }
+var sessionStore;
+if (!isVercel) {
+  try {
+    const connectSqlite3 = __require("connect-sqlite3");
+    const SQLiteStore = connectSqlite3(session);
+    sessionStore = new SQLiteStore({
+      db: "sessions.db",
+      dir: "./data"
+    });
+    logger.info("Session store configured", { store: "SQLite", sessionDb: "data/sessions.db" });
+  } catch (err) {
+    logger.warn("SQLite session store not available, using memory store");
+  }
+} else {
+  logger.info("Session store configured", { store: "Memory (Vercel serverless)" });
+}
 var sessionConfig = {
-  store: new SQLiteStore({
-    db: "sessions.db",
-    dir: "./data"
-  }),
+  store: sessionStore,
+  // undefined = use default MemoryStore
   secret: SESSION_SECRET,
   resave: false,
-  // Don't save session if unmodified
   saveUninitialized: false,
-  // Don't create session until something stored
   cookie: {
     secure: process.env.NODE_ENV === "production",
-    // HTTPS only in production
     httpOnly: true,
-    // Prevent XSS attacks
     maxAge: 30 * 24 * 60 * 60 * 1e3,
     // 30 days
     sameSite: "lax"
-    // CSRF protection
   },
   name: "bedside.sid"
-  // Custom session cookie name
 };
-logger.info("Session store configured", {
-  store: "SQLite",
-  sessionDb: "data/sessions.db",
-  cookieMaxAge: "30 days",
-  secure: sessionConfig.cookie?.secure
-});
 var session_default = sessionConfig;
 
 // server/websocket/index.ts
@@ -13826,7 +13833,7 @@ var websocket_default = DeviceBridgeWebSocket;
 
 // server/index.ts
 var app = express2();
-var isVercel = process.env.VERCEL === "1";
+var isVercel2 = process.env.VERCEL === "1";
 app.set("trust proxy", true);
 app.use(express2.json());
 app.use(express2.urlencoded({ extended: false }));
@@ -13864,7 +13871,7 @@ async function initializeApp() {
     const message = err.message || "Internal Server Error";
     res.status(status).json({ message });
   });
-  if (!isVercel && app.get("env") !== "development") {
+  if (!isVercel2 && app.get("env") !== "development") {
     serveStatic(app);
   }
   return app;
@@ -13876,7 +13883,7 @@ async function getApp() {
   }
   return appPromise;
 }
-if (!isVercel) {
+if (!isVercel2) {
   (async () => {
     await initializeApp();
     const http = await import("http");
