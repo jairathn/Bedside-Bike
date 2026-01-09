@@ -6312,6 +6312,489 @@ var init_alert_engine = __esm({
   }
 });
 
+// vite.config.ts
+import { defineConfig } from "vite";
+import react from "@vitejs/plugin-react";
+import path from "path";
+import runtimeErrorOverlay from "@replit/vite-plugin-runtime-error-modal";
+var vite_config_default;
+var init_vite_config = __esm({
+  async "vite.config.ts"() {
+    "use strict";
+    vite_config_default = defineConfig({
+      plugins: [
+        react(),
+        runtimeErrorOverlay(),
+        ...process.env.NODE_ENV !== "production" && process.env.REPL_ID !== void 0 ? [
+          await import("@replit/vite-plugin-cartographer").then(
+            (m) => m.cartographer()
+          )
+        ] : []
+      ],
+      resolve: {
+        alias: {
+          "@": path.resolve(import.meta.dirname, "client", "src"),
+          "@shared": path.resolve(import.meta.dirname, "shared"),
+          "@assets": path.resolve(import.meta.dirname, "attached_assets")
+        }
+      },
+      root: path.resolve(import.meta.dirname, "client"),
+      build: {
+        outDir: path.resolve(import.meta.dirname, "dist/public"),
+        emptyOutDir: true
+      },
+      server: {
+        fs: {
+          strict: true,
+          deny: ["**/.*"]
+        }
+      }
+    });
+  }
+});
+
+// server/vite.ts
+var vite_exports = {};
+__export(vite_exports, {
+  log: () => log2,
+  serveStatic: () => serveStatic2,
+  setupVite: () => setupVite
+});
+import express from "express";
+import fs from "fs";
+import path2 from "path";
+import { createServer as createViteServer, createLogger } from "vite";
+import { nanoid } from "nanoid";
+function log2(message, source = "express") {
+  const formattedTime = (/* @__PURE__ */ new Date()).toLocaleTimeString("en-US", {
+    hour: "numeric",
+    minute: "2-digit",
+    second: "2-digit",
+    hour12: true
+  });
+  console.log(`${formattedTime} [${source}] ${message}`);
+}
+async function setupVite(app2, server) {
+  const serverOptions = {
+    middlewareMode: true,
+    hmr: { server },
+    allowedHosts: true
+  };
+  const vite = await createViteServer({
+    ...vite_config_default,
+    configFile: false,
+    customLogger: {
+      ...viteLogger,
+      error: (msg, options) => {
+        viteLogger.error(msg, options);
+        process.exit(1);
+      }
+    },
+    server: serverOptions,
+    appType: "custom"
+  });
+  app2.use(vite.middlewares);
+  app2.use("*", async (req, res, next) => {
+    const url = req.originalUrl;
+    try {
+      const clientTemplate = path2.resolve(
+        import.meta.dirname,
+        "..",
+        "client",
+        "index.html"
+      );
+      let template = await fs.promises.readFile(clientTemplate, "utf-8");
+      template = template.replace(
+        `src="/src/main.tsx"`,
+        `src="/src/main.tsx?v=${nanoid()}"`
+      );
+      const page = await vite.transformIndexHtml(url, template);
+      res.status(200).set({ "Content-Type": "text/html" }).end(page);
+    } catch (e) {
+      vite.ssrFixStacktrace(e);
+      next(e);
+    }
+  });
+}
+function serveStatic2(app2) {
+  const distPath = path2.resolve(import.meta.dirname, "public");
+  if (!fs.existsSync(distPath)) {
+    throw new Error(
+      `Could not find the build directory: ${distPath}, make sure to build the client first`
+    );
+  }
+  app2.use(express.static(distPath));
+  app2.use("*", (_req, res) => {
+    res.sendFile(path2.resolve(distPath, "index.html"));
+  });
+}
+var viteLogger;
+var init_vite = __esm({
+  async "server/vite.ts"() {
+    "use strict";
+    await init_vite_config();
+    viteLogger = createLogger();
+  }
+});
+
+// server/websocket/index.ts
+var websocket_exports = {};
+__export(websocket_exports, {
+  DeviceBridgeWebSocket: () => DeviceBridgeWebSocket,
+  default: () => websocket_default
+});
+import { WebSocketServer, WebSocket } from "ws";
+import { eq as eq15 } from "drizzle-orm";
+var DeviceBridgeWebSocket, websocket_default;
+var init_websocket = __esm({
+  async "server/websocket/index.ts"() {
+    "use strict";
+    init_logger();
+    await init_db();
+    init_schema();
+    DeviceBridgeWebSocket = class {
+      wss;
+      deviceConnections = /* @__PURE__ */ new Map();
+      providerConnections = /* @__PURE__ */ new Map();
+      deviceHeartbeats = /* @__PURE__ */ new Map();
+      constructor(server) {
+        this.wss = new WebSocketServer({
+          server,
+          path: "/ws/device-bridge",
+          // Handle CORS for WebSocket
+          verifyClient: (info) => {
+            return true;
+          }
+        });
+        this.wss.on("connection", this.handleConnection.bind(this));
+        this.wss.on("error", (error) => {
+          logger.error("WebSocket server error", { error: error.message });
+        });
+        logger.info("WebSocket server initialized", {
+          path: "/ws/device-bridge",
+          status: "ready"
+        });
+        this.startHeartbeatMonitor();
+      }
+      /**
+       * Handle new WebSocket connection
+       */
+      handleConnection(ws, req) {
+        const url = new URL(req.url, "http://localhost");
+        const clientType = url.searchParams.get("type");
+        const deviceId = url.searchParams.get("deviceId");
+        const patientId = url.searchParams.get("patientId");
+        if (clientType === "device" && deviceId) {
+          this.handleDeviceConnection(ws, deviceId);
+        } else if (clientType === "provider" && patientId) {
+          this.handleProviderConnection(ws, patientId);
+        } else {
+          logger.warn("WebSocket connection rejected - invalid parameters", {
+            clientType,
+            deviceId,
+            patientId
+          });
+          ws.close(1008, "Invalid connection parameters");
+        }
+      }
+      /**
+       * Handle device connection (Bedside Bike hardware)
+       */
+      handleDeviceConnection(ws, deviceId) {
+        this.deviceConnections.set(deviceId, ws);
+        logger.info("Device connected", { deviceId, totalDevices: this.deviceConnections.size });
+        this.sendToDevice(deviceId, {
+          type: "device_status",
+          data: { status: "connected", message: "Connected to Bedside Bike server" }
+        });
+        this.setupDeviceHeartbeat(deviceId);
+        ws.on("message", async (data) => {
+          try {
+            const message = JSON.parse(data.toString());
+            switch (message.type) {
+              case "session_update":
+                await this.handleSessionUpdate(message.data);
+                break;
+              case "device_status":
+                await this.handleDeviceStatus(message.data);
+                break;
+              default:
+                logger.warn("Unknown message type from device", {
+                  deviceId,
+                  type: message.type
+                });
+            }
+          } catch (error) {
+            logger.error("Error processing device message", {
+              error: error.message,
+              deviceId,
+              data: data.toString().substring(0, 100)
+            });
+          }
+        });
+        ws.on("close", () => {
+          this.deviceConnections.delete(deviceId);
+          this.clearDeviceHeartbeat(deviceId);
+          logger.info("Device disconnected", {
+            deviceId,
+            totalDevices: this.deviceConnections.size
+          });
+          this.broadcastDeviceStatus({
+            deviceId,
+            status: "offline",
+            lastHeartbeat: /* @__PURE__ */ new Date()
+          });
+        });
+        ws.on("error", (error) => {
+          logger.error("Device WebSocket error", { deviceId, error: error.message });
+        });
+        ws.on("ping", () => {
+          ws.pong();
+          this.resetDeviceHeartbeat(deviceId);
+        });
+      }
+      /**
+       * Handle provider connection (nurses, PTs viewing dashboard)
+       */
+      handleProviderConnection(ws, patientId) {
+        if (!this.providerConnections.has(patientId)) {
+          this.providerConnections.set(patientId, /* @__PURE__ */ new Set());
+        }
+        this.providerConnections.get(patientId).add(ws);
+        logger.info("Provider connected", {
+          patientId,
+          totalProviders: this.getTotalProviderConnections()
+        });
+        this.sendCurrentSessionStatus(ws, parseInt(patientId));
+        ws.on("close", () => {
+          this.providerConnections.get(patientId)?.delete(ws);
+          if (this.providerConnections.get(patientId)?.size === 0) {
+            this.providerConnections.delete(patientId);
+          }
+          logger.info("Provider disconnected", {
+            patientId,
+            totalProviders: this.getTotalProviderConnections()
+          });
+        });
+        ws.on("error", (error) => {
+          logger.error("Provider WebSocket error", { patientId, error: error.message });
+        });
+      }
+      /**
+       * Process session update from device
+       */
+      async handleSessionUpdate(update) {
+        try {
+          logger.debug("Processing session update", {
+            sessionId: update.sessionId,
+            patientId: update.patientId,
+            deviceId: update.deviceId,
+            status: update.status,
+            rpm: update.metrics.rpm,
+            power: update.metrics.power
+          });
+          await db.update(exerciseSessions).set({
+            currentRpm: update.metrics.rpm,
+            currentPower: update.metrics.power,
+            distanceMeters: update.metrics.distance,
+            durationSeconds: update.metrics.duration,
+            currentStatus: update.status,
+            updatedAt: /* @__PURE__ */ new Date()
+          }).where(eq15(exerciseSessions.id, update.sessionId));
+          this.broadcastToProviders(update.patientId, {
+            type: "session_update",
+            data: update
+          });
+          await this.checkSessionAlerts(update);
+        } catch (error) {
+          logger.error("Failed to process session update", {
+            error: error.message,
+            sessionId: update.sessionId
+          });
+        }
+      }
+      /**
+       * Handle device status update
+       */
+      async handleDeviceStatus(status) {
+        logger.debug("Device status update", status);
+        this.broadcastDeviceStatus(status);
+      }
+      /**
+       * Check for alert conditions during session update
+       * Uses alert engine for comprehensive alert checking
+       */
+      async checkSessionAlerts(update) {
+        try {
+          if (update.status === "completed") {
+            const { alertEngine: alertEngine2 } = await init_alert_engine().then(() => alert_engine_exports);
+            const alerts3 = await alertEngine2.checkSessionAlerts(update.sessionId);
+            for (const alert of alerts3) {
+              this.broadcastAlert(alert);
+            }
+            if (alerts3.length > 0) {
+              logger.info("Session alerts generated and broadcast", {
+                sessionId: update.sessionId,
+                alertCount: alerts3.length
+              });
+            }
+          }
+        } catch (error) {
+          logger.error("Failed to check session alerts", {
+            error: error.message,
+            sessionId: update.sessionId
+          });
+        }
+      }
+      /**
+       * Broadcast message to all providers watching a patient
+       */
+      broadcastToProviders(patientId, message) {
+        const connections = this.providerConnections.get(patientId.toString());
+        if (!connections) return;
+        const messageStr = JSON.stringify(message);
+        let sent = 0;
+        connections.forEach((ws) => {
+          if (ws.readyState === WebSocket.OPEN) {
+            ws.send(messageStr);
+            sent++;
+          }
+        });
+        logger.debug("Broadcast to providers", { patientId, providerCount: sent });
+      }
+      /**
+       * Broadcast alert to providers
+       */
+      broadcastAlert(alert) {
+        this.broadcastToProviders(alert.patientId, {
+          type: "alert",
+          data: alert
+        });
+        logger.info("Alert broadcast", {
+          patientId: alert.patientId,
+          type: alert.type,
+          priority: alert.priority
+        });
+      }
+      /**
+       * Broadcast device status to all providers
+       */
+      broadcastDeviceStatus(status) {
+        logger.debug("Device status broadcast", status);
+      }
+      /**
+       * Send message to specific device
+       */
+      sendToDevice(deviceId, message) {
+        const ws = this.deviceConnections.get(deviceId);
+        if (!ws || ws.readyState !== WebSocket.OPEN) {
+          logger.warn("Cannot send to device - not connected", { deviceId });
+          return false;
+        }
+        ws.send(JSON.stringify(message));
+        return true;
+      }
+      /**
+       * Send current session status to newly connected provider
+       */
+      async sendCurrentSessionStatus(ws, patientId) {
+        try {
+          const activeSessions = await db.select().from(exerciseSessions).where(eq15(exerciseSessions.patientId, patientId));
+          if (activeSessions.length > 0) {
+            ws.send(JSON.stringify({
+              type: "session_update",
+              data: {
+                type: "initial_state",
+                sessions: activeSessions
+              }
+            }));
+          }
+        } catch (error) {
+          logger.error("Failed to send current session status", {
+            error: error.message,
+            patientId
+          });
+        }
+      }
+      /**
+       * Heartbeat monitoring for devices
+       */
+      startHeartbeatMonitor() {
+        setInterval(() => {
+          this.deviceConnections.forEach((ws, deviceId) => {
+            if (ws.readyState === WebSocket.OPEN) {
+              ws.ping();
+            }
+          });
+        }, 3e4);
+      }
+      setupDeviceHeartbeat(deviceId) {
+        this.clearDeviceHeartbeat(deviceId);
+        const timeout = setTimeout(() => {
+          logger.warn("Device heartbeat timeout", { deviceId });
+          this.deviceConnections.get(deviceId)?.close();
+        }, 6e4);
+        this.deviceHeartbeats.set(deviceId, timeout);
+      }
+      resetDeviceHeartbeat(deviceId) {
+        this.setupDeviceHeartbeat(deviceId);
+      }
+      clearDeviceHeartbeat(deviceId) {
+        const timeout = this.deviceHeartbeats.get(deviceId);
+        if (timeout) {
+          clearTimeout(timeout);
+          this.deviceHeartbeats.delete(deviceId);
+        }
+      }
+      /**
+       * Get total number of provider connections
+       */
+      getTotalProviderConnections() {
+        let total = 0;
+        this.providerConnections.forEach((set) => {
+          total += set.size;
+        });
+        return total;
+      }
+      /**
+       * Get server statistics
+       */
+      getStats() {
+        return {
+          devices: {
+            connected: this.deviceConnections.size,
+            deviceIds: Array.from(this.deviceConnections.keys())
+          },
+          providers: {
+            total: this.getTotalProviderConnections(),
+            byPatient: Array.from(this.providerConnections.entries()).map(([patientId, connections]) => ({
+              patientId,
+              connections: connections.size
+            }))
+          }
+        };
+      }
+      /**
+       * Shutdown WebSocket server gracefully
+       */
+      shutdown() {
+        logger.info("Shutting down WebSocket server");
+        this.deviceConnections.forEach((ws, deviceId) => {
+          ws.close(1e3, "Server shutting down");
+        });
+        this.providerConnections.forEach((connections) => {
+          connections.forEach((ws) => {
+            ws.close(1e3, "Server shutting down");
+          });
+        });
+        this.deviceHeartbeats.forEach((timeout) => clearTimeout(timeout));
+        this.wss.close();
+      }
+    };
+    websocket_default = DeviceBridgeWebSocket;
+  }
+});
+
 // server/index.ts
 import express2 from "express";
 import session2 from "express-session";
@@ -13332,114 +13815,6 @@ async function createProgressiveGoals(patientId, stats) {
   }
 }
 
-// server/vite.ts
-import express from "express";
-import fs from "fs";
-import path2 from "path";
-import { createServer as createViteServer, createLogger } from "vite";
-
-// vite.config.ts
-import { defineConfig } from "vite";
-import react from "@vitejs/plugin-react";
-import path from "path";
-import runtimeErrorOverlay from "@replit/vite-plugin-runtime-error-modal";
-var vite_config_default = defineConfig({
-  plugins: [
-    react(),
-    runtimeErrorOverlay(),
-    ...process.env.NODE_ENV !== "production" && process.env.REPL_ID !== void 0 ? [
-      await import("@replit/vite-plugin-cartographer").then(
-        (m) => m.cartographer()
-      )
-    ] : []
-  ],
-  resolve: {
-    alias: {
-      "@": path.resolve(import.meta.dirname, "client", "src"),
-      "@shared": path.resolve(import.meta.dirname, "shared"),
-      "@assets": path.resolve(import.meta.dirname, "attached_assets")
-    }
-  },
-  root: path.resolve(import.meta.dirname, "client"),
-  build: {
-    outDir: path.resolve(import.meta.dirname, "dist/public"),
-    emptyOutDir: true
-  },
-  server: {
-    fs: {
-      strict: true,
-      deny: ["**/.*"]
-    }
-  }
-});
-
-// server/vite.ts
-import { nanoid } from "nanoid";
-var viteLogger = createLogger();
-function log(message, source = "express") {
-  const formattedTime = (/* @__PURE__ */ new Date()).toLocaleTimeString("en-US", {
-    hour: "numeric",
-    minute: "2-digit",
-    second: "2-digit",
-    hour12: true
-  });
-  console.log(`${formattedTime} [${source}] ${message}`);
-}
-async function setupVite(app2, server) {
-  const serverOptions = {
-    middlewareMode: true,
-    hmr: { server },
-    allowedHosts: true
-  };
-  const vite = await createViteServer({
-    ...vite_config_default,
-    configFile: false,
-    customLogger: {
-      ...viteLogger,
-      error: (msg, options) => {
-        viteLogger.error(msg, options);
-        process.exit(1);
-      }
-    },
-    server: serverOptions,
-    appType: "custom"
-  });
-  app2.use(vite.middlewares);
-  app2.use("*", async (req, res, next) => {
-    const url = req.originalUrl;
-    try {
-      const clientTemplate = path2.resolve(
-        import.meta.dirname,
-        "..",
-        "client",
-        "index.html"
-      );
-      let template = await fs.promises.readFile(clientTemplate, "utf-8");
-      template = template.replace(
-        `src="/src/main.tsx"`,
-        `src="/src/main.tsx?v=${nanoid()}"`
-      );
-      const page = await vite.transformIndexHtml(url, template);
-      res.status(200).set({ "Content-Type": "text/html" }).end(page);
-    } catch (e) {
-      vite.ssrFixStacktrace(e);
-      next(e);
-    }
-  });
-}
-function serveStatic(app2) {
-  const distPath = path2.resolve(import.meta.dirname, "public");
-  if (!fs.existsSync(distPath)) {
-    throw new Error(
-      `Could not find the build directory: ${distPath}, make sure to build the client first`
-    );
-  }
-  app2.use(express.static(distPath));
-  app2.use("*", (_req, res) => {
-    res.sendFile(path2.resolve(distPath, "index.html"));
-  });
-}
-
 // server/index.ts
 init_logger();
 
@@ -13484,356 +13859,9 @@ var sessionConfig = {
 };
 var session_default = sessionConfig;
 
-// server/websocket/index.ts
-init_logger();
-await init_db();
-init_schema();
-import { WebSocketServer, WebSocket } from "ws";
-import { eq as eq15 } from "drizzle-orm";
-var DeviceBridgeWebSocket = class {
-  wss;
-  deviceConnections = /* @__PURE__ */ new Map();
-  providerConnections = /* @__PURE__ */ new Map();
-  deviceHeartbeats = /* @__PURE__ */ new Map();
-  constructor(server) {
-    this.wss = new WebSocketServer({
-      server,
-      path: "/ws/device-bridge",
-      // Handle CORS for WebSocket
-      verifyClient: (info) => {
-        return true;
-      }
-    });
-    this.wss.on("connection", this.handleConnection.bind(this));
-    this.wss.on("error", (error) => {
-      logger.error("WebSocket server error", { error: error.message });
-    });
-    logger.info("WebSocket server initialized", {
-      path: "/ws/device-bridge",
-      status: "ready"
-    });
-    this.startHeartbeatMonitor();
-  }
-  /**
-   * Handle new WebSocket connection
-   */
-  handleConnection(ws, req) {
-    const url = new URL(req.url, "http://localhost");
-    const clientType = url.searchParams.get("type");
-    const deviceId = url.searchParams.get("deviceId");
-    const patientId = url.searchParams.get("patientId");
-    if (clientType === "device" && deviceId) {
-      this.handleDeviceConnection(ws, deviceId);
-    } else if (clientType === "provider" && patientId) {
-      this.handleProviderConnection(ws, patientId);
-    } else {
-      logger.warn("WebSocket connection rejected - invalid parameters", {
-        clientType,
-        deviceId,
-        patientId
-      });
-      ws.close(1008, "Invalid connection parameters");
-    }
-  }
-  /**
-   * Handle device connection (Bedside Bike hardware)
-   */
-  handleDeviceConnection(ws, deviceId) {
-    this.deviceConnections.set(deviceId, ws);
-    logger.info("Device connected", { deviceId, totalDevices: this.deviceConnections.size });
-    this.sendToDevice(deviceId, {
-      type: "device_status",
-      data: { status: "connected", message: "Connected to Bedside Bike server" }
-    });
-    this.setupDeviceHeartbeat(deviceId);
-    ws.on("message", async (data) => {
-      try {
-        const message = JSON.parse(data.toString());
-        switch (message.type) {
-          case "session_update":
-            await this.handleSessionUpdate(message.data);
-            break;
-          case "device_status":
-            await this.handleDeviceStatus(message.data);
-            break;
-          default:
-            logger.warn("Unknown message type from device", {
-              deviceId,
-              type: message.type
-            });
-        }
-      } catch (error) {
-        logger.error("Error processing device message", {
-          error: error.message,
-          deviceId,
-          data: data.toString().substring(0, 100)
-        });
-      }
-    });
-    ws.on("close", () => {
-      this.deviceConnections.delete(deviceId);
-      this.clearDeviceHeartbeat(deviceId);
-      logger.info("Device disconnected", {
-        deviceId,
-        totalDevices: this.deviceConnections.size
-      });
-      this.broadcastDeviceStatus({
-        deviceId,
-        status: "offline",
-        lastHeartbeat: /* @__PURE__ */ new Date()
-      });
-    });
-    ws.on("error", (error) => {
-      logger.error("Device WebSocket error", { deviceId, error: error.message });
-    });
-    ws.on("ping", () => {
-      ws.pong();
-      this.resetDeviceHeartbeat(deviceId);
-    });
-  }
-  /**
-   * Handle provider connection (nurses, PTs viewing dashboard)
-   */
-  handleProviderConnection(ws, patientId) {
-    if (!this.providerConnections.has(patientId)) {
-      this.providerConnections.set(patientId, /* @__PURE__ */ new Set());
-    }
-    this.providerConnections.get(patientId).add(ws);
-    logger.info("Provider connected", {
-      patientId,
-      totalProviders: this.getTotalProviderConnections()
-    });
-    this.sendCurrentSessionStatus(ws, parseInt(patientId));
-    ws.on("close", () => {
-      this.providerConnections.get(patientId)?.delete(ws);
-      if (this.providerConnections.get(patientId)?.size === 0) {
-        this.providerConnections.delete(patientId);
-      }
-      logger.info("Provider disconnected", {
-        patientId,
-        totalProviders: this.getTotalProviderConnections()
-      });
-    });
-    ws.on("error", (error) => {
-      logger.error("Provider WebSocket error", { patientId, error: error.message });
-    });
-  }
-  /**
-   * Process session update from device
-   */
-  async handleSessionUpdate(update) {
-    try {
-      logger.debug("Processing session update", {
-        sessionId: update.sessionId,
-        patientId: update.patientId,
-        deviceId: update.deviceId,
-        status: update.status,
-        rpm: update.metrics.rpm,
-        power: update.metrics.power
-      });
-      await db.update(exerciseSessions).set({
-        currentRpm: update.metrics.rpm,
-        currentPower: update.metrics.power,
-        distanceMeters: update.metrics.distance,
-        durationSeconds: update.metrics.duration,
-        currentStatus: update.status,
-        updatedAt: /* @__PURE__ */ new Date()
-      }).where(eq15(exerciseSessions.id, update.sessionId));
-      this.broadcastToProviders(update.patientId, {
-        type: "session_update",
-        data: update
-      });
-      await this.checkSessionAlerts(update);
-    } catch (error) {
-      logger.error("Failed to process session update", {
-        error: error.message,
-        sessionId: update.sessionId
-      });
-    }
-  }
-  /**
-   * Handle device status update
-   */
-  async handleDeviceStatus(status) {
-    logger.debug("Device status update", status);
-    this.broadcastDeviceStatus(status);
-  }
-  /**
-   * Check for alert conditions during session update
-   * Uses alert engine for comprehensive alert checking
-   */
-  async checkSessionAlerts(update) {
-    try {
-      if (update.status === "completed") {
-        const { alertEngine: alertEngine2 } = await init_alert_engine().then(() => alert_engine_exports);
-        const alerts3 = await alertEngine2.checkSessionAlerts(update.sessionId);
-        for (const alert of alerts3) {
-          this.broadcastAlert(alert);
-        }
-        if (alerts3.length > 0) {
-          logger.info("Session alerts generated and broadcast", {
-            sessionId: update.sessionId,
-            alertCount: alerts3.length
-          });
-        }
-      }
-    } catch (error) {
-      logger.error("Failed to check session alerts", {
-        error: error.message,
-        sessionId: update.sessionId
-      });
-    }
-  }
-  /**
-   * Broadcast message to all providers watching a patient
-   */
-  broadcastToProviders(patientId, message) {
-    const connections = this.providerConnections.get(patientId.toString());
-    if (!connections) return;
-    const messageStr = JSON.stringify(message);
-    let sent = 0;
-    connections.forEach((ws) => {
-      if (ws.readyState === WebSocket.OPEN) {
-        ws.send(messageStr);
-        sent++;
-      }
-    });
-    logger.debug("Broadcast to providers", { patientId, providerCount: sent });
-  }
-  /**
-   * Broadcast alert to providers
-   */
-  broadcastAlert(alert) {
-    this.broadcastToProviders(alert.patientId, {
-      type: "alert",
-      data: alert
-    });
-    logger.info("Alert broadcast", {
-      patientId: alert.patientId,
-      type: alert.type,
-      priority: alert.priority
-    });
-  }
-  /**
-   * Broadcast device status to all providers
-   */
-  broadcastDeviceStatus(status) {
-    logger.debug("Device status broadcast", status);
-  }
-  /**
-   * Send message to specific device
-   */
-  sendToDevice(deviceId, message) {
-    const ws = this.deviceConnections.get(deviceId);
-    if (!ws || ws.readyState !== WebSocket.OPEN) {
-      logger.warn("Cannot send to device - not connected", { deviceId });
-      return false;
-    }
-    ws.send(JSON.stringify(message));
-    return true;
-  }
-  /**
-   * Send current session status to newly connected provider
-   */
-  async sendCurrentSessionStatus(ws, patientId) {
-    try {
-      const activeSessions = await db.select().from(exerciseSessions).where(eq15(exerciseSessions.patientId, patientId));
-      if (activeSessions.length > 0) {
-        ws.send(JSON.stringify({
-          type: "session_update",
-          data: {
-            type: "initial_state",
-            sessions: activeSessions
-          }
-        }));
-      }
-    } catch (error) {
-      logger.error("Failed to send current session status", {
-        error: error.message,
-        patientId
-      });
-    }
-  }
-  /**
-   * Heartbeat monitoring for devices
-   */
-  startHeartbeatMonitor() {
-    setInterval(() => {
-      this.deviceConnections.forEach((ws, deviceId) => {
-        if (ws.readyState === WebSocket.OPEN) {
-          ws.ping();
-        }
-      });
-    }, 3e4);
-  }
-  setupDeviceHeartbeat(deviceId) {
-    this.clearDeviceHeartbeat(deviceId);
-    const timeout = setTimeout(() => {
-      logger.warn("Device heartbeat timeout", { deviceId });
-      this.deviceConnections.get(deviceId)?.close();
-    }, 6e4);
-    this.deviceHeartbeats.set(deviceId, timeout);
-  }
-  resetDeviceHeartbeat(deviceId) {
-    this.setupDeviceHeartbeat(deviceId);
-  }
-  clearDeviceHeartbeat(deviceId) {
-    const timeout = this.deviceHeartbeats.get(deviceId);
-    if (timeout) {
-      clearTimeout(timeout);
-      this.deviceHeartbeats.delete(deviceId);
-    }
-  }
-  /**
-   * Get total number of provider connections
-   */
-  getTotalProviderConnections() {
-    let total = 0;
-    this.providerConnections.forEach((set) => {
-      total += set.size;
-    });
-    return total;
-  }
-  /**
-   * Get server statistics
-   */
-  getStats() {
-    return {
-      devices: {
-        connected: this.deviceConnections.size,
-        deviceIds: Array.from(this.deviceConnections.keys())
-      },
-      providers: {
-        total: this.getTotalProviderConnections(),
-        byPatient: Array.from(this.providerConnections.entries()).map(([patientId, connections]) => ({
-          patientId,
-          connections: connections.size
-        }))
-      }
-    };
-  }
-  /**
-   * Shutdown WebSocket server gracefully
-   */
-  shutdown() {
-    logger.info("Shutting down WebSocket server");
-    this.deviceConnections.forEach((ws, deviceId) => {
-      ws.close(1e3, "Server shutting down");
-    });
-    this.providerConnections.forEach((connections) => {
-      connections.forEach((ws) => {
-        ws.close(1e3, "Server shutting down");
-      });
-    });
-    this.deviceHeartbeats.forEach((timeout) => clearTimeout(timeout));
-    this.wss.close();
-  }
-};
-var websocket_default = DeviceBridgeWebSocket;
-
 // server/index.ts
-var app = express2();
 var isVercel2 = process.env.VERCEL === "1";
+var app = express2();
 app.set("trust proxy", true);
 app.use(express2.json());
 app.use(express2.urlencoded({ extended: false }));
@@ -13887,12 +13915,16 @@ if (!isVercel2) {
   (async () => {
     await initializeApp();
     const http = await import("http");
+    const { setupVite: setupVite2, serveStatic: serveStatic3, log: log3 } = await init_vite().then(() => vite_exports);
+    const { default: DeviceBridgeWebSocket2 } = await init_websocket().then(() => websocket_exports);
     const server = http.createServer(app);
-    const wsServer = new websocket_default(server);
+    const wsServer = new DeviceBridgeWebSocket2(server);
     logger.info("WebSocket server ready for device and provider connections");
     app.wsServer = wsServer;
     if (app.get("env") === "development") {
-      await setupVite(app, server);
+      await setupVite2(app, server);
+    } else {
+      serveStatic3(app);
     }
     const port = 5e3;
     server.listen({
@@ -13900,7 +13932,7 @@ if (!isVercel2) {
       host: "0.0.0.0",
       reusePort: true
     }, () => {
-      log(`serving on port ${port}`);
+      log3(`serving on port ${port}`);
       logger.info(`Bedside Bike API server started on port ${port}`, {
         port,
         environment: process.env.NODE_ENV || "development",
