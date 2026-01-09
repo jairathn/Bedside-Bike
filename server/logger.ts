@@ -50,24 +50,33 @@ const consoleFormat = winston.format.combine(
   )
 );
 
+// Check if running on Vercel (serverless - no filesystem write access)
+const isVercel = process.env.VERCEL === '1';
+
 // Define transports
-const transports = [
-  // Console output
+const transports: winston.transport[] = [
+  // Console output (always available)
   new winston.transports.Console({
     format: process.env.NODE_ENV === 'production' ? format : consoleFormat,
   }),
-  // Error log file
-  new winston.transports.File({
-    filename: 'logs/error.log',
-    level: 'error',
-    format,
-  }),
-  // Combined log file
-  new winston.transports.File({
-    filename: 'logs/combined.log',
-    format,
-  }),
 ];
+
+// Only add file transports for non-Vercel environments
+if (!isVercel) {
+  transports.push(
+    // Error log file
+    new winston.transports.File({
+      filename: 'logs/error.log',
+      level: 'error',
+      format,
+    }),
+    // Combined log file
+    new winston.transports.File({
+      filename: 'logs/combined.log',
+      format,
+    })
+  );
+}
 
 // Create the logger
 export const logger = winston.createLogger({
