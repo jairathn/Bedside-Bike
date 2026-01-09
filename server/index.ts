@@ -43,7 +43,7 @@ app.use((req, res, next) => {
         logLine = logLine.slice(0, 79) + "…";
       }
 
-      log(logLine);
+      logger.debug(logLine);
     }
   });
 
@@ -68,10 +68,8 @@ async function initializeApp() {
     res.status(status).json({ message });
   });
 
-  // Serve static files in production
-  if (!isVercel && app.get("env") !== "development") {
-    serveStatic(app);
-  }
+  // Note: Static file serving is handled in the standalone server block below
+  // For Vercel, static files are served by Vercel's CDN from dist/public
 
   return app;
 }
