@@ -6,7 +6,7 @@ import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
-import { Heart, Activity, Shield, UserPlus, LogIn, Lightbulb, ChevronDown, ChevronUp, ChevronLeft, ChevronRight, Calculator, User } from "lucide-react";
+import { Heart, Activity, Shield, UserPlus, LogIn, Lightbulb, ChevronDown, ChevronUp, ChevronLeft, ChevronRight, Calculator, User, ClipboardCheck, Stethoscope } from "lucide-react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 
@@ -192,6 +192,11 @@ export default function Auth({ onAuthSuccess }: AuthProps) {
     dateOfBirth: ""
   });
   const [suggestedDevice, setSuggestedDevice] = useState<string>("");
+  const [providerCredentials, setProviderCredentials] = useState({
+    email: "",
+    firstName: "",
+    lastName: ""
+  });
   const { toast } = useToast();
 
   // Query to get last used device when patient credentials are complete
@@ -288,6 +293,20 @@ export default function Auth({ onAuthSuccess }: AuthProps) {
     toast({
       title: "Demo patient loaded",
       description: `${patient.name}'s credentials have been filled in. Click "Sign In to Dashboard" to login.`,
+      duration: 5000,
+    });
+  };
+
+  const fillDemoProvider = () => {
+    setProviderCredentials({
+      email: "heidikissane@hospital.com",
+      firstName: "Heidi",
+      lastName: "Kissane"
+    });
+
+    toast({
+      title: "Demo provider loaded",
+      description: "Heidi Kissane's credentials have been filled in. Click \"Access Provider Portal\" to login.",
       duration: 5000,
     });
   };
@@ -695,6 +714,8 @@ export default function Auth({ onAuthSuccess }: AuthProps) {
                               type="email"
                               required
                               placeholder="provider@hospital.com"
+                              value={providerCredentials.email}
+                              onChange={(e) => setProviderCredentials(prev => ({ ...prev, email: e.target.value }))}
                             />
                           </div>
 
@@ -706,6 +727,8 @@ export default function Auth({ onAuthSuccess }: AuthProps) {
                                 name="firstName"
                                 required
                                 placeholder="Dr. Jane"
+                                value={providerCredentials.firstName}
+                                onChange={(e) => setProviderCredentials(prev => ({ ...prev, firstName: e.target.value }))}
                               />
                             </div>
                             <div className="space-y-2">
@@ -715,12 +738,14 @@ export default function Auth({ onAuthSuccess }: AuthProps) {
                                 name="lastName"
                                 required
                                 placeholder="Smith"
+                                value={providerCredentials.lastName}
+                                onChange={(e) => setProviderCredentials(prev => ({ ...prev, lastName: e.target.value }))}
                               />
                             </div>
                           </div>
 
-                          <Button 
-                            type="submit" 
+                          <Button
+                            type="submit"
                             className="w-full bg-indigo-600 hover:bg-indigo-700"
                             disabled={loginMutation.isPending}
                           >
@@ -728,11 +753,21 @@ export default function Auth({ onAuthSuccess }: AuthProps) {
                           </Button>
                         </form>
 
-                        <div className="mt-4 p-3 bg-blue-50 rounded-lg">
-                          <p className="text-sm text-blue-800">
-                            <strong>Demo Provider:</strong> heidikissane@hospital.com
-                          </p>
-                        </div>
+                        <button
+                          type="button"
+                          onClick={fillDemoProvider}
+                          className="mt-4 w-full text-left p-3 rounded-lg border border-indigo-200 bg-indigo-50 hover:border-indigo-400 hover:bg-indigo-100 hover:shadow-md transition-all group"
+                        >
+                          <div className="flex items-center gap-3">
+                            <Stethoscope className="w-5 h-5 text-indigo-600" />
+                            <div>
+                              <p className="font-semibold text-indigo-800 group-hover:text-indigo-900">
+                                Demo Provider: heidikissane@hospital.com
+                              </p>
+                              <p className="text-xs text-indigo-600">Click to auto-fill credentials</p>
+                            </div>
+                          </div>
+                        </button>
                       </CardContent>
                     </Card>
                   </TabsContent>
@@ -833,6 +868,27 @@ export default function Auth({ onAuthSuccess }: AuthProps) {
                     </Card>
                   </TabsContent>
                 </Tabs>
+
+                {/* Discharge Readiness Calculator - Provider Only */}
+                <Card className="mt-4 bg-gradient-to-r from-purple-50 to-indigo-50 border-purple-200">
+                  <CardContent className="p-4 text-center">
+                    <div className="flex justify-center mb-2">
+                      <ClipboardCheck className="w-6 h-6 text-purple-600" />
+                    </div>
+                    <h3 className="text-lg font-semibold text-purple-800 mb-2">Discharge Readiness Calculator</h3>
+                    <p className="text-sm text-purple-700 mb-3">
+                      Calculate your patient's discharge readiness using the validated Elderly Mobility Scale
+                    </p>
+                    <Button
+                      onClick={() => window.location.href = '/public-discharge-readiness'}
+                      variant="outline"
+                      className="border-purple-300 text-purple-700 hover:bg-purple-100"
+                    >
+                      <ClipboardCheck className="w-4 h-4 mr-2" />
+                      Try the Calculator
+                    </Button>
+                  </CardContent>
+                </Card>
               </TabsContent>
             </Tabs>
           </CardContent>

@@ -17,6 +17,7 @@ import ProviderDashboard from "@/pages/provider-dashboard";
 import KudosWall from "@/pages/kudos-wall";
 import ProviderAccessPage from "@/pages/provider-access";
 import AnonymousRiskCalculator from "@/pages/anonymous-risk-calculator";
+import PublicDischargeReadinessPage from "@/pages/public-discharge-readiness";
 
 // Personalization Module Pages
 import PersonalizedPrescriptionPage from "@/pages/personalization/personalized-prescription";
@@ -41,7 +42,7 @@ function Router() {
         } else {
           setLocation("/dashboard");
         }
-      } else if (!user && location !== "/" && location !== "/auth" && location !== "/anonymous-risk-calculator") {
+      } else if (!user && location !== "/" && location !== "/auth" && location !== "/anonymous-risk-calculator" && location !== "/public-discharge-readiness") {
         setLocation("/");
       }
     }
@@ -86,6 +87,7 @@ function Router() {
       <Route path="/provider-access" component={user ? ProviderAccessPage : () => <AuthPage onAuthSuccess={handleAuthSuccess} />} />
       <Route path="/provider-dashboard" component={user?.userType === 'provider' ? ProviderDashboard : () => <AuthPage onAuthSuccess={handleAuthSuccess} />} />
       <Route path="/anonymous-risk-calculator" component={AnonymousRiskCalculator} />
+      <Route path="/public-discharge-readiness" component={PublicDischargeReadinessPage} />
 
       {/* Personalization Module Routes (Provider Only) */}
       <Route path="/personalized-prescription" component={user?.userType === 'provider' ? PersonalizedPrescriptionPage : () => <AuthPage onAuthSuccess={handleAuthSuccess} />} />
