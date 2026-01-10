@@ -28,9 +28,22 @@ export async function updateRollingDataWindow(): Promise<void> {
 
   console.log('🔄 Auto-updating rolling data window for demo patients...');
 
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-  const todayStr = today.toISOString().split('T')[0];
+  // Use configured timezone (default to US Eastern for healthcare app)
+  // Set TIMEZONE env var to override (e.g., "America/Los_Angeles" for Pacific)
+  const timezone = process.env.TIMEZONE || 'America/New_York';
+
+  // Get current date in the user's timezone
+  const now = new Date();
+  const formatter = new Intl.DateTimeFormat('en-CA', {
+    timeZone: timezone,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit'
+  });
+  const todayStr = formatter.format(now); // Returns YYYY-MM-DD format
+  const today = new Date(todayStr + 'T00:00:00'); // Midnight in configured timezone
+
+  console.log(`📅 Today's date: ${todayStr} (timezone: ${timezone}, UTC: ${now.toISOString()})`);
 
   let updatedCount = 0;
 
@@ -52,15 +65,18 @@ export async function updateRollingDataWindow(): Promise<void> {
 
         console.log(`📊 Processing ${patient.firstName} ${patient.lastName} (${patientConfig.email})`);
 
+        // Helper to format date as YYYY-MM-DD using local time
+        const formatDate = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+
         // Calculate new admission date
         const newAdmissionDate = new Date(today);
         newAdmissionDate.setDate(today.getDate() - patientConfig.daysAdmitted);
-        const newAdmissionDateStr = newAdmissionDate.toISOString().split('T')[0];
+        const newAdmissionDateStr = formatDate(newAdmissionDate);
 
         // Calculate rolling window dates
         const windowStart = new Date(today);
         windowStart.setDate(today.getDate() - (patientConfig.windowDays - 1));
-        const windowStartStr = windowStart.toISOString().split('T')[0];
+        const windowStartStr = formatDate(windowStart);
 
         console.log(`  Rolling window: ${windowStartStr} to ${todayStr}`);
 
@@ -130,7 +146,7 @@ export async function updateRollingDataWindow(): Promise<void> {
         for (let daysAgo = patientConfig.windowDays - 1; daysAgo >= 0; daysAgo--) {
           const sessionDate = new Date(today);
           sessionDate.setDate(today.getDate() - daysAgo);
-          const sessionDateStr = sessionDate.toISOString().split('T')[0];
+          const sessionDateStr = formatDate(sessionDate);
 
           // Skip if this date has a manual session
           if (manualSessionDates.has(sessionDateStr)) {
@@ -271,15 +287,18 @@ export async function updateRollingDataWindow(): Promise<void> {
 
         console.log(`📊 Processing ${patient.first_name} ${patient.last_name} (${patientConfig.email})`);
 
+        // Helper to format date as YYYY-MM-DD using local time
+        const formatDate = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+
         // Calculate new admission date
         const newAdmissionDate = new Date(today);
         newAdmissionDate.setDate(today.getDate() - patientConfig.daysAdmitted);
-        const newAdmissionDateStr = newAdmissionDate.toISOString().split('T')[0];
+        const newAdmissionDateStr = formatDate(newAdmissionDate);
 
         // Calculate rolling window
         const windowStart = new Date(today);
         windowStart.setDate(today.getDate() - (patientConfig.windowDays - 1));
-        const windowStartStr = windowStart.toISOString().split('T')[0];
+        const windowStartStr = formatDate(windowStart);
 
         console.log(`  Rolling window: ${windowStartStr} to ${todayStr}`);
 
@@ -333,7 +352,7 @@ export async function updateRollingDataWindow(): Promise<void> {
         for (let daysAgo = patientConfig.windowDays - 1; daysAgo >= 0; daysAgo--) {
           const sessionDate = new Date(today);
           sessionDate.setDate(today.getDate() - daysAgo);
-          const sessionDateStr = sessionDate.toISOString().split('T')[0];
+          const sessionDateStr = formatDate(sessionDate);
 
           if (manualSessionDates.has(sessionDateStr)) continue;
 
