@@ -507,26 +507,31 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const patientId = parseInt(req.params.id);
       const { goals, providerId } = req.body;
-      
+
       if (!goals || !Array.isArray(goals)) {
         return res.status(400).json({ error: "Goals array is required" });
       }
-      
+
+      console.log('Saving goals for patient:', patientId, 'Goals:', JSON.stringify(goals, null, 2));
+
       // Deactivate existing goals for this patient
       await storage.deactivatePatientGoals(patientId);
-      
+
       // Create new goals
       const createdGoals = [];
       for (const goalData of goals) {
+        // Ensure numeric fields are proper numbers (not strings)
         const goal = await storage.createGoal({
           ...goalData,
           patientId,
-          providerId: providerId || 1 // Default to first provider
+          providerId: providerId || 1,
+          targetValue: parseFloat(goalData.targetValue) || 0,
+          currentValue: parseFloat(goalData.currentValue) || 0,
         });
         createdGoals.push(goal);
       }
-      
-      res.json({ 
+
+      res.json({
         message: "Goals successfully sent to patient",
         goals: createdGoals
       });
