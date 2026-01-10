@@ -403,6 +403,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Create exercise session
   app.post("/api/sessions", createLimiter, async (req, res) => {
     try {
+      console.log("Creating session with body:", JSON.stringify(req.body, null, 2));
+
       // Convert startTime string to Date object if needed
       const body = { ...req.body };
       if (typeof body.startTime === 'string') {
@@ -412,11 +414,23 @@ export async function registerRoutes(app: Express): Promise<Server> {
         body.endTime = new Date(body.endTime);
       }
 
+      console.log("Parsed body:", JSON.stringify({ ...body, startTime: body.startTime?.toISOString?.() }, null, 2));
+
       const sessionData = insertExerciseSessionSchema.parse(body) as InsertExerciseSession;
+      console.log("Validated session data, creating...");
+
       const session = await storage.createSession(sessionData);
+      console.log("Session created successfully:", session.id);
       res.json(session);
     } catch (error) {
       console.error("Session creation error:", error);
+      // For Zod errors, get the detailed message
+      if (error && typeof error === 'object' && 'issues' in error) {
+        const zodError = error as { issues: Array<{ path: string[]; message: string }> };
+        const details = zodError.issues.map(i => `${i.path.join('.')}: ${i.message}`).join(', ');
+        console.error("Zod validation errors:", details);
+        return res.status(400).json({ error: `Validation failed: ${details}` });
+      }
       const errorMessage = error instanceof Error ? error.message : "Invalid session data";
       res.status(400).json({ error: errorMessage });
     }
