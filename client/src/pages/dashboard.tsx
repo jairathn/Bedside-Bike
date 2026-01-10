@@ -1,12 +1,15 @@
 import { useEffect, useState } from "react";
 import { useLocation } from "wouter";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/hooks/use-auth";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
-import { Target, MessageCircle, LogOut, Calculator, Gamepad2, TrendingUp, Play, Trophy, Menu, Lightbulb, ChevronDown, ChevronUp, ChevronLeft, ChevronRight, HelpCircle, Heart, Activity, Info } from "lucide-react";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { useToast } from "@/hooks/use-toast";
+import { Target, MessageCircle, LogOut, Calculator, Gamepad2, TrendingUp, Play, Trophy, Menu, Lightbulb, ChevronDown, ChevronUp, ChevronLeft, ChevronRight, HelpCircle, Heart, Activity, Info, ClipboardPlus, Clock, Calendar } from "lucide-react";
 import { ProgressRing } from "@/components/progress-ring";
 
 // Patient-Friendly Did You Know Component
@@ -159,6 +162,123 @@ export default function DashboardPage() {
   const [showMobileMenu, setShowMobileMenu] = useState(false);
   const [showGoalExplanation, setShowGoalExplanation] = useState(false);
   const [showMETsExplanation, setShowMETsExplanation] = useState(false);
+  const [showManualSession, setShowManualSession] = useState(false);
+  const { toast } = useToast();
+  const queryClient = useQueryClient();
+
+  // Manual session form state
+  const getDefaultDateTime = () => {
+    const now = new Date();
+    return {
+      date: now.toISOString().split('T')[0],
+      time: now.toTimeString().slice(0, 5)
+    };
+  };
+
+  const [manualSession, setManualSession] = useState({
+    ...getDefaultDateTime(),
+    durationMinutes: 15,
+    resistance: 3
+  });
+
+  // Reset form when dialog opens
+  const handleOpenManualSession = (open: boolean) => {
+    if (open) {
+      setManualSession({
+        ...getDefaultDateTime(),
+        durationMinutes: 15,
+        resistance: 3
+      });
+    }
+    setShowManualSession(open);
+  };
+
+  // Mutation for creating manual session
+  const createManualSessionMutation = useMutation({
+    mutationFn: async (sessionData: {
+      patientId: number;
+      duration: number;
+      resistance: number;
+      sessionDate: string;
+      startTime: string;
+    }) => {
+      const response = await fetch('/api/sessions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          patientId: sessionData.patientId,
+          duration: sessionData.duration,
+          resistance: sessionData.resistance,
+          sessionDate: sessionData.sessionDate,
+          startTime: sessionData.startTime,
+          isCompleted: true,
+          isManual: true, // Mark as manually recorded (not auto-generated)
+          avgPower: sessionData.resistance * 5, // Approximate power from resistance
+          avgRpm: 50, // Default RPM for manual entry
+        }),
+      });
+
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.error || 'Failed to record session');
+      }
+
+      return response.json();
+    },
+    onSuccess: () => {
+      toast({
+        title: "Session Recorded!",
+        description: "Your exercise session has been saved successfully.",
+      });
+      setShowManualSession(false);
+      // Refresh dashboard data
+      queryClient.invalidateQueries({ queryKey: [`/api/patients/${currentPatient?.id}/dashboard`] });
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to record session. Please try again.",
+        variant: "destructive",
+      });
+    },
+  });
+
+  const handleSubmitManualSession = () => {
+    if (!currentPatient?.id) return;
+
+    // Validate date is not in the future
+    const sessionDateTime = new Date(`${manualSession.date}T${manualSession.time}`);
+    const now = new Date();
+
+    if (sessionDateTime > now) {
+      toast({
+        title: "Invalid Date/Time",
+        description: "You cannot record a session in the future.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    if (manualSession.durationMinutes <= 0) {
+      toast({
+        title: "Invalid Duration",
+        description: "Duration must be greater than 0 minutes.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    createManualSessionMutation.mutate({
+      patientId: currentPatient.id,
+      duration: manualSession.durationMinutes * 60, // Convert to seconds
+      resistance: manualSession.resistance,
+      sessionDate: manualSession.date,
+      startTime: sessionDateTime.toISOString(),
+    });
+  };
+
+  // Get max date (today) for date picker
+  const getMaxDate = () => new Date().toISOString().split('T')[0];
 
   useEffect(() => {
     if (!currentPatient) {
@@ -318,21 +438,129 @@ export default function DashboardPage() {
               </div>
               
               {todayProgress < 100 ? (
-                <Button 
-                  size="lg"
-                  className="bg-white text-blue-700 hover:bg-blue-50 text-lg sm:text-2xl px-6 sm:px-12 py-4 sm:py-6 h-auto font-bold rounded-xl w-full sm:w-auto"
-                  onClick={() => setLocation("/session")}
-                >
-                  <Play className="w-6 h-6 sm:w-8 sm:h-8 mr-2 sm:mr-3" />
-                  Start Exercise
-                </Button>
+                <div className="space-y-3">
+                  <Button
+                    size="lg"
+                    className="bg-white text-blue-700 hover:bg-blue-50 text-lg sm:text-2xl px-6 sm:px-12 py-4 sm:py-6 h-auto font-bold rounded-xl w-full sm:w-auto"
+                    onClick={() => setLocation("/session")}
+                  >
+                    <Play className="w-6 h-6 sm:w-8 sm:h-8 mr-2 sm:mr-3" />
+                    Start Exercise
+                  </Button>
+                  <div>
+                    <Dialog open={showManualSession} onOpenChange={handleOpenManualSession}>
+                      <DialogTrigger asChild>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="text-blue-100 hover:text-white hover:bg-blue-500/30"
+                        >
+                          <ClipboardPlus className="w-4 h-4 mr-2" />
+                          Record a past session manually
+                        </Button>
+                      </DialogTrigger>
+                      <DialogContent className="max-w-md">
+                        <DialogHeader>
+                          <DialogTitle className="flex items-center text-xl">
+                            <ClipboardPlus className="w-5 h-5 mr-2 text-blue-600" />
+                            Record Manual Session
+                          </DialogTitle>
+                          <DialogDescription>
+                            Log an exercise session that wasn't recorded automatically
+                          </DialogDescription>
+                        </DialogHeader>
+
+                        <div className="space-y-4 mt-4">
+                          {/* Date Input */}
+                          <div className="space-y-2">
+                            <Label htmlFor="session-date" className="flex items-center">
+                              <Calendar className="w-4 h-4 mr-2 text-gray-500" />
+                              Date
+                            </Label>
+                            <Input
+                              id="session-date"
+                              type="date"
+                              value={manualSession.date}
+                              max={getMaxDate()}
+                              onChange={(e) => setManualSession(prev => ({ ...prev, date: e.target.value }))}
+                            />
+                          </div>
+
+                          {/* Time Input */}
+                          <div className="space-y-2">
+                            <Label htmlFor="session-time" className="flex items-center">
+                              <Clock className="w-4 h-4 mr-2 text-gray-500" />
+                              Time
+                            </Label>
+                            <Input
+                              id="session-time"
+                              type="time"
+                              value={manualSession.time}
+                              onChange={(e) => setManualSession(prev => ({ ...prev, time: e.target.value }))}
+                            />
+                          </div>
+
+                          {/* Duration Input */}
+                          <div className="space-y-2">
+                            <Label htmlFor="session-duration" className="flex items-center">
+                              <Activity className="w-4 h-4 mr-2 text-gray-500" />
+                              Duration (minutes)
+                            </Label>
+                            <Input
+                              id="session-duration"
+                              type="number"
+                              min="1"
+                              max="120"
+                              value={manualSession.durationMinutes}
+                              onChange={(e) => setManualSession(prev => ({
+                                ...prev,
+                                durationMinutes: parseInt(e.target.value) || 0
+                              }))}
+                            />
+                          </div>
+
+                          {/* Resistance Input */}
+                          <div className="space-y-2">
+                            <Label htmlFor="session-resistance" className="flex items-center">
+                              <TrendingUp className="w-4 h-4 mr-2 text-gray-500" />
+                              Resistance Level (1-10)
+                            </Label>
+                            <Input
+                              id="session-resistance"
+                              type="number"
+                              min="1"
+                              max="10"
+                              value={manualSession.resistance}
+                              onChange={(e) => setManualSession(prev => ({
+                                ...prev,
+                                resistance: parseInt(e.target.value) || 1
+                              }))}
+                            />
+                            <p className="text-xs text-gray-500">
+                              1 = Very light, 5 = Moderate, 10 = Maximum effort
+                            </p>
+                          </div>
+
+                          {/* Submit Button */}
+                          <Button
+                            className="w-full bg-blue-600 hover:bg-blue-700"
+                            onClick={handleSubmitManualSession}
+                            disabled={createManualSessionMutation.isPending}
+                          >
+                            {createManualSessionMutation.isPending ? "Recording..." : "Record Session"}
+                          </Button>
+                        </div>
+                      </DialogContent>
+                    </Dialog>
+                  </div>
+                </div>
               ) : (
                 <div className="space-y-4">
                   <div className="flex items-center justify-center text-green-200">
                     <Trophy className="w-10 h-10 mr-3" />
                     <span className="text-3xl font-bold">Daily Goal Complete!</span>
                   </div>
-                  <Button 
+                  <Button
                     size="lg"
                     className="bg-green-600 text-white hover:bg-green-700 text-2xl px-12 py-6 h-auto font-bold rounded-xl"
                     onClick={() => setLocation("/session")}
@@ -340,6 +568,112 @@ export default function DashboardPage() {
                     <Play className="w-8 h-8 mr-3" />
                     Bonus Session?
                   </Button>
+                  <div>
+                    <Dialog open={showManualSession} onOpenChange={handleOpenManualSession}>
+                      <DialogTrigger asChild>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="text-green-200 hover:text-white hover:bg-green-500/30"
+                        >
+                          <ClipboardPlus className="w-4 h-4 mr-2" />
+                          Record a past session manually
+                        </Button>
+                      </DialogTrigger>
+                      <DialogContent className="max-w-md">
+                        <DialogHeader>
+                          <DialogTitle className="flex items-center text-xl">
+                            <ClipboardPlus className="w-5 h-5 mr-2 text-blue-600" />
+                            Record Manual Session
+                          </DialogTitle>
+                          <DialogDescription>
+                            Log an exercise session that wasn't recorded automatically
+                          </DialogDescription>
+                        </DialogHeader>
+
+                        <div className="space-y-4 mt-4">
+                          {/* Date Input */}
+                          <div className="space-y-2">
+                            <Label htmlFor="session-date-2" className="flex items-center">
+                              <Calendar className="w-4 h-4 mr-2 text-gray-500" />
+                              Date
+                            </Label>
+                            <Input
+                              id="session-date-2"
+                              type="date"
+                              value={manualSession.date}
+                              max={getMaxDate()}
+                              onChange={(e) => setManualSession(prev => ({ ...prev, date: e.target.value }))}
+                            />
+                          </div>
+
+                          {/* Time Input */}
+                          <div className="space-y-2">
+                            <Label htmlFor="session-time-2" className="flex items-center">
+                              <Clock className="w-4 h-4 mr-2 text-gray-500" />
+                              Time
+                            </Label>
+                            <Input
+                              id="session-time-2"
+                              type="time"
+                              value={manualSession.time}
+                              onChange={(e) => setManualSession(prev => ({ ...prev, time: e.target.value }))}
+                            />
+                          </div>
+
+                          {/* Duration Input */}
+                          <div className="space-y-2">
+                            <Label htmlFor="session-duration-2" className="flex items-center">
+                              <Activity className="w-4 h-4 mr-2 text-gray-500" />
+                              Duration (minutes)
+                            </Label>
+                            <Input
+                              id="session-duration-2"
+                              type="number"
+                              min="1"
+                              max="120"
+                              value={manualSession.durationMinutes}
+                              onChange={(e) => setManualSession(prev => ({
+                                ...prev,
+                                durationMinutes: parseInt(e.target.value) || 0
+                              }))}
+                            />
+                          </div>
+
+                          {/* Resistance Input */}
+                          <div className="space-y-2">
+                            <Label htmlFor="session-resistance-2" className="flex items-center">
+                              <TrendingUp className="w-4 h-4 mr-2 text-gray-500" />
+                              Resistance Level (1-10)
+                            </Label>
+                            <Input
+                              id="session-resistance-2"
+                              type="number"
+                              min="1"
+                              max="10"
+                              value={manualSession.resistance}
+                              onChange={(e) => setManualSession(prev => ({
+                                ...prev,
+                                resistance: parseInt(e.target.value) || 1
+                              }))}
+                            />
+                            <p className="text-xs text-gray-500">
+                              1 = Very light, 5 = Moderate, 10 = Maximum effort
+                            </p>
+                          </div>
+
+                          {/* Submit Button */}
+                          <Button
+                            className="w-full bg-blue-600 hover:bg-blue-700"
+                            onClick={handleSubmitManualSession}
+                            disabled={createManualSessionMutation.isPending}
+                          >
+                            {createManualSessionMutation.isPending ? "Recording..." : "Record Session"}
+                          </Button>
+                        </div>
+                      </DialogContent>
+                    </Dialog>
+                  </div>
                 </div>
               )}
             </div>
