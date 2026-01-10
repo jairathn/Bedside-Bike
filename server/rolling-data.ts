@@ -32,16 +32,19 @@ export async function updateRollingDataWindow(): Promise<void> {
   // Set TIMEZONE env var to override (e.g., "America/Los_Angeles" for Pacific)
   const timezone = process.env.TIMEZONE || 'America/New_York';
 
+  // Helper to format any date in the configured timezone as YYYY-MM-DD
+  const formatDateInTimezone = (date: Date): string => {
+    return new Intl.DateTimeFormat('en-CA', {
+      timeZone: timezone,
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit'
+    }).format(date);
+  };
+
   // Get current date in the user's timezone
   const now = new Date();
-  const formatter = new Intl.DateTimeFormat('en-CA', {
-    timeZone: timezone,
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit'
-  });
-  const todayStr = formatter.format(now); // Returns YYYY-MM-DD format
-  const today = new Date(todayStr + 'T00:00:00'); // Midnight in configured timezone
+  const todayStr = formatDateInTimezone(now);
 
   console.log(`📅 Today's date: ${todayStr} (timezone: ${timezone}, UTC: ${now.toISOString()})`);
 
@@ -65,18 +68,16 @@ export async function updateRollingDataWindow(): Promise<void> {
 
         console.log(`📊 Processing ${patient.firstName} ${patient.lastName} (${patientConfig.email})`);
 
-        // Helper to format date as YYYY-MM-DD using local time
-        const formatDate = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+        // Calculate dates relative to today using milliseconds (timezone-independent)
+        const MS_PER_DAY = 24 * 60 * 60 * 1000;
 
-        // Calculate new admission date
-        const newAdmissionDate = new Date(today);
-        newAdmissionDate.setDate(today.getDate() - patientConfig.daysAdmitted);
-        const newAdmissionDateStr = formatDate(newAdmissionDate);
+        // Calculate admission date (daysAdmitted days ago)
+        const newAdmissionDate = new Date(now.getTime() - patientConfig.daysAdmitted * MS_PER_DAY);
+        const newAdmissionDateStr = formatDateInTimezone(newAdmissionDate);
 
-        // Calculate rolling window dates
-        const windowStart = new Date(today);
-        windowStart.setDate(today.getDate() - (patientConfig.windowDays - 1));
-        const windowStartStr = formatDate(windowStart);
+        // Calculate rolling window start (windowDays-1 days ago)
+        const windowStart = new Date(now.getTime() - (patientConfig.windowDays - 1) * MS_PER_DAY);
+        const windowStartStr = formatDateInTimezone(windowStart);
 
         console.log(`  Rolling window: ${windowStartStr} to ${todayStr}`);
 
@@ -144,13 +145,27 @@ export async function updateRollingDataWindow(): Promise<void> {
         // Generate fresh auto-sessions for days WITHOUT manual sessions
         let generatedCount = 0;
         for (let daysAgo = patientConfig.windowDays - 1; daysAgo >= 0; daysAgo--) {
-          const sessionDate = new Date(today);
-          sessionDate.setDate(today.getDate() - daysAgo);
-          const sessionDateStr = formatDate(sessionDate);
+          // Calculate this day's date using timezone-aware formatting
+          const sessionDateTime = new Date(now.getTime() - daysAgo * MS_PER_DAY);
+          const sessionDateStr = formatDateInTimezone(sessionDateTime);
 
           // Skip if this date has a manual session
           if (manualSessionDates.has(sessionDateStr)) {
             console.log(`  → Skipping ${sessionDateStr} (has manual session)`);
+            continue;
+          }
+
+          // Check if we already have auto-generated sessions for this date (prevent duplicates from race conditions)
+          const existingForDate = await db
+            .select()
+            .from(pgSchema.exerciseSessions)
+            .where(and(
+              eq(pgSchema.exerciseSessions.patientId, patient.id),
+              eq(pgSchema.exerciseSessions.sessionDate, sessionDateStr)
+            ));
+
+          if (existingForDate.length > 0) {
+            console.log(`  → Skipping ${sessionDateStr} (sessions already exist)`);
             continue;
           }
 
@@ -160,7 +175,7 @@ export async function updateRollingDataWindow(): Promise<void> {
 
           for (let sessionNum = 0; sessionNum < sessionsPerDay; sessionNum++) {
             const baseHour = sessionNum === 0 ? 9 : 14;
-            const startTime = new Date(sessionDate);
+            const startTime = new Date(sessionDateTime);
             startTime.setHours(baseHour + Math.floor(Math.random() * 2), Math.floor(Math.random() * 60), 0, 0);
 
             // Progressive improvement - duration stored in MINUTES
@@ -287,18 +302,16 @@ export async function updateRollingDataWindow(): Promise<void> {
 
         console.log(`📊 Processing ${patient.first_name} ${patient.last_name} (${patientConfig.email})`);
 
-        // Helper to format date as YYYY-MM-DD using local time
-        const formatDate = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+        // Calculate dates relative to today using milliseconds (timezone-independent)
+        const MS_PER_DAY = 24 * 60 * 60 * 1000;
 
-        // Calculate new admission date
-        const newAdmissionDate = new Date(today);
-        newAdmissionDate.setDate(today.getDate() - patientConfig.daysAdmitted);
-        const newAdmissionDateStr = formatDate(newAdmissionDate);
+        // Calculate admission date (daysAdmitted days ago)
+        const newAdmissionDate = new Date(now.getTime() - patientConfig.daysAdmitted * MS_PER_DAY);
+        const newAdmissionDateStr = formatDateInTimezone(newAdmissionDate);
 
-        // Calculate rolling window
-        const windowStart = new Date(today);
-        windowStart.setDate(today.getDate() - (patientConfig.windowDays - 1));
-        const windowStartStr = formatDate(windowStart);
+        // Calculate rolling window start (windowDays-1 days ago)
+        const windowStart = new Date(now.getTime() - (patientConfig.windowDays - 1) * MS_PER_DAY);
+        const windowStartStr = formatDateInTimezone(windowStart);
 
         console.log(`  Rolling window: ${windowStartStr} to ${todayStr}`);
 
@@ -350,18 +363,26 @@ export async function updateRollingDataWindow(): Promise<void> {
 
         // Generate fresh sessions
         for (let daysAgo = patientConfig.windowDays - 1; daysAgo >= 0; daysAgo--) {
-          const sessionDate = new Date(today);
-          sessionDate.setDate(today.getDate() - daysAgo);
-          const sessionDateStr = formatDate(sessionDate);
+          // Calculate this day's date using timezone-aware formatting
+          const sessionDateTime = new Date(now.getTime() - daysAgo * MS_PER_DAY);
+          const sessionDateStr = formatDateInTimezone(sessionDateTime);
 
+          // Skip if this date has a manual session
           if (manualSessionDates.has(sessionDateStr)) continue;
+
+          // Check if we already have sessions for this date (prevent duplicates)
+          const existingForDate = sqliteDb.prepare(
+            'SELECT COUNT(*) as count FROM exercise_sessions WHERE patient_id = ? AND session_date = ?'
+          ).get(patient.id, sessionDateStr) as { count: number };
+
+          if (existingForDate.count > 0) continue;
 
           const sessionsPerDay = Math.random() < 0.5 ? 1 : 2;
           const progressFactor = (patientConfig.windowDays - daysAgo) / patientConfig.windowDays;
 
           for (let sessionNum = 0; sessionNum < sessionsPerDay; sessionNum++) {
             const baseHour = sessionNum === 0 ? 9 : 14;
-            const startTime = new Date(sessionDate);
+            const startTime = new Date(sessionDateTime);
             startTime.setHours(baseHour + Math.floor(Math.random() * 2), Math.floor(Math.random() * 60), 0, 0);
 
             // Duration stored in MINUTES
