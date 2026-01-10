@@ -26,10 +26,18 @@ export default function ReportsPage() {
 
   // Process session data for charts
   const sessionData = (dashboardData as any)?.recentSessions || [];
-  
+
+  // Helper to format date string without timezone shift
+  // "2026-01-10" should display as "Jan 10", not "Jan 9"
+  const formatSessionDate = (dateStr: string) => {
+    // Append noon time to prevent UTC midnight from shifting to previous day
+    const date = new Date(dateStr + 'T12:00:00');
+    return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+  };
+
   // Aggregate sessions by day
   const sessionsByDay = sessionData.reduce((acc: any, session: any) => {
-    const day = new Date(session.sessionDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+    const day = formatSessionDate(session.sessionDate);
     if (!acc[day]) {
       acc[day] = {
         day,
@@ -302,7 +310,7 @@ export default function ReportsPage() {
                   {sessionData?.slice(0, 5).map((session: any, index: number) => (
                     <tr key={index} className="border-b border-gray-100">
                       <td className="py-2 sm:py-3 px-2 sm:px-4 text-gray-900 text-xs sm:text-sm">
-                        {new Date(session.sessionDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+                        {formatSessionDate(session.sessionDate)}
                       </td>
                       <td className="py-2 sm:py-3 px-2 sm:px-4 text-gray-600 text-xs sm:text-sm">
                         {Math.round(session.duration || 0)} min
