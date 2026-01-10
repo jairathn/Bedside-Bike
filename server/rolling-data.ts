@@ -28,12 +28,22 @@ export async function updateRollingDataWindow(): Promise<void> {
 
   console.log('🔄 Auto-updating rolling data window for demo patients...');
 
-  // Use local date components to avoid timezone issues with toISOString()
-  const now = new Date();
-  const todayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
-  const today = new Date(todayStr + 'T00:00:00'); // Midnight local time
+  // Use configured timezone (default to US Eastern for healthcare app)
+  // Set TIMEZONE env var to override (e.g., "America/Los_Angeles" for Pacific)
+  const timezone = process.env.TIMEZONE || 'America/New_York';
 
-  console.log(`📅 Today's date: ${todayStr} (server time: ${now.toISOString()})`);
+  // Get current date in the user's timezone
+  const now = new Date();
+  const formatter = new Intl.DateTimeFormat('en-CA', {
+    timeZone: timezone,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit'
+  });
+  const todayStr = formatter.format(now); // Returns YYYY-MM-DD format
+  const today = new Date(todayStr + 'T00:00:00'); // Midnight in configured timezone
+
+  console.log(`📅 Today's date: ${todayStr} (timezone: ${timezone}, UTC: ${now.toISOString()})`);
 
   let updatedCount = 0;
 
