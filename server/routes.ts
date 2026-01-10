@@ -314,9 +314,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
       ]);
 
       console.log('Patient found:', patient ? `${patient.firstName} ${patient.lastName} (ID: ${patient.id})` : 'NO');
-      console.log('Stats:', stats ? `Sessions: ${stats.totalSessions}, Duration: ${stats.totalDuration}s, Level: ${stats.level}` : 'NO STATS');
+      console.log('Stats:', stats ? `Sessions: ${stats.totalSessions}, Duration: ${stats.totalDuration} min, Level: ${stats.level}` : 'NO STATS');
       console.log('Sessions count:', sessions ? sessions.length : 0);
       console.log('Goals count:', goals ? goals.length : 0);
+
+      // Debug: Show session dates
+      const sessionDates = sessions?.slice(0, 10).map(s => s.sessionDate) || [];
+      console.log('📅 Recent session dates:', sessionDates.join(', '));
+      const uniqueDates = [...new Set(sessionDates)].sort();
+      console.log('📅 Unique dates in sessions:', uniqueDates.join(', '));
 
       if (!patient) {
         return res.status(404).json({ error: "Patient not found" });

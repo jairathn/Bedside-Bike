@@ -144,16 +144,21 @@ export async function updateRollingDataWindow(): Promise<void> {
 
         // Generate fresh auto-sessions for days WITHOUT manual sessions
         let generatedCount = 0;
+        const generatedDates: string[] = [];
         for (let daysAgo = patientConfig.windowDays - 1; daysAgo >= 0; daysAgo--) {
           // Calculate this day's date using timezone-aware formatting
           const sessionDateTime = new Date(now.getTime() - daysAgo * MS_PER_DAY);
           const sessionDateStr = formatDateInTimezone(sessionDateTime);
+
+          console.log(`  → Processing daysAgo=${daysAgo}, date=${sessionDateStr}`);
 
           // Skip if this date has a manual session
           if (manualSessionDates.has(sessionDateStr)) {
             console.log(`  → Skipping ${sessionDateStr} (has manual session)`);
             continue;
           }
+
+          generatedDates.push(sessionDateStr);
 
           // Generate 1-2 sessions for this day
           const sessionsPerDay = Math.random() < 0.5 ? 1 : 2;
@@ -200,7 +205,7 @@ export async function updateRollingDataWindow(): Promise<void> {
             generatedCount++;
           }
         }
-        console.log(`  ✓ Generated ${generatedCount} fresh auto-sessions`);
+        console.log(`  ✓ Generated ${generatedCount} fresh auto-sessions for dates: ${generatedDates.join(', ')}`);
 
         // Update admission date if needed
         if (patient.admissionDate !== newAdmissionDateStr) {
