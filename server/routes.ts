@@ -403,12 +403,22 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Create exercise session
   app.post("/api/sessions", createLimiter, async (req, res) => {
     try {
-      const sessionData = insertExerciseSessionSchema.parse(req.body) as InsertExerciseSession;
+      // Convert startTime string to Date object if needed
+      const body = { ...req.body };
+      if (typeof body.startTime === 'string') {
+        body.startTime = new Date(body.startTime);
+      }
+      if (typeof body.endTime === 'string') {
+        body.endTime = new Date(body.endTime);
+      }
+
+      const sessionData = insertExerciseSessionSchema.parse(body) as InsertExerciseSession;
       const session = await storage.createSession(sessionData);
       res.json(session);
     } catch (error) {
       console.error("Session creation error:", error);
-      res.status(400).json({ error: "Invalid session data" });
+      const errorMessage = error instanceof Error ? error.message : "Invalid session data";
+      res.status(400).json({ error: errorMessage });
     }
   });
 
