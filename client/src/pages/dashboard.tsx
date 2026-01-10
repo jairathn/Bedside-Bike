@@ -459,9 +459,33 @@ export default function DashboardPage() {
                 <div className="text-2xl sm:text-4xl font-bold mb-2">
                   {Math.floor(todayProgress)}% Complete
                 </div>
-                <div className="text-blue-100 text-lg sm:text-2xl mb-4 sm:mb-6">
+                <div className="text-blue-100 text-lg sm:text-2xl mb-2">
                   {Math.floor(todayMinutes)} of {targetMinutes} minutes today
                 </div>
+                {/* Show session breakdown if provider recommends multiple sessions */}
+                {(() => {
+                  const sessionsGoal = goals?.find((g: any) => g.goalType === 'sessions');
+                  const durationGoal = goals?.find((g: any) => g.goalType === 'duration');
+                  const numSessions = sessionsGoal ? parseInt(sessionsGoal.targetValue) : 0;
+
+                  if (numSessions > 1 && durationGoal?.period === 'session') {
+                    const perSessionMinutes = durationGoal.targetValue > 60
+                      ? Math.round(durationGoal.targetValue / 60)
+                      : Math.round(durationGoal.targetValue);
+                    const providerName = durationGoal.providerName || sessionsGoal?.providerName;
+
+                    return (
+                      <div className="text-blue-200 text-sm sm:text-base mb-4">
+                        {providerName ? (
+                          <>Your provider <span className="font-medium">{providerName}</span> recommends</>
+                        ) : (
+                          <>Recommended</>
+                        )}: {numSessions} sessions of {perSessionMinutes} min each for optimal recovery
+                      </div>
+                    );
+                  }
+                  return null;
+                })()}
               </div>
               
               {todayProgress < 100 ? (
