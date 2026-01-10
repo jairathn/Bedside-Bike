@@ -909,27 +909,258 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Get nudge targets (patients who could use encouragement)
   app.get("/api/kudos/nudge-targets", async (req, res) => {
     try {
-      // Mock data for now - in real implementation, this would analyze recent activity
-      const mockTargets = [
-        {
-          id: 6,
-          displayName: "Alex M.",
-          avatarEmoji: "🧑‍⚕️",
-          minutesLeft: 10,
-          lastActivity: "2 hours ago"
-        },
-        {
-          id: 7,
-          displayName: "Sam K.",
-          avatarEmoji: "🏃",
-          minutesLeft: 5,
-          lastActivity: "4 hours ago"
+      const currentPatientId = parseInt(req.query.patientId as string) || 0;
+
+      // Get all patients who have opted in to nudges
+      const allPatients = await db
+        .select({
+          id: users.id,
+          firstName: users.firstName,
+          lastName: users.lastName,
+        })
+        .from(users)
+        .leftJoin(patientPreferences, eq(users.id, patientPreferences.patientId))
+        .where(
+          and(
+            eq(users.userType, 'patient'),
+            eq(users.isActive, true)
+          )
+        );
+
+      // Get today's date in user's timezone
+      const today = new Intl.DateTimeFormat('en-CA', {
+        timeZone: 'America/New_York',
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit'
+      }).format(new Date());
+
+      // Calculate who needs encouragement (hasn't met daily goal)
+      const nudgeTargets = [];
+      for (const patient of allPatients) {
+        if (patient.id === currentPatientId) continue; // Don't show current user
+
+        // Get patient's preferences
+        const [prefs] = await db
+          .select()
+          .from(patientPreferences)
+          .where(eq(patientPreferences.patientId, patient.id));
+
+        // Get patient's daily goal
+        const [durationGoal] = await db
+          .select()
+          .from(patientGoals)
+          .where(
+            and(
+              eq(patientGoals.patientId, patient.id),
+              eq(patientGoals.goalType, 'duration'),
+              eq(patientGoals.isActive, true)
+            )
+          );
+
+        // Get today's sessions
+        const todaySessions = await db
+          .select()
+          .from(exerciseSessions)
+          .where(
+            and(
+              eq(exerciseSessions.patientId, patient.id),
+              eq(exerciseSessions.sessionDate, today)
+            )
+          );
+
+        const todayMinutes = todaySessions.reduce((sum, s) => sum + (s.duration || 0), 0);
+
+        // Calculate daily target
+        let dailyTarget = 30; // Default
+        if (durationGoal) {
+          const goalMinutes = durationGoal.targetValue > 60
+            ? durationGoal.targetValue / 60
+            : durationGoal.targetValue;
+
+          if (durationGoal.period === 'daily') {
+            dailyTarget = goalMinutes;
+          } else {
+            // Per-session - multiply by sessions goal
+            const [sessionsGoal] = await db
+              .select()
+              .from(patientGoals)
+              .where(
+                and(
+                  eq(patientGoals.patientId, patient.id),
+                  eq(patientGoals.goalType, 'sessions'),
+                  eq(patientGoals.isActive, true)
+                )
+              );
+            const sessionsPerDay = sessionsGoal ? sessionsGoal.targetValue : 2;
+            dailyTarget = goalMinutes * sessionsPerDay;
+          }
         }
-      ];
-      res.json(mockTargets);
+
+        const minutesLeft = Math.max(0, Math.round(dailyTarget - todayMinutes));
+
+        // Only show patients who haven't met their goal yet and have minutes left
+        if (minutesLeft > 0) {
+          nudgeTargets.push({
+            id: patient.id,
+            displayName: prefs?.displayName || `${patient.firstName} ${patient.lastName?.charAt(0)}.`,
+            avatarEmoji: prefs?.avatarEmoji || "👤",
+            minutesLeft,
+            dailyTarget: Math.round(dailyTarget),
+            todayMinutes: Math.round(todayMinutes),
+            optedIn: prefs?.optInNudges || false
+          });
+        }
+      }
+
+      // Sort by minutes left (most needed first) and limit
+      nudgeTargets.sort((a, b) => b.minutesLeft - a.minutesLeft);
+      res.json(nudgeTargets.slice(0, 10));
     } catch (error) {
       console.error("Get nudge targets error:", error);
       res.status(500).json({ error: "Failed to get nudge targets" });
+    }
+  });
+
+  // Get leaderboard
+  app.get("/api/kudos/leaderboard", async (req, res) => {
+    try {
+      const currentPatientId = parseInt(req.query.patientId as string) || 0;
+
+      // Get all patients with their stats
+      const patients = await db
+        .select({
+          id: users.id,
+          firstName: users.firstName,
+          lastName: users.lastName,
+          totalDuration: patientStats.totalDuration,
+          totalSessions: patientStats.totalSessions,
+          consistencyStreak: patientStats.consistencyStreak,
+        })
+        .from(users)
+        .leftJoin(patientStats, eq(users.id, patientStats.patientId))
+        .where(
+          and(
+            eq(users.userType, 'patient'),
+            eq(users.isActive, true)
+          )
+        )
+        .orderBy(desc(patientStats.totalDuration));
+
+      const leaderboard = [];
+      for (let i = 0; i < patients.length; i++) {
+        const patient = patients[i];
+
+        // Get preferences
+        const [prefs] = await db
+          .select()
+          .from(patientPreferences)
+          .where(eq(patientPreferences.patientId, patient.id));
+
+        leaderboard.push({
+          rank: i + 1,
+          id: patient.id,
+          displayName: prefs?.displayName || `${patient.firstName} ${patient.lastName?.charAt(0)}.`,
+          avatarEmoji: prefs?.avatarEmoji || "👤",
+          totalMinutes: Math.round(patient.totalDuration || 0),
+          totalSessions: patient.totalSessions || 0,
+          streak: patient.consistencyStreak || 0,
+          isCurrentUser: patient.id === currentPatientId,
+          optedIn: prefs?.optInKudos || false
+        });
+      }
+
+      res.json(leaderboard.slice(0, 10));
+    } catch (error) {
+      console.error("Get leaderboard error:", error);
+      res.status(500).json({ error: "Failed to get leaderboard" });
+    }
+  });
+
+  // Get received kudos and nudges for a patient
+  app.get("/api/kudos/received", async (req, res) => {
+    try {
+      const patientId = parseInt(req.query.patientId as string);
+      if (!patientId) {
+        return res.status(400).json({ error: "Patient ID required" });
+      }
+
+      // Get nudges received
+      const nudgesReceived = await db
+        .select({
+          id: nudgeMessages.id,
+          message: nudgeMessages.message,
+          createdAt: nudgeMessages.createdAt,
+          senderId: nudgeMessages.senderId,
+        })
+        .from(nudgeMessages)
+        .where(eq(nudgeMessages.recipientId, patientId))
+        .orderBy(desc(nudgeMessages.createdAt))
+        .limit(20);
+
+      // Get sender info for each nudge
+      const nudgesWithSenders = await Promise.all(
+        nudgesReceived.map(async (nudge) => {
+          const [sender] = await db
+            .select({ firstName: users.firstName, lastName: users.lastName })
+            .from(users)
+            .where(eq(users.id, nudge.senderId));
+
+          const [senderPrefs] = await db
+            .select()
+            .from(patientPreferences)
+            .where(eq(patientPreferences.patientId, nudge.senderId));
+
+          return {
+            ...nudge,
+            senderName: senderPrefs?.displayName || `${sender?.firstName || 'Anonymous'} ${sender?.lastName?.charAt(0) || ''}.`,
+            senderEmoji: senderPrefs?.avatarEmoji || "👤"
+          };
+        })
+      );
+
+      // Get feed items (achievements) that belong to this patient and their reactions
+      const achievements = await db
+        .select({
+          id: feedItems.id,
+          message: feedItems.message,
+          eventType: feedItems.eventType,
+          createdAt: feedItems.createdAt,
+        })
+        .from(feedItems)
+        .where(eq(feedItems.patientId, patientId))
+        .orderBy(desc(feedItems.createdAt))
+        .limit(10);
+
+      // Get reactions for each achievement
+      const achievementsWithReactions = await Promise.all(
+        achievements.map(async (item) => {
+          const reactions = await db
+            .select({
+              reactionType: kudosReactions.reactionType,
+            })
+            .from(kudosReactions)
+            .where(eq(kudosReactions.feedItemId, item.id));
+
+          return {
+            ...item,
+            reactions: reactions.map(r => r.reactionType),
+            reactionCount: reactions.length
+          };
+        })
+      );
+
+      res.json({
+        nudges: nudgesWithSenders,
+        achievements: achievementsWithReactions,
+        summary: {
+          totalNudgesReceived: nudgesReceived.length,
+          totalReactionsReceived: achievementsWithReactions.reduce((sum, a) => sum + a.reactionCount, 0)
+        }
+      });
+    } catch (error) {
+      console.error("Get received kudos error:", error);
+      res.status(500).json({ error: "Failed to get received kudos" });
     }
   });
 
