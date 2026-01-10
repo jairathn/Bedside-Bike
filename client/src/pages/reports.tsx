@@ -26,6 +26,28 @@ export default function ReportsPage() {
 
   // Process session data for charts
   const sessionData = (dashboardData as any)?.recentSessions || [];
+  const goals = (dashboardData as any)?.goals || [];
+
+  // Calculate daily target from goals (same logic as dashboard)
+  const dailyTargetMinutes = (() => {
+    const durationGoal = goals?.find((g: any) => g.goalType === 'duration');
+    if (!durationGoal) return 30; // Default fallback
+
+    // Convert to minutes if stored in seconds (value > 60 suggests seconds)
+    const goalMinutes = durationGoal.targetValue > 60
+      ? durationGoal.targetValue / 60
+      : durationGoal.targetValue;
+
+    // If it's already a daily goal, use as-is; otherwise multiply by sessions
+    if (durationGoal.period === 'daily') {
+      return Math.round(goalMinutes);
+    } else {
+      // Per-session goal - multiply by sessions per day
+      const sessionsGoal = goals?.find((g: any) => g.goalType === 'sessions');
+      const sessionsPerDay = sessionsGoal ? parseInt(sessionsGoal.targetValue) : 2;
+      return Math.round(goalMinutes * sessionsPerDay);
+    }
+  })();
 
   // Helper to format date string without timezone shift
   // "2026-01-10" should display as "Jan 10", not "Jan 9"
@@ -63,13 +85,13 @@ export default function ReportsPage() {
     day: day.day,
     duration: Math.round(day.totalDuration),
     power: Math.round(day.totalPower / day.sessionCount),
-    target: 15, // Target duration from goals
+    target: dailyTargetMinutes, // Target from provider goals
   }));
 
   const performanceData = dailyData.map((day: any) => ({
     day: day.day,
     efficiency: Math.round(((day.totalPower / day.sessionCount) / 45) * 100), // Avg efficiency vs max power
-    consistency: Math.round(Math.min((day.totalDuration / 15) * 100, 100)), // Daily duration vs 15min target
+    consistency: Math.round(Math.min((day.totalDuration / dailyTargetMinutes) * 100, 100)), // Daily duration vs target
   }));
 
   const chartConfig = {

@@ -10,7 +10,7 @@ import { Switch } from "@/components/ui/switch";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
-import { Heart, MessageCircle, Settings, Zap, Target, Award, ThumbsUp } from "lucide-react";
+import { Heart, MessageCircle, Settings, Zap, Target, Award, ThumbsUp, Trophy, TrendingUp, Gift } from "lucide-react";
 import { apiRequest } from "@/lib/queryClient";
 
 export default function KudosWall() {
@@ -21,36 +21,54 @@ export default function KudosWall() {
   const [showSettings, setShowSettings] = useState(false);
   const [displayName, setDisplayName] = useState<string>("");
 
+  const patientId = user?.id;
+
   // Get patient preferences
-  const { data: preferences } = useQuery({
-    queryKey: ['/api/kudos/preferences'],
-    enabled: !!user,
+  const { data: preferences, refetch: refetchPreferences } = useQuery({
+    queryKey: [`/api/kudos/preferences?patientId=${patientId}`],
+    enabled: !!patientId,
   });
 
   // Get feed items
   const { data: feedItems, isLoading } = useQuery({
-    queryKey: ['/api/kudos/feed'],
-    enabled: !!user,
+    queryKey: [`/api/kudos/feed?patientId=${patientId}`],
+    enabled: !!patientId,
   });
 
   // Get nudge opportunities (patients who could use encouragement)
   const { data: nudgeTargets } = useQuery({
-    queryKey: ['/api/kudos/nudge-targets'],
-    enabled: !!user,
+    queryKey: [`/api/kudos/nudge-targets?patientId=${patientId}`],
+    enabled: !!patientId,
+  });
+
+  // Get leaderboard
+  const { data: leaderboard } = useQuery({
+    queryKey: [`/api/kudos/leaderboard?patientId=${patientId}`],
+    enabled: !!patientId,
+  });
+
+  // Get received kudos/nudges
+  const { data: receivedKudos } = useQuery({
+    queryKey: [`/api/kudos/received?patientId=${patientId}`],
+    enabled: !!patientId,
   });
 
   // Update preferences mutation (silent for real-time updates)
   const updatePreferencesMutation = useMutation({
     mutationFn: async (updates: any) => {
-      return await apiRequest('/api/kudos/preferences', {
+      return await apiRequest(`/api/kudos/preferences?patientId=${patientId}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(updates),
       });
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['/api/kudos/preferences'] });
-      // Silent update - no toast spam
+      queryClient.invalidateQueries({ queryKey: [`/api/kudos/preferences?patientId=${patientId}`] });
+      refetchPreferences();
+      toast({
+        title: "Settings saved",
+        description: "Your preferences have been updated",
+      });
     },
   });
 
@@ -65,21 +83,21 @@ export default function KudosWall() {
   // Send reaction mutation
   const reactionMutation = useMutation({
     mutationFn: async ({ feedItemId, reaction }: { feedItemId: number; reaction: string }) => {
-      return await apiRequest('/api/kudos/react', {
+      return await apiRequest(`/api/kudos/react?patientId=${patientId}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ feedItemId, reactionType: reaction }),
       });
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['/api/kudos/feed'] });
+      queryClient.invalidateQueries({ queryKey: [`/api/kudos/feed?patientId=${patientId}`] });
     },
   });
 
   // Send nudge mutation
   const nudgeMutation = useMutation({
     mutationFn: async ({ recipientId, templateType, metadata }: any) => {
-      return await apiRequest('/api/kudos/nudge', {
+      return await apiRequest(`/api/kudos/nudge?patientId=${patientId}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ recipientId, templateType, metadata }),
@@ -90,6 +108,7 @@ export default function KudosWall() {
         title: "Nudge Sent!",
         description: "Your encouragement has been delivered",
       });
+      queryClient.invalidateQueries({ queryKey: [`/api/kudos/nudge-targets?patientId=${patientId}`] });
     },
   });
 
@@ -207,8 +226,59 @@ export default function KudosWall() {
         )}
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          {/* Main Feed */}
-          <div className="lg:col-span-2">
+          {/* Main Feed and Leaderboard */}
+          <div className="lg:col-span-2 space-y-6">
+            {/* Leaderboard */}
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center">
+                  <Trophy className="w-5 h-5 mr-2 text-yellow-500" />
+                  Leaderboard
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                {leaderboard?.length > 0 ? (
+                  <div className="space-y-2">
+                    {leaderboard.map((entry: any) => (
+                      <div
+                        key={entry.id}
+                        className={`flex items-center justify-between p-3 rounded-lg ${
+                          entry.isCurrentUser
+                            ? 'bg-blue-50 border-2 border-blue-200'
+                            : 'bg-gray-50'
+                        }`}
+                      >
+                        <div className="flex items-center space-x-3">
+                          <span className={`font-bold w-6 ${
+                            entry.rank === 1 ? 'text-yellow-500' :
+                            entry.rank === 2 ? 'text-gray-400' :
+                            entry.rank === 3 ? 'text-amber-600' : 'text-gray-600'
+                          }`}>
+                            {entry.rank === 1 ? '🥇' : entry.rank === 2 ? '🥈' : entry.rank === 3 ? '🥉' : `#${entry.rank}`}
+                          </span>
+                          <span className="text-xl">{entry.avatarEmoji}</span>
+                          <div>
+                            <span className="font-medium">{entry.displayName}</span>
+                            {entry.isCurrentUser && <Badge className="ml-2 text-xs">You</Badge>}
+                          </div>
+                        </div>
+                        <div className="text-right">
+                          <div className="font-bold text-blue-600">{entry.totalMinutes} min</div>
+                          <div className="text-xs text-gray-500">{entry.streak > 0 && `🔥 ${entry.streak} day streak`}</div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="text-center py-6">
+                    <Trophy className="w-8 h-8 text-gray-400 mx-auto mb-2" />
+                    <p className="text-sm text-gray-500">No leaderboard data yet</p>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+
+            {/* Recent Achievements Feed */}
             <Card>
               <CardHeader>
                 <CardTitle className="flex items-center">
@@ -226,9 +296,9 @@ export default function KudosWall() {
                           <p className="text-gray-900">{item.message}</p>
                           <div className="flex items-center space-x-4 mt-2">
                             <span className="text-sm text-gray-500">
-                              {new Date(item.createdAt).toLocaleTimeString([], { 
-                                hour: '2-digit', 
-                                minute: '2-digit' 
+                              {new Date(item.createdAt).toLocaleTimeString([], {
+                                hour: '2-digit',
+                                minute: '2-digit'
                               })}
                             </span>
                             <div className="flex space-x-1">
@@ -267,25 +337,70 @@ export default function KudosWall() {
             </Card>
           </div>
 
-          {/* Nudge Sidebar */}
-          <div>
+          {/* Sidebar */}
+          <div className="space-y-4">
+            {/* Received Kudos & Nudges */}
             <Card>
               <CardHeader>
-                <CardTitle className="flex items-center">
+                <CardTitle className="flex items-center text-base">
+                  <Gift className="w-5 h-5 mr-2 text-purple-500" />
+                  Your Received Encouragement
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                {receivedKudos?.nudges?.length > 0 ? (
+                  receivedKudos.nudges.slice(0, 5).map((nudge: any) => (
+                    <div key={nudge.id} className="border rounded-lg p-3 bg-purple-50">
+                      <div className="flex items-start space-x-2">
+                        <span className="text-lg">{nudge.senderEmoji}</span>
+                        <div>
+                          <p className="text-sm text-gray-700">{nudge.message}</p>
+                          <p className="text-xs text-gray-500 mt-1">
+                            from {nudge.senderName}
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                  ))
+                ) : (
+                  <div className="text-center py-4">
+                    <Gift className="w-6 h-6 text-gray-400 mx-auto mb-2" />
+                    <p className="text-xs text-gray-500">No nudges received yet</p>
+                  </div>
+                )}
+                {receivedKudos?.summary && (
+                  <div className="border-t pt-3 mt-3">
+                    <div className="flex justify-between text-sm">
+                      <span className="text-gray-600">Total nudges received</span>
+                      <Badge variant="secondary">{receivedKudos.summary.totalNudgesReceived}</Badge>
+                    </div>
+                    <div className="flex justify-between text-sm mt-1">
+                      <span className="text-gray-600">Reactions on your posts</span>
+                      <Badge variant="secondary">{receivedKudos.summary.totalReactionsReceived}</Badge>
+                    </div>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+
+            {/* Send Encouragement */}
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center text-base">
                   <MessageCircle className="w-5 h-5 mr-2" />
                   Send Encouragement
                 </CardTitle>
               </CardHeader>
-              <CardContent className="space-y-4">
+              <CardContent className="space-y-3">
                 {nudgeTargets?.length > 0 ? (
                   nudgeTargets.map((target: any) => (
                     <div key={target.id} className="border rounded-lg p-3">
                       <div className="flex items-center space-x-2 mb-2">
                         <span className="text-lg">{target.avatarEmoji}</span>
-                        <span className="font-medium">{target.displayName}</span>
+                        <span className="font-medium text-sm">{target.displayName}</span>
                       </div>
-                      <p className="text-sm text-gray-600 mb-3">
-                        {target.minutesLeft} minutes left today
+                      <p className="text-xs text-gray-600 mb-2">
+                        {target.todayMinutes}/{target.dailyTarget} min • <span className="text-orange-600">{target.minutesLeft} left</span>
                       </p>
                       <Button
                         size="sm"
@@ -297,18 +412,19 @@ export default function KudosWall() {
                             metadata: { minutesLeft: target.minutesLeft }
                           });
                         }}
-                        disabled={nudgeMutation.isPending}
+                        disabled={nudgeMutation.isPending || !target.optedIn}
+                        variant={target.optedIn ? "default" : "outline"}
                       >
                         <ThumbsUp className="w-4 h-4 mr-1" />
-                        Send Nudge
+                        {target.optedIn ? 'Send Nudge' : 'Not accepting nudges'}
                       </Button>
                     </div>
                   ))
                 ) : (
-                  <div className="text-center py-6">
-                    <MessageCircle className="w-8 h-8 text-gray-400 mx-auto mb-2" />
-                    <p className="text-sm text-gray-500">
-                      Everyone's caught up!
+                  <div className="text-center py-4">
+                    <MessageCircle className="w-6 h-6 text-gray-400 mx-auto mb-2" />
+                    <p className="text-xs text-gray-500">
+                      Everyone's on track today! 🎉
                     </p>
                   </div>
                 )}
@@ -316,23 +432,27 @@ export default function KudosWall() {
             </Card>
 
             {/* Quick Stats */}
-            <Card className="mt-4">
+            <Card>
               <CardHeader>
-                <CardTitle className="text-lg">Today's Activity</CardTitle>
+                <CardTitle className="text-base">Community Stats</CardTitle>
               </CardHeader>
               <CardContent>
-                <div className="space-y-3">
-                  <div className="flex justify-between">
-                    <span className="text-sm text-gray-600">Kudos given</span>
-                    <Badge variant="secondary">5</Badge>
+                <div className="space-y-2">
+                  <div className="flex justify-between text-sm">
+                    <span className="text-gray-600">Patients on track</span>
+                    <Badge variant="secondary" className="bg-green-100 text-green-800">
+                      {(leaderboard?.length || 0) - (nudgeTargets?.length || 0)}
+                    </Badge>
                   </div>
-                  <div className="flex justify-between">
-                    <span className="text-sm text-gray-600">Nudges sent</span>
-                    <Badge variant="secondary">2</Badge>
+                  <div className="flex justify-between text-sm">
+                    <span className="text-gray-600">Need encouragement</span>
+                    <Badge variant="secondary" className="bg-orange-100 text-orange-800">
+                      {nudgeTargets?.length || 0}
+                    </Badge>
                   </div>
-                  <div className="flex justify-between">
-                    <span className="text-sm text-gray-600">Active patients</span>
-                    <Badge variant="secondary">{nudgeTargets?.length || 0}</Badge>
+                  <div className="flex justify-between text-sm">
+                    <span className="text-gray-600">Active in community</span>
+                    <Badge variant="secondary">{leaderboard?.length || 0}</Badge>
                   </div>
                 </div>
               </CardContent>
