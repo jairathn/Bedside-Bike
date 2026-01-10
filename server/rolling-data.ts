@@ -266,6 +266,28 @@ export async function updateRollingDataWindow(): Promise<void> {
             .where(eq(pgSchema.patientProtocolAssignments.id, assignments[0].id));
         }
 
+        // Recalculate patient stats from actual sessions
+        const allPatientSessions = await db
+          .select()
+          .from(pgSchema.exerciseSessions)
+          .where(eq(pgSchema.exerciseSessions.patientId, patient.id));
+
+        const totalSessions = allPatientSessions.length;
+        const totalDuration = allPatientSessions.reduce((sum, s) => sum + (s.duration || 0), 0);
+        const avgSessionDuration = totalSessions > 0 ? Math.round(totalDuration / totalSessions) : 0;
+
+        await db
+          .update(pgSchema.patientStats)
+          .set({
+            totalSessions: totalSessions,
+            totalDuration: totalDuration, // Stored in MINUTES
+            avgDailyDuration: avgSessionDuration,
+            updatedAt: new Date()
+          })
+          .where(eq(pgSchema.patientStats.patientId, patient.id));
+
+        console.log(`  ✓ Reset stats: ${totalSessions} sessions, ${totalDuration} total min, ${avgSessionDuration} avg min`);
+
         updatedCount++;
       }
     } else {
@@ -428,6 +450,17 @@ export async function updateRollingDataWindow(): Promise<void> {
           sqliteDb.prepare('UPDATE patient_protocol_assignments SET start_date = ?, updated_at = ? WHERE id = ?')
             .run(Math.floor(newAdmissionDate.getTime() / 1000), Math.floor(Date.now() / 1000), protocolAssignment.id);
         }
+
+        // Recalculate patient stats from actual sessions
+        const allPatientSessions = sqliteDb.prepare('SELECT * FROM exercise_sessions WHERE patient_id = ?').all(patient.id) as any[];
+        const totalSessions = allPatientSessions.length;
+        const totalDuration = allPatientSessions.reduce((sum: number, s: any) => sum + (s.duration || 0), 0);
+        const avgSessionDuration = totalSessions > 0 ? Math.round(totalDuration / totalSessions) : 0;
+
+        sqliteDb.prepare('UPDATE patient_stats SET total_sessions = ?, total_duration = ?, avg_daily_duration = ?, updated_at = ? WHERE patient_id = ?')
+          .run(totalSessions, totalDuration, avgSessionDuration, Math.floor(Date.now() / 1000), patient.id);
+
+        console.log(`  ✓ Reset stats: ${totalSessions} sessions, ${totalDuration} total min, ${avgSessionDuration} avg min`);
 
         updatedCount++;
       }
