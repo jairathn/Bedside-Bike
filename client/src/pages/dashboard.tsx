@@ -277,8 +277,13 @@ export default function DashboardPage() {
     });
   };
 
-  // Get max date (today) for date picker
-  const getMaxDate = () => new Date().toISOString().split('T')[0];
+  // Get max date (today) for date picker - use America/New_York to match server
+  const getMaxDate = () => new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'America/New_York',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit'
+  }).format(new Date());
 
   useEffect(() => {
     if (!currentPatient) {
@@ -317,8 +322,18 @@ export default function DashboardPage() {
 
   // Calculate today's progress - sum all sessions from today
   // Duration is stored in MINUTES
-  const today = new Date().toISOString().split('T')[0]; // Get today's date (YYYY-MM-DD)
+  // Use America/New_York timezone to match server-side session generation
+  const today = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'America/New_York',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit'
+  }).format(new Date());
   const recentSessions = (dashboardData as any)?.recentSessions || [];
+
+  // Debug: Log date comparison info
+  console.log('📅 Client today (EST):', today);
+  console.log('📅 Session dates:', recentSessions.slice(0, 5).map((s: any) => s.sessionDate));
   const todayMinutes = recentSessions
     .filter((session: any) => session.sessionDate === today)
     .reduce((total: number, session: any) => total + (session.duration || 0), 0);
