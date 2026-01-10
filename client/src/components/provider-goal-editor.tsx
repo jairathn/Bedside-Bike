@@ -399,7 +399,7 @@ export function ProviderGoalEditor({ patientGoals = [], patientId, onUpdateGoals
         },
         body: JSON.stringify({
           goals: goalsData,
-          providerId: 3 // Current provider
+          providerId: user?.id || 1 // Use logged-in provider's ID
         }),
       });
 
