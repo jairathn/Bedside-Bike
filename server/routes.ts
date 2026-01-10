@@ -4,8 +4,8 @@ import { storage } from "./storage";
 // Authentication will be handled by existing auth system
 import { db } from "./db";
 import { updateRollingDataWindow } from "./rolling-data";
-import { patientStats, users, providerPatients, patientGoals, exerciseSessions } from "@shared/schema";
-import { eq, and } from "drizzle-orm";
+import { patientStats, users, providerPatients, patientGoals, exerciseSessions, patientPreferences, feedItems, nudgeMessages, kudosReactions } from "@shared/schema";
+import { eq, and, desc } from "drizzle-orm";
 import { calculateRisks } from "./risk-calculator";
 // Removed duplicate calculator - using only central risk calculator
 import { kudosService } from "./kudos-service";
