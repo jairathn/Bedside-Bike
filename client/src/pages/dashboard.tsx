@@ -337,15 +337,26 @@ export default function DashboardPage() {
   const todayMinutes = recentSessions
     .filter((session: any) => session.sessionDate === today)
     .reduce((total: number, session: any) => total + (session.duration || 0), 0);
-  // Calculate daily target = session duration × number of sessions (same as goals page)
+  // Calculate daily target from duration goal
+  // If goal period is 'daily', use value directly; if 'session', multiply by sessions per day
   const targetMinutes = (() => {
     const durationGoal = goals?.find((g: any) => g.goalType === 'duration');
-    const sessionsGoal = goals?.find((g: any) => g.goalType === 'sessions');
-    // Check if targetValue is already in minutes or needs conversion from seconds
-    const sessionMinutes = durationGoal ? 
-      (durationGoal.targetValue > 60 ? durationGoal.targetValue / 60 : durationGoal.targetValue) : 15;
-    const sessionsPerDay = sessionsGoal ? sessionsGoal.targetValue : 2;
-    return Math.round(sessionMinutes * sessionsPerDay);
+    if (!durationGoal) return 30; // Default fallback
+
+    // Convert to minutes if stored in seconds (value > 60 suggests seconds)
+    const goalMinutes = durationGoal.targetValue > 60
+      ? durationGoal.targetValue / 60
+      : durationGoal.targetValue;
+
+    // If it's already a daily goal, use as-is; otherwise multiply by sessions
+    if (durationGoal.period === 'daily') {
+      return Math.round(goalMinutes);
+    } else {
+      // Per-session goal - multiply by sessions per day
+      const sessionsGoal = goals?.find((g: any) => g.goalType === 'sessions');
+      const sessionsPerDay = sessionsGoal ? sessionsGoal.targetValue : 2;
+      return Math.round(goalMinutes * sessionsPerDay);
+    }
   })();
   const todayProgress = Math.min((todayMinutes / targetMinutes) * 100, 100);
 
@@ -843,8 +854,8 @@ export default function DashboardPage() {
           </Button>
         </div>
 
-        {/* Additional Goals - Patient-Friendly Only */}
-        {goals && goals.filter((goal: any) => ['resistance', 'duration', 'sessions', 'power'].includes(goal.goalType)).length > 0 && (
+        {/* Additional Goals - Show goals OTHER than duration (which is shown at top) */}
+        {goals && goals.filter((goal: any) => ['resistance', 'sessions', 'power'].includes(goal.goalType)).length > 0 && (
           <Card className="card-interactive animate-slide-up">
             <CardContent className="p-6">
               <div className="flex items-center justify-between mb-4">
@@ -952,7 +963,7 @@ export default function DashboardPage() {
               </div>
               <div className="grid gap-4">
                 {goals
-                  .filter((goal: any) => ['resistance', 'duration', 'sessions', 'power'].includes(goal.goalType))
+                  .filter((goal: any) => ['resistance', 'sessions', 'power'].includes(goal.goalType))
                   .map((goal: any, index: number) => {
                     const isAchieved = parseFloat(goal.currentValue || '0') >= parseFloat(goal.targetValue || '0');
                     const isPowerGoal = goal.goalType === 'power';
