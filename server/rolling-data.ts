@@ -147,9 +147,9 @@ export async function updateRollingDataWindow(): Promise<void> {
             const startTime = new Date(sessionDate);
             startTime.setHours(baseHour + Math.floor(Math.random() * 2), Math.floor(Math.random() * 60), 0, 0);
 
-            // Progressive improvement
+            // Progressive improvement - duration stored in MINUTES
             const baseDuration = 8 + Math.floor(progressFactor * 12);
-            const duration = baseDuration + Math.floor(Math.random() * 5);
+            const duration = baseDuration + Math.floor(Math.random() * 5); // 8-25 minutes
 
             const baseResistance = 2 + Math.floor(progressFactor * 3);
             const resistance = baseResistance + Math.floor(Math.random() * 2);
@@ -167,7 +167,7 @@ export async function updateRollingDataWindow(): Promise<void> {
                 sessionDate: sessionDateStr,
                 startTime: startTime,
                 endTime: endTime,
-                duration: duration,
+                duration: duration, // Stored in MINUTES
                 resistance: resistance,
                 avgRpm: avgRpm,
                 maxRpm: avgRpm + Math.floor(Math.random() * 15) + 5,
@@ -345,8 +345,9 @@ export async function updateRollingDataWindow(): Promise<void> {
             const startTime = new Date(sessionDate);
             startTime.setHours(baseHour + Math.floor(Math.random() * 2), Math.floor(Math.random() * 60), 0, 0);
 
+            // Duration stored in MINUTES
             const baseDuration = 8 + Math.floor(progressFactor * 12);
-            const duration = baseDuration + Math.floor(Math.random() * 5);
+            const duration = baseDuration + Math.floor(Math.random() * 5); // 8-25 minutes
 
             const baseResistance = 2 + Math.floor(progressFactor * 3);
             const resistance = baseResistance + Math.floor(Math.random() * 2);
@@ -366,7 +367,7 @@ export async function updateRollingDataWindow(): Promise<void> {
               sessionDateStr,
               Math.floor(startTime.getTime() / 1000),
               Math.floor(endTime.getTime() / 1000),
-              duration,
+              duration, // Stored in MINUTES
               resistance,
               avgRpm,
               avgRpm + Math.floor(Math.random() * 15) + 5,

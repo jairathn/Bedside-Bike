@@ -270,7 +270,7 @@ export default function DashboardPage() {
 
     createManualSessionMutation.mutate({
       patientId: currentPatient.id,
-      duration: manualSession.durationMinutes * 60, // Convert to seconds
+      duration: manualSession.durationMinutes, // Duration stored in MINUTES
       resistance: manualSession.resistance,
       sessionDate: manualSession.date,
       startTime: sessionDateTime.toISOString(),
@@ -316,11 +316,12 @@ export default function DashboardPage() {
   const sessions = (dashboardData as any)?.recentSessions || [];
 
   // Calculate today's progress - sum all sessions from today
+  // Duration is stored in MINUTES
   const today = new Date().toISOString().split('T')[0]; // Get today's date (YYYY-MM-DD)
   const recentSessions = (dashboardData as any)?.recentSessions || [];
   const todayMinutes = recentSessions
     .filter((session: any) => session.sessionDate === today)
-    .reduce((total: number, session: any) => total + (session.duration / 60), 0);
+    .reduce((total: number, session: any) => total + (session.duration || 0), 0);
   // Calculate daily target = session duration × number of sessions (same as goals page)
   const targetMinutes = (() => {
     const durationGoal = goals?.find((g: any) => g.goalType === 'duration');

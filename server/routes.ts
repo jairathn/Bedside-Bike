@@ -2168,8 +2168,8 @@ async function generateRecentSessionData(patientId: number, numDays: number, ski
       // Progressive improvement over the 4 days
       const progressFactor = (numDays - daysAgo) / numDays; // 0.25, 0.5, 0.75, 1.0
 
-      // Duration: 15-20 minutes, increasing slightly each day
-      const baseDuration = 900 + (progressFactor * 300); // 15-20 minutes
+      // Duration: 15-20 minutes, increasing slightly each day (stored in MINUTES)
+      const baseDuration = 15 + (progressFactor * 5); // 15-20 minutes
       const variance = baseDuration * 0.2;
       const duration = Math.floor(baseDuration + (Math.random() - 0.5) * variance);
 
@@ -2182,7 +2182,7 @@ async function generateRecentSessionData(patientId: number, numDays: number, ski
       // Create proper timestamps
       const startTimeDate = new Date(sessionDate);
       startTimeDate.setHours(9 + sessionNum * 5 + Math.floor(Math.random() * 2)); // Morning and afternoon sessions
-      const endTimeDate = new Date(startTimeDate.getTime() + duration * 1000);
+      const endTimeDate = new Date(startTimeDate.getTime() + duration * 60 * 1000); // Convert minutes to ms for timestamp
 
       // PostgreSQL expects Date objects or ISO strings, SQLite expects Unix timestamps
       const startTime = usePostgres ? startTimeDate : Math.floor(startTimeDate.getTime() / 1000);
