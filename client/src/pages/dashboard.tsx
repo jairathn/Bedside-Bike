@@ -212,6 +212,7 @@ export default function DashboardPage() {
           sessionDate: sessionData.sessionDate,
           startTime: sessionData.startTime,
           isCompleted: true,
+          isManual: true, // Mark as manually recorded (not auto-generated)
           avgPower: sessionData.resistance * 5, // Approximate power from resistance
           avgRpm: 50, // Default RPM for manual entry
         }),

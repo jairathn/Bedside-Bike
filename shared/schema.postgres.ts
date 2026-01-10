@@ -138,6 +138,7 @@ export const exerciseSessions = pgTable("exercise_sessions", {
   endTime: timestamp("end_time", { withTimezone: true }),
   stopsAndStarts: integer("stops_and_starts").default(0),
   isCompleted: boolean("is_completed").default(false),
+  isManual: boolean("is_manual").default(false), // true = manually recorded, false = auto-generated/device
   // Real-time tracking fields
   currentRpm: doublePrecision("current_rpm"),
   currentPower: doublePrecision("current_power"),

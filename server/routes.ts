@@ -2061,29 +2061,53 @@ async function seedPatientWithMockData() {
     
     // Check if we already have session data
     const existingSessions = await storage.getSessionsByPatient(patient.id);
-    
-    // Calculate the date range for the last 4 days
+
+    // Calculate the date range for the last 4 days (rolling window)
     const fourDaysAgo = new Date(today);
     fourDaysAgo.setDate(today.getDate() - 3); // Last 4 days including today
     const fourDaysAgoStr = fourDaysAgo.toISOString().split('T')[0];
-    
-    // Check if we need to regenerate sessions (if any session is not from the last 4 days)
-    const hasCurrentSessions = existingSessions.length > 0 && 
-      existingSessions.some(s => s.sessionDate >= fourDaysAgoStr);
-    
-    if (!hasCurrentSessions) {
-      // Delete all old sessions if any exist
-      if (existingSessions.length > 0) {
-        for (const session of existingSessions) {
-          await db.delete(exerciseSessions).where(eq(exerciseSessions.id, session.id));
+    const todayStr = today.toISOString().split('T')[0];
+
+    // Separate sessions into categories
+    const sessionsWithinWindow: typeof existingSessions = [];
+    const sessionsOutsideWindow: typeof existingSessions = [];
+    const manualSessionDatesWithinWindow = new Set<string>();
+
+    for (const session of existingSessions) {
+      const isWithinWindow = session.sessionDate >= fourDaysAgoStr && session.sessionDate <= todayStr;
+      if (isWithinWindow) {
+        sessionsWithinWindow.push(session);
+        // Track dates that have manual sessions (so we don't overwrite them)
+        if ((session as any).isManual === true) {
+          manualSessionDatesWithinWindow.add(session.sessionDate);
         }
-        console.log(`✓ Cleared ${existingSessions.length} old sessions`);
+      } else {
+        sessionsOutsideWindow.push(session);
       }
-      
-      // Generate new sessions for the last 4 days
-      await generateRecentSessionData(patient.id, 4);
-      console.log(`✓ Generated 4 days of recent exercise sessions (${fourDaysAgoStr} to ${today.toISOString().split('T')[0]})`);
     }
+
+    // Delete ALL sessions outside the rolling window (both manual and auto-generated)
+    if (sessionsOutsideWindow.length > 0) {
+      for (const session of sessionsOutsideWindow) {
+        await db.delete(exerciseSessions).where(eq(exerciseSessions.id, session.id));
+      }
+      console.log(`✓ Cleared ${sessionsOutsideWindow.length} sessions outside rolling window`);
+    }
+
+    // Delete auto-generated sessions within window (to regenerate fresh ones)
+    // But KEEP manual sessions within window
+    const autoSessionsWithinWindow = sessionsWithinWindow.filter(s => (s as any).isManual !== true);
+    if (autoSessionsWithinWindow.length > 0) {
+      for (const session of autoSessionsWithinWindow) {
+        await db.delete(exerciseSessions).where(eq(exerciseSessions.id, session.id));
+      }
+      console.log(`✓ Cleared ${autoSessionsWithinWindow.length} auto-generated sessions to refresh`);
+    }
+
+    // Generate new auto sessions for days that don't have manual sessions
+    // This ensures we always have fresh demo data while preserving user inputs
+    await generateRecentSessionData(patient.id, 4, manualSessionDatesWithinWindow);
+    console.log(`✓ Generated rolling window sessions (${fourDaysAgoStr} to ${todayStr}), preserved ${manualSessionDatesWithinWindow.size} manual session date(s)`)
 
     // Ensure patient stats exist
     let stats = await storage.getPatientStats(patient.id);
@@ -2120,34 +2144,41 @@ async function seedPatientWithMockData() {
 }
 
 // Generate sessions for the last N days from today
-async function generateRecentSessionData(patientId: number, numDays: number) {
+// skipDates: Set of date strings (YYYY-MM-DD) to skip (e.g., days with manual sessions)
+async function generateRecentSessionData(patientId: number, numDays: number, skipDates: Set<string> = new Set()) {
   const sessions = [];
   const today = new Date();
   const usePostgres = process.env.USE_POSTGRES === 'true';
-  
+
   // Generate sessions for the last numDays days
   for (let daysAgo = numDays - 1; daysAgo >= 0; daysAgo--) {
     const sessionDate = new Date(today);
     sessionDate.setDate(today.getDate() - daysAgo);
-    
+    const sessionDateStr = sessionDate.toISOString().split('T')[0];
+
+    // Skip dates that have manual sessions (don't overwrite user input)
+    if (skipDates.has(sessionDateStr)) {
+      continue;
+    }
+
     // 1-2 sessions per day with realistic progression
     const sessionsPerDay = Math.random() < 0.5 ? 1 : 2;
-    
+
     for (let sessionNum = 0; sessionNum < sessionsPerDay; sessionNum++) {
       // Progressive improvement over the 4 days
       const progressFactor = (numDays - daysAgo) / numDays; // 0.25, 0.5, 0.75, 1.0
-      
+
       // Duration: 15-20 minutes, increasing slightly each day
       const baseDuration = 900 + (progressFactor * 300); // 15-20 minutes
       const variance = baseDuration * 0.2;
       const duration = Math.floor(baseDuration + (Math.random() - 0.5) * variance);
-      
+
       // Power: 28-35W, increasing with progress
       const basePower = 28 + (progressFactor * 7);
       const powerVariance = basePower * 0.3;
       const avgPower = Math.floor(basePower + (Math.random() - 0.5) * powerVariance);
       const maxPower = Math.floor(avgPower * (1.3 + Math.random() * 0.2));
-      
+
       // Create proper timestamps
       const startTimeDate = new Date(sessionDate);
       startTimeDate.setHours(9 + sessionNum * 5 + Math.floor(Math.random() * 2)); // Morning and afternoon sessions
@@ -2159,7 +2190,7 @@ async function generateRecentSessionData(patientId: number, numDays: number) {
 
       sessions.push({
         patientId,
-        sessionDate: sessionDate.toISOString().split('T')[0],
+        sessionDate: sessionDateStr,
         startTime: startTime as any,
         endTime: endTime as any,
         duration,
@@ -2168,11 +2199,12 @@ async function generateRecentSessionData(patientId: number, numDays: number) {
         resistance: (2.5 + progressFactor * 2).toFixed(1), // 2.5 to 4.5
         stopsAndStarts: Math.max(0, 6 - Math.floor(progressFactor * 4)), // 6 down to 2
         isCompleted: true,
+        isManual: false, // Mark as auto-generated (not manual)
         sessionNotes: `Session ${sessionNum + 1}: Good effort, patient showing steady progress`
       } as any);
     }
   }
-  
+
   // Create all sessions in database
   if (usePostgres) {
     // For PostgreSQL, use PostgreSQL schema to avoid SQLite timestamp conversion
