@@ -50,9 +50,10 @@ export default function ReportsPage() {
     new Date(a.date).getTime() - new Date(b.date).getTime()
   );
 
+  // Duration is stored in MINUTES
   const progressData = dailyData.map((day: any) => ({
     day: day.day,
-    duration: Math.round(day.totalDuration / 60),
+    duration: Math.round(day.totalDuration),
     power: Math.round(day.totalPower / day.sessionCount),
     target: 15, // Target duration from goals
   }));
@@ -60,7 +61,7 @@ export default function ReportsPage() {
   const performanceData = dailyData.map((day: any) => ({
     day: day.day,
     efficiency: Math.round(((day.totalPower / day.sessionCount) / 45) * 100), // Avg efficiency vs max power
-    consistency: Math.round(Math.min((day.totalDuration / 60 / 15) * 100, 100)), // Daily duration vs 15min target
+    consistency: Math.round(Math.min((day.totalDuration / 15) * 100, 100)), // Daily duration vs 15min target
   }));
 
   const chartConfig = {
@@ -72,7 +73,7 @@ export default function ReportsPage() {
   };
 
   const stats = (dashboardData as any)?.stats;
-  const totalMinutes = Math.round((stats?.totalDuration || 0) / 60);
+  const totalMinutes = Math.round(stats?.totalDuration || 0); // Duration stored in minutes
   const avgSessionTime = Math.round(totalMinutes / (stats?.totalSessions || 1));
 
   return (
@@ -304,7 +305,7 @@ export default function ReportsPage() {
                         {new Date(session.sessionDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
                       </td>
                       <td className="py-2 sm:py-3 px-2 sm:px-4 text-gray-600 text-xs sm:text-sm">
-                        {Math.round(session.duration / 60)} min
+                        {Math.round(session.duration || 0)} min
                       </td>
                       <td className="py-2 sm:py-3 px-2 sm:px-4 text-gray-600 text-xs sm:text-sm">
                         {Math.round(parseFloat(session.avgPower) || 0)}W

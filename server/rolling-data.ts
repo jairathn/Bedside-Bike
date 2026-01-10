@@ -147,10 +147,9 @@ export async function updateRollingDataWindow(): Promise<void> {
             const startTime = new Date(sessionDate);
             startTime.setHours(baseHour + Math.floor(Math.random() * 2), Math.floor(Math.random() * 60), 0, 0);
 
-            // Progressive improvement - duration in minutes for calculations
-            const baseDurationMin = 8 + Math.floor(progressFactor * 12);
-            const durationMinutes = baseDurationMin + Math.floor(Math.random() * 5);
-            const durationSeconds = durationMinutes * 60; // Store in seconds for DB
+            // Progressive improvement - duration stored in MINUTES
+            const baseDuration = 8 + Math.floor(progressFactor * 12);
+            const duration = baseDuration + Math.floor(Math.random() * 5); // 8-25 minutes
 
             const baseResistance = 2 + Math.floor(progressFactor * 3);
             const resistance = baseResistance + Math.floor(Math.random() * 2);
@@ -159,7 +158,7 @@ export async function updateRollingDataWindow(): Promise<void> {
             const avgPower = Math.floor(avgRpm * resistance * 0.15);
 
             const endTime = new Date(startTime);
-            endTime.setMinutes(endTime.getMinutes() + durationMinutes);
+            endTime.setMinutes(endTime.getMinutes() + duration);
 
             await db
               .insert(pgSchema.exerciseSessions)
@@ -168,13 +167,13 @@ export async function updateRollingDataWindow(): Promise<void> {
                 sessionDate: sessionDateStr,
                 startTime: startTime,
                 endTime: endTime,
-                duration: durationSeconds,
+                duration: duration, // Stored in MINUTES
                 resistance: resistance,
                 avgRpm: avgRpm,
                 maxRpm: avgRpm + Math.floor(Math.random() * 15) + 5,
                 avgPower: avgPower,
                 maxPower: avgPower + Math.floor(Math.random() * 20) + 10,
-                caloriesBurned: Math.floor(durationMinutes * avgPower * 0.05),
+                caloriesBurned: Math.floor(duration * avgPower * 0.05),
                 isCompleted: true,
                 isManual: false,
                 createdAt: new Date(),
@@ -346,10 +345,9 @@ export async function updateRollingDataWindow(): Promise<void> {
             const startTime = new Date(sessionDate);
             startTime.setHours(baseHour + Math.floor(Math.random() * 2), Math.floor(Math.random() * 60), 0, 0);
 
-            // Duration in minutes for calculations, seconds for storage
-            const baseDurationMin = 8 + Math.floor(progressFactor * 12);
-            const durationMinutes = baseDurationMin + Math.floor(Math.random() * 5);
-            const durationSeconds = durationMinutes * 60;
+            // Duration stored in MINUTES
+            const baseDuration = 8 + Math.floor(progressFactor * 12);
+            const duration = baseDuration + Math.floor(Math.random() * 5); // 8-25 minutes
 
             const baseResistance = 2 + Math.floor(progressFactor * 3);
             const resistance = baseResistance + Math.floor(Math.random() * 2);
@@ -358,7 +356,7 @@ export async function updateRollingDataWindow(): Promise<void> {
             const avgPower = Math.floor(avgRpm * resistance * 0.15);
 
             const endTime = new Date(startTime);
-            endTime.setMinutes(endTime.getMinutes() + durationMinutes);
+            endTime.setMinutes(endTime.getMinutes() + duration);
 
             sqliteDb.prepare(`
               INSERT INTO exercise_sessions
@@ -369,13 +367,13 @@ export async function updateRollingDataWindow(): Promise<void> {
               sessionDateStr,
               Math.floor(startTime.getTime() / 1000),
               Math.floor(endTime.getTime() / 1000),
-              durationSeconds,
+              duration, // Stored in MINUTES
               resistance,
               avgRpm,
               avgRpm + Math.floor(Math.random() * 15) + 5,
               avgPower,
               avgPower + Math.floor(Math.random() * 20) + 10,
-              Math.floor(durationMinutes * avgPower * 0.05),
+              Math.floor(duration * avgPower * 0.05),
               Math.floor(Date.now() / 1000),
               Math.floor(Date.now() / 1000)
             );
