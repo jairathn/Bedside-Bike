@@ -641,7 +641,7 @@ export default function ProviderDashboard() {
                         <ResponsiveContainer width="100%" height="100%">
                           <LineChart data={(usageData || []).map(item => ({
                             ...item,
-                            duration: Math.floor(Number(item.duration) / 60) // Convert seconds to minutes
+                            duration: Math.floor(Number(item.duration)) // Duration already in minutes
                           }))}>
                             <CartesianGrid strokeDasharray="3 3" />
                             <XAxis dataKey="date" />

@@ -155,20 +155,6 @@ export async function updateRollingDataWindow(): Promise<void> {
             continue;
           }
 
-          // Check if we already have auto-generated sessions for this date (prevent duplicates from race conditions)
-          const existingForDate = await db
-            .select()
-            .from(pgSchema.exerciseSessions)
-            .where(and(
-              eq(pgSchema.exerciseSessions.patientId, patient.id),
-              eq(pgSchema.exerciseSessions.sessionDate, sessionDateStr)
-            ));
-
-          if (existingForDate.length > 0) {
-            console.log(`  → Skipping ${sessionDateStr} (sessions already exist)`);
-            continue;
-          }
-
           // Generate 1-2 sessions for this day
           const sessionsPerDay = Math.random() < 0.5 ? 1 : 2;
           const progressFactor = (patientConfig.windowDays - daysAgo) / patientConfig.windowDays;
@@ -369,13 +355,6 @@ export async function updateRollingDataWindow(): Promise<void> {
 
           // Skip if this date has a manual session
           if (manualSessionDates.has(sessionDateStr)) continue;
-
-          // Check if we already have sessions for this date (prevent duplicates)
-          const existingForDate = sqliteDb.prepare(
-            'SELECT COUNT(*) as count FROM exercise_sessions WHERE patient_id = ? AND session_date = ?'
-          ).get(patient.id, sessionDateStr) as { count: number };
-
-          if (existingForDate.count > 0) continue;
 
           const sessionsPerDay = Math.random() < 0.5 ? 1 : 2;
           const progressFactor = (patientConfig.windowDays - daysAgo) / patientConfig.windowDays;
