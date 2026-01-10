@@ -122,6 +122,37 @@ export async function updateRollingDataWindow(): Promise<void> {
 
         console.log(`  Found: ${sessionsOutsideWindow.length} outside window, ${manualSessionsInWindow.length} manual in window, ${autoSessionsInWindow.length} auto in window`);
 
+        // Check if TODAY already has sessions - if so, skip regeneration entirely
+        const todaysSessions = existingSessions.filter(s => s.sessionDate === todayStr);
+        if (todaysSessions.length > 0) {
+          console.log(`  ✓ Today (${todayStr}) already has ${todaysSessions.length} session(s) - skipping regeneration`);
+
+          // Still delete sessions outside window for cleanup
+          for (const session of sessionsOutsideWindow) {
+            await db
+              .delete(pgSchema.exerciseSessions)
+              .where(eq(pgSchema.exerciseSessions.id, session.id));
+          }
+          if (sessionsOutsideWindow.length > 0) {
+            console.log(`  ✗ Deleted ${sessionsOutsideWindow.length} sessions outside window`);
+          }
+
+          // Update admission date if needed
+          if (patient.admissionDate !== newAdmissionDateStr) {
+            await db
+              .update(pgSchema.users)
+              .set({
+                admissionDate: newAdmissionDateStr,
+                updatedAt: new Date()
+              })
+              .where(eq(pgSchema.users.id, patient.id));
+            console.log(`  ✓ Updated admission date to ${newAdmissionDateStr}`);
+          }
+
+          updatedCount++;
+          continue; // Skip to next patient
+        }
+
         // Delete ALL sessions outside the rolling window
         for (const session of sessionsOutsideWindow) {
           await db
@@ -362,6 +393,27 @@ export async function updateRollingDataWindow(): Promise<void> {
           } else {
             sessionsOutsideWindow.push(session);
           }
+        }
+
+        // Check if TODAY already has sessions - if so, skip regeneration entirely
+        const todaysSessions = existingSessions.filter((s: any) => s.session_date === todayStr);
+        if (todaysSessions.length > 0) {
+          console.log(`  ✓ Today (${todayStr}) already has ${todaysSessions.length} session(s) - skipping regeneration`);
+
+          // Still delete sessions outside window for cleanup
+          for (const session of sessionsOutsideWindow) {
+            sqliteDb.prepare('DELETE FROM exercise_sessions WHERE id = ?').run(session.id);
+          }
+
+          // Update admission date if needed
+          if (patient.admission_date !== newAdmissionDateStr) {
+            sqliteDb.prepare('UPDATE users SET admission_date = ?, updated_at = ? WHERE id = ?')
+              .run(newAdmissionDateStr, Math.floor(Date.now() / 1000), patient.id);
+            console.log(`  ✓ Updated admission date to ${newAdmissionDateStr}`);
+          }
+
+          updatedCount++;
+          continue; // Skip to next patient
         }
 
         // Delete sessions outside window
