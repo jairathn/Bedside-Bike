@@ -9,7 +9,6 @@ import {
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
-import { ScrollArea } from "@/components/ui/scroll-area";
 import { Shield, FileText, AlertTriangle, Database, Link, MessageSquare, Stethoscope } from "lucide-react";
 
 // Current version of the Terms of Service
@@ -38,11 +37,63 @@ function PatientTermsContent() {
         </p>
       </section>
 
+      {/* Website Disclaimer - Termly Language */}
+      <section className="bg-gray-50 p-4 rounded-lg border border-gray-200">
+        <h3 className="text-base font-semibold text-gray-900 mb-3 flex items-center gap-2">
+          <FileText className="w-5 h-5 text-gray-600" />
+          WEBSITE DISCLAIMER
+        </h3>
+        <p className="leading-relaxed text-gray-700">
+          The information provided by Bedside Bike ("we," "us," or "our") on http://www.bedsidebike.com (the "Site") is for general informational purposes only. All information on the Site is provided in good faith, however we make no representation or warranty of any kind, express or implied, regarding the accuracy, adequacy, validity, reliability, availability, or completeness of any information on the Site. UNDER NO CIRCUMSTANCE SHALL WE HAVE ANY LIABILITY TO YOU FOR ANY LOSS OR DAMAGE OF ANY KIND INCURRED AS A RESULT OF THE USE OF THE SITE OR RELIANCE ON ANY INFORMATION PROVIDED ON THE SITE. YOUR USE OF THE SITE AND YOUR RELIANCE ON ANY INFORMATION ON THE SITE IS SOLELY AT YOUR OWN RISK.
+        </p>
+      </section>
+
+      {/* External Links Disclaimer - Termly Language */}
+      <section className="bg-gray-50 p-4 rounded-lg border border-gray-200">
+        <h3 className="text-base font-semibold text-gray-900 mb-3 flex items-center gap-2">
+          <Link className="w-5 h-5 text-gray-600" />
+          EXTERNAL LINKS DISCLAIMER
+        </h3>
+        <p className="leading-relaxed text-gray-700">
+          The Site may contain (or you may be sent through the Site) links to other websites or content belonging to or originating from third parties or links to websites and features in banners or other advertising. Such external links are not investigated, monitored, or checked for accuracy, adequacy, validity, reliability, availability, or completeness by us. WE DO NOT WARRANT, ENDORSE, GUARANTEE, OR ASSUME RESPONSIBILITY FOR THE ACCURACY OR RELIABILITY OF ANY INFORMATION OFFERED BY THIRD-PARTY WEBSITES LINKED THROUGH THE SITE OR ANY WEBSITE OR FEATURE LINKED IN ANY BANNER OR OTHER ADVERTISING. WE WILL NOT BE A PARTY TO OR IN ANY WAY BE RESPONSIBLE FOR MONITORING ANY TRANSACTION BETWEEN YOU AND THIRD-PARTY PROVIDERS OF PRODUCTS OR SERVICES.
+        </p>
+      </section>
+
+      {/* Professional Disclaimer - Termly Language */}
+      <section className="bg-orange-50 p-4 rounded-lg border border-orange-200">
+        <h3 className="text-base font-semibold text-orange-900 mb-3 flex items-center gap-2">
+          <AlertTriangle className="w-5 h-5" />
+          PROFESSIONAL DISCLAIMER
+        </h3>
+        <p className="leading-relaxed text-orange-800">
+          The Site cannot and does not contain medical/health advice. The medical/health information is provided for general informational and educational purposes only and is not a substitute for professional advice. Accordingly, before taking any actions based upon such information, we encourage you to consult with the appropriate professionals. We do not provide any kind of medical/health advice. THE USE OR RELIANCE OF ANY INFORMATION CONTAINED ON THE SITE IS SOLELY AT YOUR OWN RISK.
+        </p>
+      </section>
+
+      {/* Testimonials Disclaimer - Termly Language */}
+      <section className="bg-gray-50 p-4 rounded-lg border border-gray-200">
+        <h3 className="text-base font-semibold text-gray-900 mb-3 flex items-center gap-2">
+          <MessageSquare className="w-5 h-5 text-gray-600" />
+          TESTIMONIALS DISCLAIMER
+        </h3>
+        <div className="space-y-3 text-gray-700">
+          <p className="leading-relaxed">
+            The Site may contain testimonials by users of our products and/or services. These testimonials reflect the real-life experiences and opinions of such users. However, the experiences are personal to those particular users, and may not necessarily be representative of all users of our products and/or services. We do not claim, and you should not assume, that all users will have the same experiences. YOUR INDIVIDUAL RESULTS MAY VARY.
+          </p>
+          <p className="leading-relaxed">
+            The testimonials on the Site are submitted in various forms such as text, audio and/or video, and are reviewed by us before being posted. They appear on the Site verbatim as given by the users, except for the correction of grammar or typing errors. Some testimonials may have been shortened for the sake of brevity where the full testimonial contained extraneous information not relevant to the general public.
+          </p>
+          <p className="leading-relaxed">
+            The views and opinions contained in the testimonials belong solely to the individual user and do not reflect our views and opinions. We are not affiliated with users who provide testimonials, and users are not paid or otherwise compensated for their testimonials.
+          </p>
+        </div>
+      </section>
+
       {/* Health Data Disclaimer */}
       <section className="bg-blue-50 p-4 rounded-lg border border-blue-200">
-        <h3 className="text-base font-semibold text-blue-900 mb-2 flex items-center gap-2">
+        <h3 className="text-base font-semibold text-blue-900 mb-3 flex items-center gap-2">
           <Database className="w-5 h-5" />
-          Health Data Collection & Retention
+          HEALTH DATA COLLECTION & RETENTION
         </h3>
         <ul className="list-disc list-inside space-y-2 text-blue-800">
           <li>We collect exercise session data including duration, power output, and performance metrics to personalize your therapy experience.</li>
@@ -52,61 +103,9 @@ function PatientTermsContent() {
         </ul>
       </section>
 
-      {/* Medical Disclaimer */}
-      <section className="bg-orange-50 p-4 rounded-lg border border-orange-200">
-        <h3 className="text-base font-semibold text-orange-900 mb-2 flex items-center gap-2">
-          <AlertTriangle className="w-5 h-5" />
-          Medical Disclaimer
-        </h3>
-        <ul className="list-disc list-inside space-y-2 text-orange-800">
-          <li><strong>Not a substitute for medical advice:</strong> The Bedside Bike platform provides mobility support tools and should not replace professional medical advice, diagnosis, or treatment.</li>
-          <li><strong>Consult your healthcare provider:</strong> Always consult with your physician or qualified healthcare provider before beginning any exercise program, especially during hospitalization or recovery.</li>
-          <li><strong>Stop if you experience discomfort:</strong> Discontinue use immediately and seek medical attention if you experience pain, dizziness, shortness of breath, or any concerning symptoms.</li>
-          <li><strong>AI-generated recommendations:</strong> Risk assessments and exercise recommendations are generated using algorithms and should be reviewed by your healthcare team.</li>
-        </ul>
-      </section>
-
-      {/* Website Disclaimer */}
-      <section>
-        <h3 className="text-base font-semibold text-gray-900 mb-2 flex items-center gap-2">
-          <FileText className="w-5 h-5 text-gray-600" />
-          Website Disclaimer
-        </h3>
-        <p className="leading-relaxed mb-2">
-          The information provided on this platform is for general informational purposes only. While we strive to keep the information up-to-date and accurate, we make no representations or warranties of any kind about:
-        </p>
-        <ul className="list-disc list-inside space-y-1 ml-2">
-          <li>The completeness, accuracy, reliability, or availability of the platform</li>
-          <li>The results you may obtain from using the platform</li>
-          <li>The accuracy of any information, metrics, or assessments displayed</li>
-        </ul>
-      </section>
-
-      {/* External Links Disclaimer */}
-      <section>
-        <h3 className="text-base font-semibold text-gray-900 mb-2 flex items-center gap-2">
-          <Link className="w-5 h-5 text-gray-600" />
-          External Links Disclaimer
-        </h3>
-        <p className="leading-relaxed">
-          The platform may contain links to external websites or resources. We have no control over the content, privacy policies, or practices of third-party sites and are not responsible for their content or your interactions with them.
-        </p>
-      </section>
-
-      {/* Testimonials Disclaimer */}
-      <section>
-        <h3 className="text-base font-semibold text-gray-900 mb-2 flex items-center gap-2">
-          <MessageSquare className="w-5 h-5 text-gray-600" />
-          Testimonials & User Experiences
-        </h3>
-        <p className="leading-relaxed">
-          Any testimonials, success stories, or user experiences shared on this platform represent individual results and experiences. Results may vary and are not guaranteed. Past performance does not guarantee future outcomes.
-        </p>
-      </section>
-
       {/* Privacy & Data Sharing */}
       <section className="bg-green-50 p-4 rounded-lg border border-green-200">
-        <h3 className="text-base font-semibold text-green-900 mb-2">Privacy & Data Sharing</h3>
+        <h3 className="text-base font-semibold text-green-900 mb-3">PRIVACY & DATA SHARING</h3>
         <ul className="list-disc list-inside space-y-2 text-green-800">
           <li>Your data may be shared with your healthcare providers to coordinate your care.</li>
           <li>We use industry-standard security measures to protect your information.</li>
@@ -140,25 +139,72 @@ function ProviderTermsContent() {
         </p>
       </section>
 
-      {/* Professional Disclaimer */}
-      <section className="bg-indigo-50 p-4 rounded-lg border border-indigo-200">
-        <h3 className="text-base font-semibold text-indigo-900 mb-2 flex items-center gap-2">
-          <Shield className="w-5 h-5" />
-          Professional Disclaimer
+      {/* Website Disclaimer - Termly Language */}
+      <section className="bg-gray-50 p-4 rounded-lg border border-gray-200">
+        <h3 className="text-base font-semibold text-gray-900 mb-3 flex items-center gap-2">
+          <FileText className="w-5 h-5 text-gray-600" />
+          WEBSITE DISCLAIMER
         </h3>
-        <ul className="list-disc list-inside space-y-2 text-indigo-800">
-          <li><strong>Clinical judgment required:</strong> This platform provides decision support tools and should supplement, not replace, your professional clinical judgment.</li>
-          <li><strong>Verify all recommendations:</strong> AI-generated risk assessments and exercise recommendations should be independently verified before implementation.</li>
-          <li><strong>Responsibility:</strong> You remain professionally responsible for all clinical decisions made for patients under your care.</li>
-          <li><strong>Credentials verification:</strong> By registering, you attest that your professional credentials are valid and current.</li>
-        </ul>
+        <p className="leading-relaxed text-gray-700">
+          The information provided by Bedside Bike ("we," "us," or "our") on http://www.bedsidebike.com (the "Site") is for general informational purposes only. All information on the Site is provided in good faith, however we make no representation or warranty of any kind, express or implied, regarding the accuracy, adequacy, validity, reliability, availability, or completeness of any information on the Site. UNDER NO CIRCUMSTANCE SHALL WE HAVE ANY LIABILITY TO YOU FOR ANY LOSS OR DAMAGE OF ANY KIND INCURRED AS A RESULT OF THE USE OF THE SITE OR RELIANCE ON ANY INFORMATION PROVIDED ON THE SITE. YOUR USE OF THE SITE AND YOUR RELIANCE ON ANY INFORMATION ON THE SITE IS SOLELY AT YOUR OWN RISK.
+        </p>
+      </section>
+
+      {/* External Links Disclaimer - Termly Language */}
+      <section className="bg-gray-50 p-4 rounded-lg border border-gray-200">
+        <h3 className="text-base font-semibold text-gray-900 mb-3 flex items-center gap-2">
+          <Link className="w-5 h-5 text-gray-600" />
+          EXTERNAL LINKS DISCLAIMER
+        </h3>
+        <p className="leading-relaxed text-gray-700">
+          The Site may contain (or you may be sent through the Site) links to other websites or content belonging to or originating from third parties or links to websites and features in banners or other advertising. Such external links are not investigated, monitored, or checked for accuracy, adequacy, validity, reliability, availability, or completeness by us. WE DO NOT WARRANT, ENDORSE, GUARANTEE, OR ASSUME RESPONSIBILITY FOR THE ACCURACY OR RELIABILITY OF ANY INFORMATION OFFERED BY THIRD-PARTY WEBSITES LINKED THROUGH THE SITE OR ANY WEBSITE OR FEATURE LINKED IN ANY BANNER OR OTHER ADVERTISING. WE WILL NOT BE A PARTY TO OR IN ANY WAY BE RESPONSIBLE FOR MONITORING ANY TRANSACTION BETWEEN YOU AND THIRD-PARTY PROVIDERS OF PRODUCTS OR SERVICES.
+        </p>
+      </section>
+
+      {/* Professional Disclaimer - Termly Language */}
+      <section className="bg-indigo-50 p-4 rounded-lg border border-indigo-200">
+        <h3 className="text-base font-semibold text-indigo-900 mb-3 flex items-center gap-2">
+          <Shield className="w-5 h-5" />
+          PROFESSIONAL DISCLAIMER
+        </h3>
+        <p className="leading-relaxed text-indigo-800 mb-3">
+          The Site cannot and does not contain medical/health advice. The medical/health information is provided for general informational and educational purposes only and is not a substitute for professional advice. Accordingly, before taking any actions based upon such information, we encourage you to consult with the appropriate professionals. We do not provide any kind of medical/health advice. THE USE OR RELIANCE OF ANY INFORMATION CONTAINED ON THE SITE IS SOLELY AT YOUR OWN RISK.
+        </p>
+        <div className="border-t border-indigo-200 pt-3 mt-3">
+          <p className="text-indigo-800 font-medium mb-2">Additional Provider Responsibilities:</p>
+          <ul className="list-disc list-inside space-y-1 text-indigo-700">
+            <li>This platform provides decision support tools and should supplement, not replace, your professional clinical judgment.</li>
+            <li>AI-generated risk assessments and exercise recommendations should be independently verified before implementation.</li>
+            <li>You remain professionally responsible for all clinical decisions made for patients under your care.</li>
+            <li>By registering, you attest that your professional credentials are valid and current.</li>
+          </ul>
+        </div>
+      </section>
+
+      {/* Testimonials Disclaimer - Termly Language */}
+      <section className="bg-gray-50 p-4 rounded-lg border border-gray-200">
+        <h3 className="text-base font-semibold text-gray-900 mb-3 flex items-center gap-2">
+          <MessageSquare className="w-5 h-5 text-gray-600" />
+          TESTIMONIALS DISCLAIMER
+        </h3>
+        <div className="space-y-3 text-gray-700">
+          <p className="leading-relaxed">
+            The Site may contain testimonials by users of our products and/or services. These testimonials reflect the real-life experiences and opinions of such users. However, the experiences are personal to those particular users, and may not necessarily be representative of all users of our products and/or services. We do not claim, and you should not assume, that all users will have the same experiences. YOUR INDIVIDUAL RESULTS MAY VARY.
+          </p>
+          <p className="leading-relaxed">
+            The testimonials on the Site are submitted in various forms such as text, audio and/or video, and are reviewed by us before being posted. They appear on the Site verbatim as given by the users, except for the correction of grammar or typing errors. Some testimonials may have been shortened for the sake of brevity where the full testimonial contained extraneous information not relevant to the general public.
+          </p>
+          <p className="leading-relaxed">
+            The views and opinions contained in the testimonials belong solely to the individual user and do not reflect our views and opinions. We are not affiliated with users who provide testimonials, and users are not paid or otherwise compensated for their testimonials.
+          </p>
+        </div>
       </section>
 
       {/* Patient Data Access */}
       <section className="bg-blue-50 p-4 rounded-lg border border-blue-200">
-        <h3 className="text-base font-semibold text-blue-900 mb-2 flex items-center gap-2">
+        <h3 className="text-base font-semibold text-blue-900 mb-3 flex items-center gap-2">
           <Database className="w-5 h-5" />
-          Patient Data Access & HIPAA Compliance
+          PATIENT DATA ACCESS & HIPAA COMPLIANCE
         </h3>
         <ul className="list-disc list-inside space-y-2 text-blue-800">
           <li>You agree to access patient data only for legitimate treatment, payment, or healthcare operations purposes.</li>
@@ -169,21 +215,11 @@ function ProviderTermsContent() {
         </ul>
       </section>
 
-      {/* Data Usage & Research */}
-      <section className="bg-purple-50 p-4 rounded-lg border border-purple-200">
-        <h3 className="text-base font-semibold text-purple-900 mb-2">Data Usage & Quality Improvement</h3>
-        <ul className="list-disc list-inside space-y-2 text-purple-800">
-          <li>Aggregated, de-identified data may be used to improve the platform's algorithms and recommendations.</li>
-          <li>Clinical outcome data may be used for quality improvement and research with appropriate IRB approval.</li>
-          <li>You may be asked to participate in optional surveys or feedback sessions to improve the platform.</li>
-        </ul>
-      </section>
-
       {/* Limitation of Liability */}
       <section>
-        <h3 className="text-base font-semibold text-gray-900 mb-2 flex items-center gap-2">
+        <h3 className="text-base font-semibold text-gray-900 mb-3 flex items-center gap-2">
           <AlertTriangle className="w-5 h-5 text-gray-600" />
-          Limitation of Liability
+          LIMITATION OF LIABILITY
         </h3>
         <ul className="list-disc list-inside space-y-2">
           <li>The platform is provided "as is" without warranties of any kind.</li>
@@ -193,20 +229,9 @@ function ProviderTermsContent() {
         </ul>
       </section>
 
-      {/* Website & External Links Disclaimer */}
-      <section>
-        <h3 className="text-base font-semibold text-gray-900 mb-2 flex items-center gap-2">
-          <Link className="w-5 h-5 text-gray-600" />
-          Website & External Resources
-        </h3>
-        <p className="leading-relaxed">
-          Information on this platform is for clinical decision support only. We make no guarantees regarding accuracy or completeness. External links are provided for convenience and we are not responsible for their content or accuracy.
-        </p>
-      </section>
-
       {/* Account Responsibilities */}
       <section className="bg-orange-50 p-4 rounded-lg border border-orange-200">
-        <h3 className="text-base font-semibold text-orange-900 mb-2">Account Responsibilities</h3>
+        <h3 className="text-base font-semibold text-orange-900 mb-3">ACCOUNT RESPONSIBILITIES</h3>
         <ul className="list-disc list-inside space-y-2 text-orange-800">
           <li>You are responsible for maintaining the security of your account credentials.</li>
           <li>You must log out when using shared computers or devices.</li>
