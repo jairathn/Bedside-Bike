@@ -645,8 +645,16 @@ export default function ProviderDashboard() {
                             duration: Math.floor(Number(item.duration)) // Duration already in minutes
                           }))}>
                             <CartesianGrid strokeDasharray="3 3" />
-                            <XAxis dataKey="date" />
-                            <YAxis />
+                            <XAxis
+                              dataKey="date"
+                              tickFormatter={(date) => {
+                                const d = new Date(date);
+                                return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+                              }}
+                              fontSize={11}
+                              interval="preserveStartEnd"
+                            />
+                            <YAxis fontSize={11} />
                             <Tooltip formatter={(value, name) => [`${value} min`, 'Duration']} />
                             <Line type="monotone" dataKey="duration" stroke="#3B82F6" strokeWidth={2} />
                           </LineChart>
@@ -664,8 +672,16 @@ export default function ProviderDashboard() {
                         <ResponsiveContainer width="100%" height="100%">
                           <LineChart data={usageData || []}>
                             <CartesianGrid strokeDasharray="3 3" />
-                            <XAxis dataKey="date" />
-                            <YAxis />
+                            <XAxis
+                              dataKey="date"
+                              tickFormatter={(date) => {
+                                const d = new Date(date);
+                                return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+                              }}
+                              fontSize={11}
+                              interval="preserveStartEnd"
+                            />
+                            <YAxis fontSize={11} />
                             <Tooltip formatter={(value, name) => [`${value}W`, 'Power']} />
                             <Line type="monotone" dataKey="avgPower" stroke="#10B981" strokeWidth={2} />
                           </LineChart>
