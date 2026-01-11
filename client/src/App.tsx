@@ -5,6 +5,8 @@ import { QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { AuthProvider, useAuth } from "@/lib/auth.tsx";
+import { SessionTimerProvider } from "@/contexts/SessionTimerContext";
+import SessionTimerBanner from "@/components/SessionTimerBanner";
 import AuthPage from "@/pages/auth";
 import DashboardPage from "@/pages/dashboard";
 import SessionPage from "@/pages/session";
@@ -110,8 +112,11 @@ function App() {
     <QueryClientProvider client={queryClient}>
       <TooltipProvider>
         <AuthProvider>
-          <Toaster />
-          <Router />
+          <SessionTimerProvider>
+            <Toaster />
+            <SessionTimerBanner />
+            <Router />
+          </SessionTimerProvider>
         </AuthProvider>
       </TooltipProvider>
     </QueryClientProvider>
