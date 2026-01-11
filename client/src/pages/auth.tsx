@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -9,6 +9,7 @@ import { useToast } from "@/hooks/use-toast";
 import { Heart, Activity, Shield, UserPlus, LogIn, Lightbulb, ChevronDown, ChevronUp, ChevronLeft, ChevronRight, Calculator, User, ClipboardCheck, Stethoscope } from "lucide-react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
+import { TermsOfServiceModal, TOS_VERSION } from "@/components/terms-of-service-modal";
 
 interface AuthProps {
   onAuthSuccess: (user: any) => void;
@@ -199,6 +200,10 @@ export default function Auth({ onAuthSuccess }: AuthProps) {
   });
   const { toast } = useToast();
 
+  // Terms of Service modal state
+  const [showTosModal, setShowTosModal] = useState(false);
+  const [pendingRegistration, setPendingRegistration] = useState<FormData | null>(null);
+
   // Query to get last used device when patient credentials are complete
   const { data: lastDeviceData } = useQuery({
     queryKey: ['/api/patients/last-device', patientCredentials.firstName, patientCredentials.lastName, patientCredentials.dateOfBirth],
@@ -262,7 +267,11 @@ export default function Auth({ onAuthSuccess }: AuthProps) {
     mutationFn: async (registerData: any) => {
       const response = await apiRequest("/api/auth/register", {
         method: "POST",
-        body: JSON.stringify(registerData),
+        body: JSON.stringify({
+          ...registerData,
+          tosAccepted: true,
+          tosVersion: TOS_VERSION,
+        }),
       });
       return response;
     },
@@ -281,6 +290,30 @@ export default function Auth({ onAuthSuccess }: AuthProps) {
       });
     },
   });
+
+  // Handle ToS acceptance
+  const handleTosAccept = () => {
+    setShowTosModal(false);
+    if (pendingRegistration) {
+      const data = Object.fromEntries(pendingRegistration.entries());
+      registerMutation.mutate({
+        ...data,
+        userType,
+      });
+      setPendingRegistration(null);
+    }
+  };
+
+  // Handle ToS decline
+  const handleTosDecline = () => {
+    setShowTosModal(false);
+    setPendingRegistration(null);
+    toast({
+      title: "Registration cancelled",
+      description: "You must accept the Terms of Service to create an account.",
+      variant: "destructive",
+    });
+  };
 
   const fillDemoPatient = (patient: typeof demoPatients[0]) => {
     // Update state - controlled inputs will automatically update
@@ -340,11 +373,9 @@ export default function Auth({ onAuthSuccess }: AuthProps) {
   };
 
   const handleRegister = (formData: FormData) => {
-    const data = Object.fromEntries(formData.entries());
-    registerMutation.mutate({
-      ...data,
-      userType,
-    });
+    // Store the form data and show ToS modal
+    setPendingRegistration(formData);
+    setShowTosModal(true);
   };
 
   return (
@@ -905,6 +936,14 @@ export default function Auth({ onAuthSuccess }: AuthProps) {
           </div>
         </div>
       </div>
+
+      {/* Terms of Service Modal */}
+      <TermsOfServiceModal
+        open={showTosModal}
+        onAccept={handleTosAccept}
+        onDecline={handleTosDecline}
+        userType={userType}
+      />
     </div>
   );
 }

@@ -38,6 +38,9 @@ export const users = pgTable("users", {
   specialty: varchar("specialty", { length: 100 }),
   licenseNumber: varchar("license_number", { length: 50 }),
   isActive: boolean("is_active").default(true),
+  // Terms of Service acceptance
+  tosAcceptedAt: timestamp("tos_accepted_at", { withTimezone: true }),
+  tosVersion: varchar("tos_version", { length: 20 }),
   createdAt: timestamp("created_at", { withTimezone: true }).default(sql`NOW()`),
   updatedAt: timestamp("updated_at", { withTimezone: true }).default(sql`NOW()`),
 });
@@ -557,6 +560,8 @@ export const loginSchema = z.object({
 export const patientRegistrationSchema = loginSchema.extend({
   dateOfBirth: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Date must be in YYYY-MM-DD format"),
   userType: z.literal("patient"),
+  tosAccepted: z.boolean().refine(val => val === true, "You must accept the Terms of Service"),
+  tosVersion: z.string().optional(),
 });
 
 export const providerRegistrationSchema = loginSchema.extend({
@@ -564,6 +569,8 @@ export const providerRegistrationSchema = loginSchema.extend({
   specialty: z.string().min(1, "Specialty is required"),
   licenseNumber: z.string().optional(),
   userType: z.literal("provider"),
+  tosAccepted: z.boolean().refine(val => val === true, "You must accept the Terms of Service"),
+  tosVersion: z.string().optional(),
 });
 
 export const riskAssessmentInputSchema = z.object({
