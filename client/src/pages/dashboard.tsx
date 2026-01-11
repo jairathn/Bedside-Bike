@@ -11,6 +11,8 @@ import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
 import { Target, MessageCircle, LogOut, Calculator, Gamepad2, TrendingUp, Play, Trophy, Menu, Lightbulb, ChevronDown, ChevronUp, ChevronLeft, ChevronRight, HelpCircle, Heart, Activity, Info, ClipboardPlus, Clock, Calendar } from "lucide-react";
 import { ProgressRing } from "@/components/progress-ring";
+import StartSessionModal from "@/components/StartSessionModal";
+import { useSessionTimer } from "@/contexts/SessionTimerContext";
 
 // Patient-Friendly Did You Know Component
 function PatientFactoids() {
@@ -163,8 +165,10 @@ export default function DashboardPage() {
   const [showGoalExplanation, setShowGoalExplanation] = useState(false);
   const [showMETsExplanation, setShowMETsExplanation] = useState(false);
   const [showManualSession, setShowManualSession] = useState(false);
+  const [showStartSession, setShowStartSession] = useState(false);
   const { toast } = useToast();
   const queryClient = useQueryClient();
+  const { state: sessionState } = useSessionTimer();
 
   // Manual session form state
   const getDefaultDateTime = () => {
@@ -493,10 +497,11 @@ export default function DashboardPage() {
                   <Button
                     size="lg"
                     className="bg-white text-blue-700 hover:bg-blue-50 text-lg sm:text-2xl px-6 sm:px-12 py-4 sm:py-6 h-auto font-bold rounded-xl w-full sm:w-auto"
-                    onClick={() => setLocation("/session")}
+                    onClick={() => setShowStartSession(true)}
+                    disabled={sessionState.isActive}
                   >
                     <Play className="w-6 h-6 sm:w-8 sm:h-8 mr-2 sm:mr-3" />
-                    Start Exercise
+                    {sessionState.isActive ? "Session Active" : "Start Exercise"}
                   </Button>
                   <div>
                     <Dialog open={showManualSession} onOpenChange={handleOpenManualSession}>
@@ -614,10 +619,11 @@ export default function DashboardPage() {
                   <Button
                     size="lg"
                     className="bg-green-600 text-white hover:bg-green-700 text-2xl px-12 py-6 h-auto font-bold rounded-xl"
-                    onClick={() => setLocation("/session")}
+                    onClick={() => setShowStartSession(true)}
+                    disabled={sessionState.isActive}
                   >
                     <Play className="w-8 h-8 mr-3" />
-                    Bonus Session?
+                    {sessionState.isActive ? "Session Active" : "Bonus Session?"}
                   </Button>
                   <div>
                     <Dialog open={showManualSession} onOpenChange={handleOpenManualSession}>
@@ -1100,6 +1106,12 @@ export default function DashboardPage() {
           </Card>
         )}
       </div>
+
+      {/* Start Session Modal */}
+      <StartSessionModal
+        open={showStartSession}
+        onOpenChange={setShowStartSession}
+      />
     </div>
   );
 }
