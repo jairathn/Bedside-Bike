@@ -1109,19 +1109,34 @@ export async function registerRoutes(app: Express): Promise<Server> {
           );
         const todayMinutes = todaySessions.reduce((sum, s) => sum + (s.duration || 0), 0);
 
-        // Get daily goal (duration goal with period='daily')
-        const [durationGoal] = await db
+        // Get session duration goal and sessions per day to calculate daily target
+        const [sessionDurationGoal] = await db
           .select({ targetValue: patientGoals.targetValue })
           .from(patientGoals)
           .where(
             and(
               eq(patientGoals.patientId, patient.id),
               eq(patientGoals.goalType, 'duration'),
-              eq(patientGoals.period, 'daily'),
+              eq(patientGoals.period, 'session'),
               eq(patientGoals.isActive, true)
             )
           );
-        const dailyGoal = durationGoal?.targetValue || 15; // Default 15 min if no goal set
+
+        const [sessionsGoal] = await db
+          .select({ targetValue: patientGoals.targetValue })
+          .from(patientGoals)
+          .where(
+            and(
+              eq(patientGoals.patientId, patient.id),
+              eq(patientGoals.goalType, 'sessions'),
+              eq(patientGoals.isActive, true)
+            )
+          );
+
+        // Calculate daily goal: session duration × sessions per day
+        const sessionDuration = parseFloat(sessionDurationGoal?.targetValue || '15');
+        const sessionsPerDay = parseFloat(sessionsGoal?.targetValue || '2');
+        const dailyGoal = sessionDuration * sessionsPerDay; // e.g., 15 min × 2 = 30 min daily
         const goalPercent = Math.round((todayMinutes / dailyGoal) * 100);
 
         leaderboardData.push({
