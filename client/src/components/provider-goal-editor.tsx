@@ -384,7 +384,7 @@ export function ProviderGoalEditor({ patientGoals = [], patientId, onUpdateGoals
           targetValue: resistance.toString(),
           currentValue: "0",
           unit: "level",
-          label: "Resistance Setting",
+          label: "Resistance Level (if cycling)",
           subtitle: `Level ${resistance} resistance`,
           period: "session",
           isActive: true
@@ -439,7 +439,7 @@ export function ProviderGoalEditor({ patientGoals = [], patientId, onUpdateGoals
         {
           goalType: "resistance",
           targetValue: resistance.toString(),
-          label: "Resistance Setting",
+          label: "Resistance Level (if cycling)",
           subtitle: `Level ${resistance} resistance`
         }
       ];
