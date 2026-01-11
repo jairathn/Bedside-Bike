@@ -1109,19 +1109,34 @@ export async function registerRoutes(app: Express): Promise<Server> {
           );
         const todayMinutes = todaySessions.reduce((sum, s) => sum + (s.duration || 0), 0);
 
-        // Get daily goal (duration goal with period='daily')
-        const [durationGoal] = await db
+        // Get session duration goal and sessions per day to calculate daily target
+        const [sessionDurationGoal] = await db
           .select({ targetValue: patientGoals.targetValue })
           .from(patientGoals)
           .where(
             and(
               eq(patientGoals.patientId, patient.id),
               eq(patientGoals.goalType, 'duration'),
-              eq(patientGoals.period, 'daily'),
+              eq(patientGoals.period, 'session'),
               eq(patientGoals.isActive, true)
             )
           );
-        const dailyGoal = durationGoal?.targetValue || 15; // Default 15 min if no goal set
+
+        const [sessionsGoal] = await db
+          .select({ targetValue: patientGoals.targetValue })
+          .from(patientGoals)
+          .where(
+            and(
+              eq(patientGoals.patientId, patient.id),
+              eq(patientGoals.goalType, 'sessions'),
+              eq(patientGoals.isActive, true)
+            )
+          );
+
+        // Calculate daily goal: session duration × sessions per day
+        const sessionDuration = parseFloat(sessionDurationGoal?.targetValue || '15');
+        const sessionsPerDay = parseFloat(sessionsGoal?.targetValue || '2');
+        const dailyGoal = sessionDuration * sessionsPerDay; // e.g., 15 min × 2 = 30 min daily
         const goalPercent = Math.round((todayMinutes / dailyGoal) * 100);
 
         leaderboardData.push({
@@ -2434,28 +2449,42 @@ async function seedPatientWithMockData() {
       }
     }
 
-    // Delete ALL sessions outside the rolling window (both manual and auto-generated)
-    if (sessionsOutsideWindow.length > 0) {
-      for (const session of sessionsOutsideWindow) {
-        await db.delete(exerciseSessions).where(eq(exerciseSessions.id, session.id));
-      }
-      console.log(`✓ Cleared ${sessionsOutsideWindow.length} sessions outside rolling window`);
-    }
+    // Check if TODAY already has sessions - if so, skip regeneration to prevent duplicates
+    const todaysSessions = existingSessions.filter(s => s.sessionDate === todayStr);
+    if (todaysSessions.length > 0) {
+      console.log(`✓ Neil Jairath already has ${todaysSessions.length} session(s) today - skipping regeneration`);
 
-    // Delete auto-generated sessions within window (to regenerate fresh ones)
-    // But KEEP manual sessions within window
-    const autoSessionsWithinWindow = sessionsWithinWindow.filter(s => (s as any).isManual !== true);
-    if (autoSessionsWithinWindow.length > 0) {
-      for (const session of autoSessionsWithinWindow) {
-        await db.delete(exerciseSessions).where(eq(exerciseSessions.id, session.id));
+      // Still clean up sessions outside window
+      if (sessionsOutsideWindow.length > 0) {
+        for (const session of sessionsOutsideWindow) {
+          await db.delete(exerciseSessions).where(eq(exerciseSessions.id, session.id));
+        }
+        console.log(`✓ Cleared ${sessionsOutsideWindow.length} sessions outside rolling window`);
       }
-      console.log(`✓ Cleared ${autoSessionsWithinWindow.length} auto-generated sessions to refresh`);
-    }
+    } else {
+      // Delete ALL sessions outside the rolling window (both manual and auto-generated)
+      if (sessionsOutsideWindow.length > 0) {
+        for (const session of sessionsOutsideWindow) {
+          await db.delete(exerciseSessions).where(eq(exerciseSessions.id, session.id));
+        }
+        console.log(`✓ Cleared ${sessionsOutsideWindow.length} sessions outside rolling window`);
+      }
 
-    // Generate new auto sessions for days that don't have manual sessions
-    // This ensures we always have fresh demo data while preserving user inputs
-    await generateRecentSessionData(patient.id, 4, manualSessionDatesWithinWindow);
-    console.log(`✓ Generated rolling window sessions (${fourDaysAgoStr} to ${todayStr}), preserved ${manualSessionDatesWithinWindow.size} manual session date(s)`)
+      // Delete auto-generated sessions within window (to regenerate fresh ones)
+      // But KEEP manual sessions within window
+      const autoSessionsWithinWindow = sessionsWithinWindow.filter(s => (s as any).isManual !== true);
+      if (autoSessionsWithinWindow.length > 0) {
+        for (const session of autoSessionsWithinWindow) {
+          await db.delete(exerciseSessions).where(eq(exerciseSessions.id, session.id));
+        }
+        console.log(`✓ Cleared ${autoSessionsWithinWindow.length} auto-generated sessions to refresh`);
+      }
+
+      // Generate new auto sessions for days that don't have manual sessions
+      // This ensures we always have fresh demo data while preserving user inputs
+      await generateRecentSessionData(patient.id, 4, manualSessionDatesWithinWindow);
+      console.log(`✓ Generated rolling window sessions (${fourDaysAgoStr} to ${todayStr}), preserved ${manualSessionDatesWithinWindow.size} manual session date(s)`);
+    }
 
     // Ensure patient stats exist
     let stats = await storage.getPatientStats(patient.id);
