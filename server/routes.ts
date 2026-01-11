@@ -5,7 +5,7 @@ import { storage } from "./storage";
 import { db } from "./db";
 import { updateRollingDataWindow } from "./rolling-data";
 import { patientStats, users, providerPatients, patientGoals, exerciseSessions, patientPreferences, feedItems, nudgeMessages, kudosReactions } from "@shared/schema";
-import { eq, and, desc } from "drizzle-orm";
+import { eq, and, desc, gte, inArray } from "drizzle-orm";
 import { calculateRisks } from "./risk-calculator";
 // Removed duplicate calculator - using only central risk calculator
 import { kudosService } from "./kudos-service";
@@ -1039,7 +1039,30 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const currentPatientId = parseInt(req.query.patientId as string) || 0;
 
-      // Get all patients with their stats
+      // Calculate date 3 days ago (in America/New_York timezone)
+      const threeDaysAgo = new Date();
+      threeDaysAgo.setDate(threeDaysAgo.getDate() - 3);
+      const threeDaysAgoStr = new Intl.DateTimeFormat('en-CA', {
+        timeZone: 'America/New_York',
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit'
+      }).format(threeDaysAgo);
+
+      // Get patient IDs who have been active in the past 3 days
+      const activePatients = await db
+        .selectDistinct({ patientId: exerciseSessions.patientId })
+        .from(exerciseSessions)
+        .where(gte(exerciseSessions.sessionDate, threeDaysAgoStr));
+
+      const activePatientIds = activePatients.map(p => p.patientId);
+
+      // If no active patients, return empty leaderboard
+      if (activePatientIds.length === 0) {
+        return res.json([]);
+      }
+
+      // Get all active patients with their stats
       const patients = await db
         .select({
           id: users.id,
@@ -1054,7 +1077,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         .where(
           and(
             eq(users.userType, 'patient'),
-            eq(users.isActive, true)
+            eq(users.isActive, true),
+            inArray(users.id, activePatientIds)
           )
         )
         .orderBy(desc(patientStats.totalDuration));
