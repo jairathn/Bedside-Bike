@@ -84,32 +84,49 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Patient/Provider Registration
   app.post("/api/auth/register", authLimiter, async (req, res) => {
     try {
-      const { userType } = req.body;
-      
+      const { userType, tosAccepted, tosVersion } = req.body;
+
+      // Require Terms of Service acceptance for all registrations
+      if (!tosAccepted) {
+        return res.status(400).json({ error: "You must accept the Terms of Service to create an account" });
+      }
+
       if (userType === 'patient') {
         const patientData = patientRegistrationSchema.parse(req.body) as PatientRegistration;
-        
+
         // Check if patient already exists
         const existingPatient = await storage.getUserByEmail(patientData.email);
         if (existingPatient) {
           return res.status(400).json({ error: "Patient already exists with this email" });
         }
-        
-        const patient = await storage.createUser(patientData);
+
+        // Create patient with ToS acceptance timestamp
+        const { tosAccepted: _, ...patientDataWithoutTos } = patientData;
+        const patient = await storage.createUser({
+          ...patientDataWithoutTos,
+          tosAcceptedAt: new Date(),
+          tosVersion: tosVersion || '1.0.0',
+        });
         res.json({ user: patient });
-        
+
       } else if (userType === 'provider') {
         const providerData = providerRegistrationSchema.parse(req.body) as ProviderRegistration;
-        
+
         // Check if provider already exists
         const existingProvider = await storage.getUserByEmail(providerData.email);
         if (existingProvider) {
           return res.status(400).json({ error: "Provider already exists with this email" });
         }
-        
-        const provider = await storage.createUser(providerData);
+
+        // Create provider with ToS acceptance timestamp
+        const { tosAccepted: _, ...providerDataWithoutTos } = providerData;
+        const provider = await storage.createUser({
+          ...providerDataWithoutTos,
+          tosAcceptedAt: new Date(),
+          tosVersion: tosVersion || '1.0.0',
+        });
         res.json({ user: provider });
-        
+
       } else {
         return res.status(400).json({ error: "Invalid user type" });
       }
