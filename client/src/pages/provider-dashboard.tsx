@@ -676,39 +676,28 @@ export default function ProviderDashboard() {
                 </div>
 
                 {/* Mobility Summary Card for EMR Copy-Paste */}
-                {recentSessions && recentSessions.length > 0 && (
-                  <MobilitySummaryCard
-                    patientName={`${selectedPatient.firstName} ${selectedPatient.lastName}`}
-                    date={new Intl.DateTimeFormat('en-US', {
-                      year: 'numeric',
-                      month: 'long',
-                      day: 'numeric'
-                    }).format(new Date())}
-                    activities={recentSessions
-                      .filter((s: any) => {
-                        const sessionDate = new Date(s.sessionDate || s.createdAt);
-                        const today = new Date();
-                        return sessionDate.toDateString() === today.toDateString();
-                      })
-                      .map((s: any) => ({
-                        type: (s.activityType || 'ride') as 'ride' | 'walk' | 'sit' | 'transfer',
-                        duration: s.duration || 0,
-                        watts: s.equivalentWatts || (s.activityType === 'ride' ? Math.round((s.resistance || 3) * 5) : undefined),
-                        assistance: s.assistanceLevel as 'assisted' | 'independent' | undefined,
-                        resistance: s.resistance,
-                        transferCount: s.transferCount,
-                      }))}
-                    goalMinutes={(() => {
-                      const durationGoal = patientGoals?.find((g: any) => g.goalType === 'duration');
-                      if (!durationGoal) return 30;
-                      return durationGoal.targetValue > 60
-                        ? Math.round(durationGoal.targetValue / 60)
-                        : Math.round(durationGoal.targetValue);
-                    })()}
-                    streak={(patientStats as any)?.stats?.consistencyStreak || 0}
-                    weeklyAverage={Math.round(((patientStats as any)?.stats?.avgDailyDuration || 0) / 60)}
-                  />
-                )}
+                <MobilitySummaryCard
+                  patientName={`${selectedPatient.firstName} ${selectedPatient.lastName}`}
+                  admissionDate={selectedPatient.admissionDate}
+                  sessions={allSessions.map((s: any) => ({
+                    id: s.id,
+                    sessionDate: s.sessionDate,
+                    duration: s.duration || 0,
+                    activityType: s.activityType || 'ride',
+                    assistanceLevel: s.assistanceLevel,
+                    resistance: s.resistance,
+                    avgPower: s.avgPower ? parseFloat(s.avgPower) : undefined,
+                    equivalentWatts: s.equivalentWatts,
+                    transferCount: s.transferCount,
+                  }))}
+                  goalMinutes={(() => {
+                    const durationGoal = patientGoals?.find((g: any) => g.goalType === 'duration');
+                    if (!durationGoal) return 30;
+                    return durationGoal.targetValue > 60
+                      ? Math.round(durationGoal.targetValue / 60)
+                      : Math.round(durationGoal.targetValue);
+                  })()}
+                />
 
                 {/* Comprehensive Goal Management */}
                 <ProviderGoalEditor
