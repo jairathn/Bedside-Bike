@@ -10,7 +10,8 @@ import { Switch } from "@/components/ui/switch";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
-import { Heart, MessageCircle, Settings, Zap, Target, Award, ThumbsUp, Trophy, TrendingUp, Gift } from "lucide-react";
+import { Heart, MessageCircle, Settings, Zap, Target, Award, ThumbsUp, Trophy, TrendingUp, Gift, Clock, Flame } from "lucide-react";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { apiRequest } from "@/lib/queryClient";
 
 export default function KudosWall() {
@@ -228,53 +229,113 @@ export default function KudosWall() {
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           {/* Main Feed and Leaderboard */}
           <div className="lg:col-span-2 space-y-6">
-            {/* Leaderboard */}
+            {/* Leaderboards */}
             <Card>
               <CardHeader>
                 <CardTitle className="flex items-center">
                   <Trophy className="w-5 h-5 mr-2 text-yellow-500" />
-                  Leaderboard
+                  Leaderboards
                 </CardTitle>
               </CardHeader>
               <CardContent>
-                {leaderboard?.length > 0 ? (
-                  <div className="space-y-2">
-                    {leaderboard.map((entry: any) => (
-                      <div
-                        key={entry.id}
-                        className={`flex items-center justify-between p-3 rounded-lg ${
-                          entry.isCurrentUser
-                            ? 'bg-blue-50 border-2 border-blue-200'
-                            : 'bg-gray-50'
-                        }`}
-                      >
-                        <div className="flex items-center space-x-3">
-                          <span className={`font-bold w-6 ${
-                            entry.rank === 1 ? 'text-yellow-500' :
-                            entry.rank === 2 ? 'text-gray-400' :
-                            entry.rank === 3 ? 'text-amber-600' : 'text-gray-600'
-                          }`}>
-                            {entry.rank === 1 ? '🥇' : entry.rank === 2 ? '🥈' : entry.rank === 3 ? '🥉' : `#${entry.rank}`}
-                          </span>
-                          <span className="text-xl">{entry.avatarEmoji}</span>
-                          <div>
-                            <span className="font-medium">{entry.displayName}</span>
-                            {entry.isCurrentUser && <Badge className="ml-2 text-xs">You</Badge>}
+                <Tabs defaultValue="today" className="w-full">
+                  <TabsList className="grid w-full grid-cols-2 mb-4">
+                    <TabsTrigger value="today" className="flex items-center gap-1">
+                      <Clock className="w-4 h-4" />
+                      Today's Leaders
+                    </TabsTrigger>
+                    <TabsTrigger value="goals" className="flex items-center gap-1">
+                      <Flame className="w-4 h-4" />
+                      Goal Crushers
+                    </TabsTrigger>
+                  </TabsList>
+
+                  {/* Today's Leaders - based on minutes today */}
+                  <TabsContent value="today">
+                    {leaderboard?.todayLeaders?.length > 0 ? (
+                      <div className="space-y-2">
+                        {leaderboard.todayLeaders.map((entry: any) => (
+                          <div
+                            key={entry.id}
+                            className={`flex items-center justify-between p-3 rounded-lg ${
+                              entry.isCurrentUser
+                                ? 'bg-blue-50 border-2 border-blue-200'
+                                : 'bg-gray-50'
+                            }`}
+                          >
+                            <div className="flex items-center space-x-3">
+                              <span className={`font-bold w-6 ${
+                                entry.rank === 1 ? 'text-yellow-500' :
+                                entry.rank === 2 ? 'text-gray-400' :
+                                entry.rank === 3 ? 'text-amber-600' : 'text-gray-600'
+                              }`}>
+                                {entry.rank === 1 ? '🥇' : entry.rank === 2 ? '🥈' : entry.rank === 3 ? '🥉' : `#${entry.rank}`}
+                              </span>
+                              <span className="text-xl">{entry.avatarEmoji}</span>
+                              <div>
+                                <span className="font-medium">{entry.displayName}</span>
+                                {entry.isCurrentUser && <Badge className="ml-2 text-xs">You</Badge>}
+                              </div>
+                            </div>
+                            <div className="text-right">
+                              <div className="font-bold text-blue-600">{entry.todayMinutes} min</div>
+                              <div className="text-xs text-gray-500">today</div>
+                            </div>
                           </div>
-                        </div>
-                        <div className="text-right">
-                          <div className="font-bold text-blue-600">{entry.totalMinutes} min</div>
-                          <div className="text-xs text-gray-500">{entry.streak > 0 && `🔥 ${entry.streak} day streak`}</div>
-                        </div>
+                        ))}
                       </div>
-                    ))}
-                  </div>
-                ) : (
-                  <div className="text-center py-6">
-                    <Trophy className="w-8 h-8 text-gray-400 mx-auto mb-2" />
-                    <p className="text-sm text-gray-500">No leaderboard data yet</p>
-                  </div>
-                )}
+                    ) : (
+                      <div className="text-center py-6">
+                        <Clock className="w-8 h-8 text-gray-400 mx-auto mb-2" />
+                        <p className="text-sm text-gray-500">No activity today yet</p>
+                      </div>
+                    )}
+                  </TabsContent>
+
+                  {/* Goal Crushers - based on % of daily goal achieved */}
+                  <TabsContent value="goals">
+                    {leaderboard?.goalCrushers?.length > 0 ? (
+                      <div className="space-y-2">
+                        {leaderboard.goalCrushers.map((entry: any) => (
+                          <div
+                            key={entry.id}
+                            className={`flex items-center justify-between p-3 rounded-lg ${
+                              entry.isCurrentUser
+                                ? 'bg-green-50 border-2 border-green-200'
+                                : 'bg-gray-50'
+                            }`}
+                          >
+                            <div className="flex items-center space-x-3">
+                              <span className={`font-bold w-6 ${
+                                entry.rank === 1 ? 'text-yellow-500' :
+                                entry.rank === 2 ? 'text-gray-400' :
+                                entry.rank === 3 ? 'text-amber-600' : 'text-gray-600'
+                              }`}>
+                                {entry.rank === 1 ? '🥇' : entry.rank === 2 ? '🥈' : entry.rank === 3 ? '🥉' : `#${entry.rank}`}
+                              </span>
+                              <span className="text-xl">{entry.avatarEmoji}</span>
+                              <div>
+                                <span className="font-medium">{entry.displayName}</span>
+                                {entry.isCurrentUser && <Badge className="ml-2 text-xs">You</Badge>}
+                              </div>
+                            </div>
+                            <div className="text-right">
+                              <div className={`font-bold ${entry.goalPercent >= 100 ? 'text-green-600' : 'text-orange-500'}`}>
+                                {entry.goalPercent}%
+                              </div>
+                              <div className="text-xs text-gray-500">{entry.todayMinutes}/{entry.dailyGoal} min</div>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <div className="text-center py-6">
+                        <Target className="w-8 h-8 text-gray-400 mx-auto mb-2" />
+                        <p className="text-sm text-gray-500">No goal data yet</p>
+                      </div>
+                    )}
+                  </TabsContent>
+                </Tabs>
               </CardContent>
             </Card>
 
