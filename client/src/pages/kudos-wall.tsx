@@ -502,7 +502,7 @@ export default function KudosWall() {
                   <div className="flex justify-between text-sm">
                     <span className="text-gray-600">Patients on track</span>
                     <Badge variant="secondary" className="bg-green-100 text-green-800">
-                      {(leaderboard?.length || 0) - (nudgeTargets?.length || 0)}
+                      {(leaderboard?.todayLeaders?.length || 0) - (nudgeTargets?.length || 0)}
                     </Badge>
                   </div>
                   <div className="flex justify-between text-sm">
@@ -513,7 +513,7 @@ export default function KudosWall() {
                   </div>
                   <div className="flex justify-between text-sm">
                     <span className="text-gray-600">Active in community</span>
-                    <Badge variant="secondary">{leaderboard?.length || 0}</Badge>
+                    <Badge variant="secondary">{leaderboard?.todayLeaders?.length || 0}</Badge>
                   </div>
                 </div>
               </CardContent>
