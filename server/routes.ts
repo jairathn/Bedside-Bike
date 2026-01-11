@@ -5,7 +5,7 @@ import { storage } from "./storage";
 import { db } from "./db";
 import { updateRollingDataWindow } from "./rolling-data";
 import { patientStats, users, providerPatients, patientGoals, exerciseSessions, patientPreferences, feedItems, nudgeMessages, kudosReactions } from "@shared/schema";
-import { eq, and, desc, gte, inArray } from "drizzle-orm";
+import { eq, and, desc, gte, inArray, sql } from "drizzle-orm";
 import { calculateRisks } from "./risk-calculator";
 // Removed duplicate calculator - using only central risk calculator
 import { kudosService } from "./kudos-service";
@@ -1034,12 +1034,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Get leaderboard
+  // Get leaderboard with fair metrics
   app.get("/api/kudos/leaderboard", async (req, res) => {
     try {
       const currentPatientId = parseInt(req.query.patientId as string) || 0;
 
-      // Calculate date 3 days ago (in America/New_York timezone)
+      // Get today's date in America/New_York timezone
+      const todayStr = new Intl.DateTimeFormat('en-CA', {
+        timeZone: 'America/New_York',
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit'
+      }).format(new Date());
+
+      // Calculate date 3 days ago for activity filter
       const threeDaysAgo = new Date();
       threeDaysAgo.setDate(threeDaysAgo.getDate() - 3);
       const threeDaysAgoStr = new Intl.DateTimeFormat('en-CA', {
@@ -1057,19 +1065,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       const activePatientIds = activePatients.map(p => p.patientId);
 
-      // If no active patients, return empty leaderboard
+      // If no active patients, return empty leaderboards
       if (activePatientIds.length === 0) {
-        return res.json([]);
+        return res.json({ todayLeaders: [], goalCrushers: [] });
       }
 
-      // Get all active patients with their stats
+      // Get all active patients with their info
       const patients = await db
         .select({
           id: users.id,
           firstName: users.firstName,
           lastName: users.lastName,
-          totalDuration: patientStats.totalDuration,
-          totalSessions: patientStats.totalSessions,
           consistencyStreak: patientStats.consistencyStreak,
         })
         .from(users)
@@ -1080,33 +1086,70 @@ export async function registerRoutes(app: Express): Promise<Server> {
             eq(users.isActive, true),
             inArray(users.id, activePatientIds)
           )
-        )
-        .orderBy(desc(patientStats.totalDuration));
+        );
 
-      const leaderboard = [];
-      for (let i = 0; i < patients.length; i++) {
-        const patient = patients[i];
-
+      // Build leaderboard data for each patient
+      const leaderboardData = [];
+      for (const patient of patients) {
         // Get preferences
         const [prefs] = await db
           .select()
           .from(patientPreferences)
           .where(eq(patientPreferences.patientId, patient.id));
 
-        leaderboard.push({
-          rank: i + 1,
+        // Get today's minutes
+        const todaySessions = await db
+          .select({ duration: exerciseSessions.duration })
+          .from(exerciseSessions)
+          .where(
+            and(
+              eq(exerciseSessions.patientId, patient.id),
+              eq(exerciseSessions.sessionDate, todayStr)
+            )
+          );
+        const todayMinutes = todaySessions.reduce((sum, s) => sum + (s.duration || 0), 0);
+
+        // Get daily goal (duration goal with period='daily')
+        const [durationGoal] = await db
+          .select({ targetValue: patientGoals.targetValue })
+          .from(patientGoals)
+          .where(
+            and(
+              eq(patientGoals.patientId, patient.id),
+              eq(patientGoals.goalType, 'duration'),
+              eq(patientGoals.period, 'daily'),
+              eq(patientGoals.isActive, true)
+            )
+          );
+        const dailyGoal = durationGoal?.targetValue || 15; // Default 15 min if no goal set
+        const goalPercent = Math.round((todayMinutes / dailyGoal) * 100);
+
+        leaderboardData.push({
           id: patient.id,
           displayName: prefs?.displayName || `${patient.firstName} ${patient.lastName?.charAt(0)}.`,
           avatarEmoji: prefs?.avatarEmoji || "👤",
-          totalMinutes: Math.round(patient.totalDuration || 0),
-          totalSessions: patient.totalSessions || 0,
+          todayMinutes,
+          dailyGoal,
+          goalPercent,
           streak: patient.consistencyStreak || 0,
           isCurrentUser: patient.id === currentPatientId,
           optedIn: prefs?.optInKudos || false
         });
       }
 
-      res.json(leaderboard.slice(0, 10));
+      // Today's Leaders - sorted by today's minutes
+      const todayLeaders = [...leaderboardData]
+        .sort((a, b) => b.todayMinutes - a.todayMinutes)
+        .slice(0, 10)
+        .map((p, i) => ({ ...p, rank: i + 1 }));
+
+      // Goal Crushers - sorted by goal achievement percentage
+      const goalCrushers = [...leaderboardData]
+        .sort((a, b) => b.goalPercent - a.goalPercent)
+        .slice(0, 10)
+        .map((p, i) => ({ ...p, rank: i + 1 }));
+
+      res.json({ todayLeaders, goalCrushers });
     } catch (error) {
       console.error("Get leaderboard error:", error);
       res.status(500).json({ error: "Failed to get leaderboard" });
