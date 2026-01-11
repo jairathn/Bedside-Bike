@@ -149,21 +149,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
         console.log('=== SERVER LOGIN DEBUG ===');
         console.log('Received:', { firstName, lastName, dateOfBirth, deviceNumber });
 
-        let patient = await storage.getPatientByName(firstName, lastName, dateOfBirth);
+        const patient = await storage.getPatientByName(firstName, lastName, dateOfBirth);
         console.log('Patient found:', patient ? `Yes (ID: ${patient.id}, DOB: ${patient.dateOfBirth})` : 'No');
-        
-        // If patient doesn't exist, create new one with generated email
+
+        // If patient doesn't exist, return error - they need to register first
         if (!patient) {
-          const email = `${firstName.toLowerCase()}.${lastName.toLowerCase()}@bedside-bike.local`;
-          patient = await storage.createUser({
-            email,
-            firstName,
-            lastName,
-            dateOfBirth,
-            userType: 'patient'
+          return res.status(401).json({
+            error: "Account not found. Please register first using the Register tab."
           });
         }
-        
+
         // Link patient to device if device number provided
         let deviceLinkResult = null;
         if (deviceNumber && patient) {
@@ -173,10 +168,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
             console.warn('Failed to link patient to device:', error);
           }
         }
-        
-        return res.json({ 
-          user: patient, 
-          patient, 
+
+        return res.json({
+          user: patient,
+          patient,
           deviceNumber,
           deviceLinkResult // Include device switching info
         });
@@ -187,23 +182,23 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       if (loginData.userType === 'patient') {
         let patient = await storage.getUserByEmail(loginData.email);
-        
-        if (!patient && loginData.dateOfBirth) {
+
+        // Also try name + DOB lookup if email not found
+        if (!patient && loginData.dateOfBirth && loginData.firstName && loginData.lastName) {
           patient = await storage.getPatientByName(
             loginData.firstName,
             loginData.lastName,
             loginData.dateOfBirth
           );
         }
-        
-        // If patient doesn't exist, create new one
+
+        // If patient doesn't exist, return error - they need to register first
         if (!patient) {
-          patient = await storage.createUser({
-            ...loginData,
-            userType: 'patient'
+          return res.status(401).json({
+            error: "Account not found. Please register first using the Register tab."
           });
         }
-        
+
         // Link patient to device if device number provided
         const { deviceNumber } = req.body;
         let deviceLinkResult = null;
@@ -214,10 +209,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
             console.warn('Failed to link patient to device:', error);
           }
         }
-        
-        res.json({ 
-          user: patient, 
-          patient, 
+
+        res.json({
+          user: patient,
+          patient,
           deviceNumber,
           deviceLinkResult // Include device switching info
         });
