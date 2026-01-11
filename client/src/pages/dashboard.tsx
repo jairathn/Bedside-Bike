@@ -9,10 +9,11 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, Di
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
-import { Target, MessageCircle, LogOut, Calculator, Gamepad2, TrendingUp, Play, Trophy, Menu, Lightbulb, ChevronDown, ChevronUp, ChevronLeft, ChevronRight, HelpCircle, Heart, Activity, Info, ClipboardPlus, Clock, Calendar } from "lucide-react";
+import { Target, MessageCircle, LogOut, Calculator, Gamepad2, TrendingUp, Play, Trophy, Menu, Lightbulb, ChevronDown, ChevronUp, ChevronLeft, ChevronRight, HelpCircle, Heart, Activity, Info, ClipboardPlus, Clock, Calendar, Bike, Footprints, Armchair } from "lucide-react";
 import { ProgressRing } from "@/components/progress-ring";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import StartSessionModal from "@/components/StartSessionModal";
-import { useSessionTimer } from "@/contexts/SessionTimerContext";
+import { useSessionTimer, ActivityType, AssistanceLevel } from "@/contexts/SessionTimerContext";
 
 // Patient-Friendly Did You Know Component
 function PatientFactoids() {
@@ -182,7 +183,9 @@ export default function DashboardPage() {
   const [manualSession, setManualSession] = useState({
     ...getDefaultDateTime(),
     durationMinutes: 15,
-    resistance: 3
+    resistance: 3,
+    activityType: 'ride' as ActivityType,
+    assistanceLevel: 'assisted' as AssistanceLevel,
   });
 
   // Reset form when dialog opens
@@ -191,7 +194,9 @@ export default function DashboardPage() {
       setManualSession({
         ...getDefaultDateTime(),
         durationMinutes: 15,
-        resistance: 3
+        resistance: 3,
+        activityType: 'ride',
+        assistanceLevel: 'assisted',
       });
     }
     setShowManualSession(open);
@@ -202,9 +207,11 @@ export default function DashboardPage() {
     mutationFn: async (sessionData: {
       patientId: number;
       duration: number;
-      resistance: number;
+      resistance?: number;
       sessionDate: string;
       startTime: string;
+      activityType: ActivityType;
+      assistanceLevel?: AssistanceLevel;
     }) => {
       const response = await fetch('/api/sessions', {
         method: 'POST',
@@ -212,13 +219,17 @@ export default function DashboardPage() {
         body: JSON.stringify({
           patientId: sessionData.patientId,
           duration: sessionData.duration,
-          resistance: sessionData.resistance,
+          resistance: sessionData.activityType === 'ride' ? sessionData.resistance : undefined,
           sessionDate: sessionData.sessionDate,
           startTime: sessionData.startTime,
           isCompleted: true,
           isManual: true, // Mark as manually recorded (not auto-generated)
-          avgPower: sessionData.resistance * 5, // Approximate power from resistance
-          avgRpm: 50, // Default RPM for manual entry
+          activityType: sessionData.activityType,
+          assistanceLevel: sessionData.activityType === 'walk' ? sessionData.assistanceLevel : undefined,
+          avgPower: sessionData.activityType === 'ride' && sessionData.resistance
+            ? sessionData.resistance * 5
+            : undefined,
+          avgRpm: sessionData.activityType === 'ride' ? 50 : undefined,
         }),
       });
 
@@ -230,9 +241,15 @@ export default function DashboardPage() {
       return response.json();
     },
     onSuccess: () => {
+      const activityLabels: Record<ActivityType, string> = {
+        ride: 'cycling',
+        walk: 'walking',
+        sit: 'chair sitting',
+        transfer: 'transfer',
+      };
       toast({
         title: "Session Recorded!",
-        description: "Your exercise session has been saved successfully.",
+        description: `Your ${activityLabels[manualSession.activityType]} session has been saved successfully.`,
       });
       setShowManualSession(false);
       // Refresh dashboard data
@@ -275,9 +292,11 @@ export default function DashboardPage() {
     createManualSessionMutation.mutate({
       patientId: currentPatient.id,
       duration: manualSession.durationMinutes, // Duration stored in MINUTES
-      resistance: manualSession.resistance,
+      resistance: manualSession.activityType === 'ride' ? manualSession.resistance : undefined,
       sessionDate: manualSession.date,
       startTime: sessionDateTime.toISOString(),
+      activityType: manualSession.activityType,
+      assistanceLevel: manualSession.activityType === 'walk' ? manualSession.assistanceLevel : undefined,
     });
   };
 
@@ -501,7 +520,7 @@ export default function DashboardPage() {
                     disabled={sessionState.isActive}
                   >
                     <Play className="w-6 h-6 sm:w-8 sm:h-8 mr-2 sm:mr-3" />
-                    {sessionState.isActive ? "Session Active" : "Start Exercise"}
+                    {sessionState.isActive ? "Session Active" : "Start Movement"}
                   </Button>
                   <div>
                     <Dialog open={showManualSession} onOpenChange={handleOpenManualSession}>
@@ -519,14 +538,60 @@ export default function DashboardPage() {
                         <DialogHeader>
                           <DialogTitle className="flex items-center text-xl">
                             <ClipboardPlus className="w-5 h-5 mr-2 text-blue-600" />
-                            Record Manual Session
+                            Record Past Activity
                           </DialogTitle>
                           <DialogDescription>
-                            Log an exercise session that wasn't recorded automatically
+                            Log a movement session that wasn't recorded automatically
                           </DialogDescription>
                         </DialogHeader>
 
                         <div className="space-y-4 mt-4">
+                          {/* Activity Type Selection */}
+                          <div className="space-y-2">
+                            <Label className="flex items-center">
+                              <Activity className="w-4 h-4 mr-2 text-gray-500" />
+                              Activity Type
+                            </Label>
+                            <div className="grid grid-cols-3 gap-2">
+                              <button
+                                type="button"
+                                onClick={() => setManualSession(prev => ({ ...prev, activityType: 'ride' }))}
+                                className={`flex flex-col items-center p-3 rounded-lg border-2 transition-all ${
+                                  manualSession.activityType === 'ride'
+                                    ? 'border-blue-500 bg-blue-50'
+                                    : 'border-gray-200 hover:border-gray-300'
+                                }`}
+                              >
+                                <Bike className="w-6 h-6 text-blue-600 mb-1" />
+                                <span className="text-xs font-medium">Ride</span>
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => setManualSession(prev => ({ ...prev, activityType: 'walk' }))}
+                                className={`flex flex-col items-center p-3 rounded-lg border-2 transition-all ${
+                                  manualSession.activityType === 'walk'
+                                    ? 'border-green-500 bg-green-50'
+                                    : 'border-gray-200 hover:border-gray-300'
+                                }`}
+                              >
+                                <Footprints className="w-6 h-6 text-green-600 mb-1" />
+                                <span className="text-xs font-medium">Walk</span>
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => setManualSession(prev => ({ ...prev, activityType: 'sit' }))}
+                                className={`flex flex-col items-center p-3 rounded-lg border-2 transition-all ${
+                                  manualSession.activityType === 'sit'
+                                    ? 'border-purple-500 bg-purple-50'
+                                    : 'border-gray-200 hover:border-gray-300'
+                                }`}
+                              >
+                                <Armchair className="w-6 h-6 text-purple-600 mb-1" />
+                                <span className="text-xs font-medium">Chair</span>
+                              </button>
+                            </div>
+                          </div>
+
                           {/* Date Input */}
                           <div className="space-y-2">
                             <Label htmlFor="session-date" className="flex items-center">
@@ -559,7 +624,7 @@ export default function DashboardPage() {
                           {/* Duration Input */}
                           <div className="space-y-2">
                             <Label htmlFor="session-duration" className="flex items-center">
-                              <Activity className="w-4 h-4 mr-2 text-gray-500" />
+                              <Clock className="w-4 h-4 mr-2 text-gray-500" />
                               Duration (minutes)
                             </Label>
                             <Input
@@ -575,31 +640,61 @@ export default function DashboardPage() {
                             />
                           </div>
 
-                          {/* Resistance Input */}
-                          <div className="space-y-2">
-                            <Label htmlFor="session-resistance" className="flex items-center">
-                              <TrendingUp className="w-4 h-4 mr-2 text-gray-500" />
-                              Resistance Level (1-10)
-                            </Label>
-                            <Input
-                              id="session-resistance"
-                              type="number"
-                              min="1"
-                              max="10"
-                              value={manualSession.resistance}
-                              onChange={(e) => setManualSession(prev => ({
-                                ...prev,
-                                resistance: parseInt(e.target.value) || 1
-                              }))}
-                            />
-                            <p className="text-xs text-gray-500">
-                              1 = Very light, 5 = Moderate, 10 = Maximum effort
-                            </p>
-                          </div>
+                          {/* Resistance Input - Only for cycling */}
+                          {manualSession.activityType === 'ride' && (
+                            <div className="space-y-2">
+                              <Label htmlFor="session-resistance" className="flex items-center">
+                                <TrendingUp className="w-4 h-4 mr-2 text-gray-500" />
+                                Resistance Level (1-10)
+                              </Label>
+                              <Input
+                                id="session-resistance"
+                                type="number"
+                                min="1"
+                                max="10"
+                                value={manualSession.resistance}
+                                onChange={(e) => setManualSession(prev => ({
+                                  ...prev,
+                                  resistance: parseInt(e.target.value) || 1
+                                }))}
+                              />
+                              <p className="text-xs text-gray-500">
+                                1 = Very light, 5 = Moderate, 10 = Maximum effort
+                              </p>
+                            </div>
+                          )}
+
+                          {/* Assistance Level - Only for walking */}
+                          {manualSession.activityType === 'walk' && (
+                            <div className="space-y-2">
+                              <Label className="flex items-center">
+                                <Footprints className="w-4 h-4 mr-2 text-gray-500" />
+                                Assistance Level
+                              </Label>
+                              <Select
+                                value={manualSession.assistanceLevel}
+                                onValueChange={(value: AssistanceLevel) =>
+                                  setManualSession(prev => ({ ...prev, assistanceLevel: value }))
+                                }
+                              >
+                                <SelectTrigger>
+                                  <SelectValue placeholder="Select assistance level" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  <SelectItem value="assisted">Assisted (with physical help)</SelectItem>
+                                  <SelectItem value="independent">Independent (supervised only)</SelectItem>
+                                </SelectContent>
+                              </Select>
+                            </div>
+                          )}
 
                           {/* Submit Button */}
                           <Button
-                            className="w-full bg-blue-600 hover:bg-blue-700"
+                            className={`w-full ${
+                              manualSession.activityType === 'walk' ? 'bg-green-600 hover:bg-green-700' :
+                              manualSession.activityType === 'sit' ? 'bg-purple-600 hover:bg-purple-700' :
+                              'bg-blue-600 hover:bg-blue-700'
+                            }`}
                             onClick={handleSubmitManualSession}
                             disabled={createManualSessionMutation.isPending}
                           >
@@ -641,14 +736,60 @@ export default function DashboardPage() {
                         <DialogHeader>
                           <DialogTitle className="flex items-center text-xl">
                             <ClipboardPlus className="w-5 h-5 mr-2 text-blue-600" />
-                            Record Manual Session
+                            Record Past Activity
                           </DialogTitle>
                           <DialogDescription>
-                            Log an exercise session that wasn't recorded automatically
+                            Log a movement session that wasn't recorded automatically
                           </DialogDescription>
                         </DialogHeader>
 
                         <div className="space-y-4 mt-4">
+                          {/* Activity Type Selection */}
+                          <div className="space-y-2">
+                            <Label className="flex items-center">
+                              <Activity className="w-4 h-4 mr-2 text-gray-500" />
+                              Activity Type
+                            </Label>
+                            <div className="grid grid-cols-3 gap-2">
+                              <button
+                                type="button"
+                                onClick={() => setManualSession(prev => ({ ...prev, activityType: 'ride' }))}
+                                className={`flex flex-col items-center p-3 rounded-lg border-2 transition-all ${
+                                  manualSession.activityType === 'ride'
+                                    ? 'border-blue-500 bg-blue-50'
+                                    : 'border-gray-200 hover:border-gray-300'
+                                }`}
+                              >
+                                <Bike className="w-6 h-6 text-blue-600 mb-1" />
+                                <span className="text-xs font-medium">Ride</span>
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => setManualSession(prev => ({ ...prev, activityType: 'walk' }))}
+                                className={`flex flex-col items-center p-3 rounded-lg border-2 transition-all ${
+                                  manualSession.activityType === 'walk'
+                                    ? 'border-green-500 bg-green-50'
+                                    : 'border-gray-200 hover:border-gray-300'
+                                }`}
+                              >
+                                <Footprints className="w-6 h-6 text-green-600 mb-1" />
+                                <span className="text-xs font-medium">Walk</span>
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => setManualSession(prev => ({ ...prev, activityType: 'sit' }))}
+                                className={`flex flex-col items-center p-3 rounded-lg border-2 transition-all ${
+                                  manualSession.activityType === 'sit'
+                                    ? 'border-purple-500 bg-purple-50'
+                                    : 'border-gray-200 hover:border-gray-300'
+                                }`}
+                              >
+                                <Armchair className="w-6 h-6 text-purple-600 mb-1" />
+                                <span className="text-xs font-medium">Chair</span>
+                              </button>
+                            </div>
+                          </div>
+
                           {/* Date Input */}
                           <div className="space-y-2">
                             <Label htmlFor="session-date-2" className="flex items-center">
@@ -681,7 +822,7 @@ export default function DashboardPage() {
                           {/* Duration Input */}
                           <div className="space-y-2">
                             <Label htmlFor="session-duration-2" className="flex items-center">
-                              <Activity className="w-4 h-4 mr-2 text-gray-500" />
+                              <Clock className="w-4 h-4 mr-2 text-gray-500" />
                               Duration (minutes)
                             </Label>
                             <Input
@@ -697,31 +838,61 @@ export default function DashboardPage() {
                             />
                           </div>
 
-                          {/* Resistance Input */}
-                          <div className="space-y-2">
-                            <Label htmlFor="session-resistance-2" className="flex items-center">
-                              <TrendingUp className="w-4 h-4 mr-2 text-gray-500" />
-                              Resistance Level (1-10)
-                            </Label>
-                            <Input
-                              id="session-resistance-2"
-                              type="number"
-                              min="1"
-                              max="10"
-                              value={manualSession.resistance}
-                              onChange={(e) => setManualSession(prev => ({
-                                ...prev,
-                                resistance: parseInt(e.target.value) || 1
-                              }))}
-                            />
-                            <p className="text-xs text-gray-500">
-                              1 = Very light, 5 = Moderate, 10 = Maximum effort
-                            </p>
-                          </div>
+                          {/* Resistance Input - Only for cycling */}
+                          {manualSession.activityType === 'ride' && (
+                            <div className="space-y-2">
+                              <Label htmlFor="session-resistance-2" className="flex items-center">
+                                <TrendingUp className="w-4 h-4 mr-2 text-gray-500" />
+                                Resistance Level (1-10)
+                              </Label>
+                              <Input
+                                id="session-resistance-2"
+                                type="number"
+                                min="1"
+                                max="10"
+                                value={manualSession.resistance}
+                                onChange={(e) => setManualSession(prev => ({
+                                  ...prev,
+                                  resistance: parseInt(e.target.value) || 1
+                                }))}
+                              />
+                              <p className="text-xs text-gray-500">
+                                1 = Very light, 5 = Moderate, 10 = Maximum effort
+                              </p>
+                            </div>
+                          )}
+
+                          {/* Assistance Level - Only for walking */}
+                          {manualSession.activityType === 'walk' && (
+                            <div className="space-y-2">
+                              <Label className="flex items-center">
+                                <Footprints className="w-4 h-4 mr-2 text-gray-500" />
+                                Assistance Level
+                              </Label>
+                              <Select
+                                value={manualSession.assistanceLevel}
+                                onValueChange={(value: AssistanceLevel) =>
+                                  setManualSession(prev => ({ ...prev, assistanceLevel: value }))
+                                }
+                              >
+                                <SelectTrigger>
+                                  <SelectValue placeholder="Select assistance level" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  <SelectItem value="assisted">Assisted (with physical help)</SelectItem>
+                                  <SelectItem value="independent">Independent (supervised only)</SelectItem>
+                                </SelectContent>
+                              </Select>
+                            </div>
+                          )}
 
                           {/* Submit Button */}
                           <Button
-                            className="w-full bg-blue-600 hover:bg-blue-700"
+                            className={`w-full ${
+                              manualSession.activityType === 'walk' ? 'bg-green-600 hover:bg-green-700' :
+                              manualSession.activityType === 'sit' ? 'bg-purple-600 hover:bg-purple-700' :
+                              'bg-blue-600 hover:bg-blue-700'
+                            }`}
                             onClick={handleSubmitManualSession}
                             disabled={createManualSessionMutation.isPending}
                           >
