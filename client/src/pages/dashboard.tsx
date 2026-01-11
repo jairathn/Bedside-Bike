@@ -645,7 +645,7 @@ export default function DashboardPage() {
                             <div className="space-y-2">
                               <Label htmlFor="session-resistance" className="flex items-center">
                                 <TrendingUp className="w-4 h-4 mr-2 text-gray-500" />
-                                Resistance Level (1-10)
+                                Resistance Level (if cycling)
                               </Label>
                               <Input
                                 id="session-resistance"
@@ -843,7 +843,7 @@ export default function DashboardPage() {
                             <div className="space-y-2">
                               <Label htmlFor="session-resistance-2" className="flex items-center">
                                 <TrendingUp className="w-4 h-4 mr-2 text-gray-500" />
-                                Resistance Level (1-10)
+                                Resistance Level (if cycling)
                               </Label>
                               <Input
                                 id="session-resistance-2"
