@@ -1,100 +1,295 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Copy, Check, ClipboardList, Calendar, Activity, Footprints, Bike, Armchair } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
+import { Copy, Check, ClipboardList, Calendar, Activity, Footprints, Bike, Armchair, TrendingUp, TrendingDown, Minus, Hospital } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ReferenceLine } from 'recharts';
+
+interface Session {
+  id?: number;
+  sessionDate: string;
+  duration: number;
+  activityType?: 'ride' | 'walk' | 'sit' | 'transfer';
+  assistanceLevel?: 'assisted' | 'independent';
+  resistance?: number;
+  avgPower?: number;
+  equivalentWatts?: number;
+  transferCount?: number;
+}
 
 interface MobilitySummaryProps {
   patientName: string;
-  date: string;
-  activities: Array<{
-    type: 'ride' | 'walk' | 'sit' | 'transfer';
-    duration: number;
-    watts?: number;
-    assistance?: 'assisted' | 'independent';
-    resistance?: number;
-    transferCount?: number;
-  }>;
+  admissionDate: string;
+  sessions: Session[];
   goalMinutes: number;
-  streak: number;
-  weeklyAverage: number;
+  currentMobilityStatus?: string;
 }
 
 export default function MobilitySummaryCard({
   patientName,
-  date,
-  activities,
+  admissionDate,
+  sessions,
   goalMinutes,
-  streak,
-  weeklyAverage
+  currentMobilityStatus
 }: MobilitySummaryProps) {
   const [copied, setCopied] = useState(false);
   const { toast } = useToast();
 
-  // Calculate totals
-  const totalMinutes = activities
-    .filter(a => a.type !== 'transfer')
-    .reduce((sum, a) => sum + a.duration, 0);
-  const goalPercentage = Math.round((totalMinutes / goalMinutes) * 100);
+  // Calculate hospital day
+  const hospitalDay = useMemo(() => {
+    const admission = new Date(admissionDate);
+    const today = new Date();
+    return Math.floor((today.getTime() - admission.getTime()) / (1000 * 60 * 60 * 24)) + 1;
+  }, [admissionDate]);
 
-  // Get activity label
-  const getActivityLabel = (type: string) => ({
-    ride: 'Cycling',
-    walk: 'Walking',
-    sit: 'Chair',
-    transfer: 'Transfers'
-  }[type] || type);
+  // Group sessions by date and calculate daily totals
+  const dailyData = useMemo(() => {
+    const byDate: Record<string, {
+      date: string;
+      totalMinutes: number;
+      sessions: Session[];
+      rideMinutes: number;
+      walkMinutes: number;
+      sitMinutes: number;
+      transfers: number;
+      avgWatts: number;
+    }> = {};
 
-  // Format duration
-  const formatDuration = (activity: typeof activities[0]) => {
-    if (activity.type === 'transfer') {
-      return `${activity.transferCount || 0}x`;
+    // Initialize all dates from admission to today
+    const admission = new Date(admissionDate);
+    const today = new Date();
+    for (let d = new Date(admission); d <= today; d.setDate(d.getDate() + 1)) {
+      const dateStr = d.toISOString().split('T')[0];
+      byDate[dateStr] = {
+        date: dateStr,
+        totalMinutes: 0,
+        sessions: [],
+        rideMinutes: 0,
+        walkMinutes: 0,
+        sitMinutes: 0,
+        transfers: 0,
+        avgWatts: 0
+      };
     }
-    return `${activity.duration} min`;
+
+    // Aggregate sessions
+    sessions.forEach(session => {
+      const dateStr = session.sessionDate?.split('T')[0] || session.sessionDate;
+      if (byDate[dateStr]) {
+        byDate[dateStr].sessions.push(session);
+        const duration = session.duration || 0;
+        const activityType = session.activityType || 'ride';
+
+        if (activityType !== 'transfer') {
+          byDate[dateStr].totalMinutes += duration;
+        }
+
+        switch (activityType) {
+          case 'ride':
+            byDate[dateStr].rideMinutes += duration;
+            break;
+          case 'walk':
+            byDate[dateStr].walkMinutes += duration;
+            break;
+          case 'sit':
+            byDate[dateStr].sitMinutes += duration;
+            break;
+          case 'transfer':
+            byDate[dateStr].transfers += (session.transferCount || 1);
+            break;
+        }
+      }
+    });
+
+    // Calculate avg watts per day
+    Object.values(byDate).forEach(day => {
+      const wattsSum = day.sessions.reduce((sum, s) => {
+        return sum + (s.equivalentWatts || s.avgPower || 0);
+      }, 0);
+      day.avgWatts = day.sessions.length > 0 ? Math.round(wattsSum / day.sessions.length) : 0;
+    });
+
+    return Object.values(byDate).sort((a, b) => a.date.localeCompare(b.date));
+  }, [sessions, admissionDate]);
+
+  // Calculate summary statistics
+  const stats = useMemo(() => {
+    const daysWithActivity = dailyData.filter(d => d.totalMinutes > 0).length;
+    const totalMinutes = dailyData.reduce((sum, d) => sum + d.totalMinutes, 0);
+    const avgMinutesPerDay = hospitalDay > 0 ? Math.round(totalMinutes / hospitalDay) : 0;
+    const goalAchievementDays = dailyData.filter(d => d.totalMinutes >= goalMinutes).length;
+    const goalAchievementRate = hospitalDay > 0 ? Math.round((goalAchievementDays / hospitalDay) * 100) : 0;
+
+    // Trend calculation (last 3 days vs previous 3 days)
+    const recent3 = dailyData.slice(-3);
+    const previous3 = dailyData.slice(-6, -3);
+    const recentAvg = recent3.length > 0 ? recent3.reduce((sum, d) => sum + d.totalMinutes, 0) / recent3.length : 0;
+    const previousAvg = previous3.length > 0 ? previous3.reduce((sum, d) => sum + d.totalMinutes, 0) / previous3.length : 0;
+    const trend = recentAvg - previousAvg;
+
+    // Activity breakdown
+    const totalRide = dailyData.reduce((sum, d) => sum + d.rideMinutes, 0);
+    const totalWalk = dailyData.reduce((sum, d) => sum + d.walkMinutes, 0);
+    const totalSit = dailyData.reduce((sum, d) => sum + d.sitMinutes, 0);
+    const totalTransfers = dailyData.reduce((sum, d) => sum + d.transfers, 0);
+
+    // Today's data
+    const todayStr = new Date().toISOString().split('T')[0];
+    const todayData = dailyData.find(d => d.date === todayStr);
+
+    return {
+      hospitalDay,
+      daysWithActivity,
+      totalMinutes,
+      avgMinutesPerDay,
+      goalAchievementDays,
+      goalAchievementRate,
+      trend,
+      totalRide,
+      totalWalk,
+      totalSit,
+      totalTransfers,
+      todayMinutes: todayData?.totalMinutes || 0,
+      todayGoalPercent: todayData ? Math.round((todayData.totalMinutes / goalMinutes) * 100) : 0
+    };
+  }, [dailyData, hospitalDay, goalMinutes]);
+
+  // Format date for display
+  const formatDate = (dateStr: string) => {
+    const date = new Date(dateStr);
+    return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
   };
 
-  // Format output (watts)
-  const formatOutput = (activity: typeof activities[0]) => {
-    if (activity.watts && activity.watts > 0) {
-      return activity.type === 'ride' ? `${activity.watts}W` : `${activity.watts}W eq.`;
+  // Generate ASCII trend graph for clipboard
+  const generateASCIIGraph = () => {
+    const maxMinutes = Math.max(...dailyData.map(d => d.totalMinutes), goalMinutes);
+    const height = 6;
+    const width = Math.min(dailyData.length, 14); // Last 14 days max
+    const recentData = dailyData.slice(-width);
+
+    const lines: string[] = [];
+
+    // Header
+    lines.push(`Movement Trend (Last ${width} Days)`);
+    lines.push('─'.repeat(width + 10));
+
+    // Graph rows
+    for (let row = height; row >= 0; row--) {
+      const threshold = (row / height) * maxMinutes;
+      let line = row === Math.round((goalMinutes / maxMinutes) * height) ? '→' : ' ';
+      line += `${Math.round(threshold).toString().padStart(3)}│`;
+
+      for (const day of recentData) {
+        if (day.totalMinutes >= threshold && threshold > 0) {
+          line += '█';
+        } else if (row === 0) {
+          line += '─';
+        } else {
+          line += ' ';
+        }
+      }
+      lines.push(line);
     }
-    return '--';
+
+    // X-axis labels
+    lines.push('    └' + '─'.repeat(width));
+    const dateLabels = recentData.map(d => formatDate(d.date).slice(0, 2)).join('');
+    lines.push('     ' + dateLabels);
+
+    return lines.join('\n');
   };
 
-  // Format assistance
-  const formatAssistance = (activity: typeof activities[0]) => {
-    if (activity.type === 'walk' && activity.assistance) {
-      return activity.assistance === 'assisted' ? 'Asst.' : 'Indep.';
-    }
-    if (activity.type === 'ride' && activity.resistance) {
-      return `R${activity.resistance}`;
-    }
-    return 'N/A';
-  };
-
-  // Generate plain text summary for clipboard
+  // Generate comprehensive plain text summary for clipboard
   const generatePlainTextSummary = () => {
-    const header = `MOBILITY SUMMARY - ${patientName} - ${date}`;
-    const separator = '━'.repeat(44);
-    const goalLine = `Movement Today: ${totalMinutes} min (${goalPercentage}% of ${goalMinutes} min goal)`;
+    const today = new Date().toLocaleDateString('en-US', {
+      year: 'numeric', month: 'long', day: 'numeric'
+    });
 
-    const tableHeader = `
-┌──────────┬──────────┬────────────┬─────────┐
-│ Activity │ Duration │ Avg Output │ Assist  │
-├──────────┼──────────┼────────────┼─────────┤`;
+    const header = `
+╔══════════════════════════════════════════════════════════════╗
+║          CLINICAL MOBILITY SUMMARY - HANDOFF REPORT          ║
+╠══════════════════════════════════════════════════════════════╣
+║  Patient: ${patientName.padEnd(48)}║
+║  Report Date: ${today.padEnd(44)}║
+║  Hospital Day: ${String(stats.hospitalDay).padEnd(43)}║
+║  Admission: ${new Date(admissionDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }).padEnd(46)}║
+╚══════════════════════════════════════════════════════════════╝`;
 
-    const rows = activities.map(a => {
-      const activity = getActivityLabel(a.type).padEnd(8);
-      const duration = formatDuration(a).padEnd(8);
-      const output = formatOutput(a).padEnd(10);
-      const assist = formatAssistance(a).padEnd(7);
-      return `│ ${activity} │ ${duration} │ ${output} │ ${assist} │`;
-    }).join('\n');
+    const overview = `
+┌─────────────────────────────────────────────────────────────┐
+│ MOBILITY OVERVIEW                                           │
+├─────────────────────────────────────────────────────────────┤
+│ Daily Goal: ${goalMinutes} min/day                                       │
+│ Goal Achievement: ${stats.goalAchievementDays}/${stats.hospitalDay} days (${stats.goalAchievementRate}%)                           │
+│ Average: ${stats.avgMinutesPerDay} min/day                                        │
+│ Trend: ${stats.trend > 0 ? '↑ IMPROVING' : stats.trend < 0 ? '↓ DECLINING' : '→ STABLE'}                                         │
+│ Days Active: ${stats.daysWithActivity}/${stats.hospitalDay}                                          │
+└─────────────────────────────────────────────────────────────┘`;
 
-    const tableFooter = '└──────────┴──────────┴────────────┴─────────┘';
-    const summaryLine = `7-Day Avg: ${weeklyAverage} min/day | Consistency: ${streak}-day streak`;
+    const activityBreakdown = `
+┌─────────────────────────────────────────────────────────────┐
+│ ACTIVITY BREAKDOWN (Total Stay)                             │
+├─────────────────────────────────────────────────────────────┤
+│ 🚴 Cycling:    ${String(stats.totalRide).padStart(4)} min                                      │
+│ 🚶 Walking:    ${String(stats.totalWalk).padStart(4)} min                                      │
+│ 🪑 Chair:      ${String(stats.totalSit).padStart(4)} min                                      │
+│ ↔️ Transfers:  ${String(stats.totalTransfers).padStart(4)}x                                        │
+├─────────────────────────────────────────────────────────────┤
+│ TOTAL:        ${String(stats.totalMinutes).padStart(4)} min                                      │
+└─────────────────────────────────────────────────────────────┘`;
 
-    return `${header}\n${separator}\n${goalLine}\n${tableHeader}\n${rows}\n${tableFooter}\n${summaryLine}`;
+    const asciiGraph = `
+┌─────────────────────────────────────────────────────────────┐
+│ DAILY TREND                                                 │
+├─────────────────────────────────────────────────────────────┤
+${generateASCIIGraph().split('\n').map(line => '│ ' + line.padEnd(60) + '│').join('\n')}
+└─────────────────────────────────────────────────────────────┘`;
+
+    // Daily table (last 7 days)
+    const recentDays = dailyData.slice(-7);
+    let dailyTable = `
+┌─────────────────────────────────────────────────────────────┐
+│ LAST 7 DAYS DETAIL                                          │
+├──────────┬────────┬────────┬────────┬────────┬─────────────┤
+│   Date   │  Ride  │  Walk  │ Chair  │ Total  │ Goal Met    │
+├──────────┼────────┼────────┼────────┼────────┼─────────────┤`;
+
+    recentDays.forEach(day => {
+      const date = formatDate(day.date).padEnd(8);
+      const ride = `${day.rideMinutes}m`.padStart(6);
+      const walk = `${day.walkMinutes}m`.padStart(6);
+      const sit = `${day.sitMinutes}m`.padStart(6);
+      const total = `${day.totalMinutes}m`.padStart(6);
+      const goalMet = day.totalMinutes >= goalMinutes ? '    ✓' : '    ✗';
+      dailyTable += `\n│ ${date} │${ride} │${walk} │${sit} │${total} │${goalMet.padEnd(12)}│`;
+    });
+
+    dailyTable += `
+├──────────┴────────┴────────┴────────┴────────┴─────────────┤
+│ Goal: ${goalMinutes} min/day                                             │
+└─────────────────────────────────────────────────────────────┘`;
+
+    const todaySummary = `
+┌─────────────────────────────────────────────────────────────┐
+│ TODAY'S STATUS                                              │
+├─────────────────────────────────────────────────────────────┤
+│ Movement Today: ${stats.todayMinutes} min (${stats.todayGoalPercent}% of goal)                        │
+│ Status: ${stats.todayGoalPercent >= 100 ? '✓ GOAL MET' : stats.todayGoalPercent >= 50 ? '◐ IN PROGRESS' : '○ NEEDS ATTENTION'}                                           │
+└─────────────────────────────────────────────────────────────┘`;
+
+    const clinicalNote = `
+═══════════════════════════════════════════════════════════════
+CLINICAL NOTE (Copy for EMR):
+Patient ${patientName} on hospital day ${stats.hospitalDay}. Mobility goal: ${goalMinutes} min/day.
+Achievement rate: ${stats.goalAchievementRate}% (${stats.goalAchievementDays}/${stats.hospitalDay} days).
+Avg daily mobility: ${stats.avgMinutesPerDay} min.
+Activity mix: cycling ${stats.totalRide}min, walking ${stats.totalWalk}min, chair ${stats.totalSit}min.
+Trend: ${stats.trend > 2 ? 'Improving' : stats.trend < -2 ? 'Declining - consider intervention' : 'Stable'}.
+Today: ${stats.todayMinutes} min (${stats.todayGoalPercent}% of goal).
+═══════════════════════════════════════════════════════════════`;
+
+    return header + overview + activityBreakdown + asciiGraph + dailyTable + todaySummary + clinicalNote;
   };
 
   const handleCopy = async () => {
@@ -104,7 +299,7 @@ export default function MobilitySummaryCard({
       setCopied(true);
       toast({
         title: "Copied to Clipboard!",
-        description: "Mobility summary ready to paste into your EMR.",
+        description: "Full mobility report ready to paste into EMR.",
       });
       setTimeout(() => setCopied(false), 2000);
     } catch (err) {
@@ -116,25 +311,10 @@ export default function MobilitySummaryCard({
     }
   };
 
-  // Get icon for activity type
-  const getActivityIcon = (type: string) => {
-    switch (type) {
-      case 'ride': return <Bike className="w-4 h-4 text-blue-600" />;
-      case 'walk': return <Footprints className="w-4 h-4 text-green-600" />;
-      case 'sit': return <Armchair className="w-4 h-4 text-purple-600" />;
-      default: return <Activity className="w-4 h-4 text-gray-600" />;
-    }
-  };
-
-  // Get color for activity type
-  const getActivityColor = (type: string) => {
-    switch (type) {
-      case 'ride': return 'bg-blue-50 border-blue-200';
-      case 'walk': return 'bg-green-50 border-green-200';
-      case 'sit': return 'bg-purple-50 border-purple-200';
-      default: return 'bg-gray-50 border-gray-200';
-    }
-  };
+  // Trend icon
+  const TrendIcon = stats.trend > 2 ? TrendingUp : stats.trend < -2 ? TrendingDown : Minus;
+  const trendColor = stats.trend > 2 ? 'text-green-600' : stats.trend < -2 ? 'text-red-600' : 'text-gray-600';
+  const trendBg = stats.trend > 2 ? 'bg-green-50' : stats.trend < -2 ? 'bg-red-50' : 'bg-gray-50';
 
   return (
     <Card className="border-slate-200">
@@ -142,7 +322,7 @@ export default function MobilitySummaryCard({
         <div className="flex items-center justify-between">
           <CardTitle className="text-lg font-semibold flex items-center">
             <ClipboardList className="w-5 h-5 mr-2 text-slate-600" />
-            Mobility Summary
+            Clinical Mobility Report
           </CardTitle>
           <Button
             size="sm"
@@ -163,81 +343,139 @@ export default function MobilitySummaryCard({
             )}
           </Button>
         </div>
-        <div className="flex items-center text-sm text-gray-500">
-          <Calendar className="w-4 h-4 mr-1" />
-          {date}
+        <div className="flex items-center gap-4 text-sm text-gray-500">
+          <div className="flex items-center">
+            <Hospital className="w-4 h-4 mr-1" />
+            Day {stats.hospitalDay}
+          </div>
+          <div className="flex items-center">
+            <Calendar className="w-4 h-4 mr-1" />
+            Admitted {new Date(admissionDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+          </div>
         </div>
       </CardHeader>
+
       <CardContent className="space-y-4">
-        {/* Goal Progress */}
-        <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
-          <span className="font-medium">Movement Today</span>
-          <div className="text-right">
-            <span className="text-lg font-bold text-blue-600">{totalMinutes} min</span>
-            <span className="text-gray-500 text-sm ml-1">
-              ({goalPercentage}% of {goalMinutes} min goal)
-            </span>
+        {/* Key Metrics Row */}
+        <div className="grid grid-cols-4 gap-3">
+          <div className="text-center p-3 bg-blue-50 rounded-lg">
+            <div className="text-2xl font-bold text-blue-600">{stats.avgMinutesPerDay}</div>
+            <div className="text-xs text-gray-600">Avg min/day</div>
+          </div>
+          <div className="text-center p-3 bg-green-50 rounded-lg">
+            <div className="text-2xl font-bold text-green-600">{stats.goalAchievementRate}%</div>
+            <div className="text-xs text-gray-600">Goal Rate</div>
+          </div>
+          <div className={`text-center p-3 rounded-lg ${trendBg}`}>
+            <div className={`text-2xl font-bold ${trendColor} flex items-center justify-center`}>
+              <TrendIcon className="w-5 h-5 mr-1" />
+              {Math.abs(Math.round(stats.trend))}
+            </div>
+            <div className="text-xs text-gray-600">Trend</div>
+          </div>
+          <div className="text-center p-3 bg-purple-50 rounded-lg">
+            <div className="text-2xl font-bold text-purple-600">{stats.daysWithActivity}</div>
+            <div className="text-xs text-gray-600">Active Days</div>
           </div>
         </div>
 
-        {/* Activity Table */}
-        {activities.length > 0 ? (
-          <div className="space-y-2">
-            {activities.map((activity, index) => (
-              <div
-                key={index}
-                className={`flex items-center justify-between p-3 rounded-lg border ${getActivityColor(activity.type)}`}
-              >
-                <div className="flex items-center space-x-3">
-                  {getActivityIcon(activity.type)}
-                  <span className="font-medium">{getActivityLabel(activity.type)}</span>
-                </div>
-                <div className="flex items-center space-x-4 text-sm">
-                  <div className="text-center">
-                    <div className="font-medium">{formatDuration(activity)}</div>
-                    <div className="text-xs text-gray-500">Duration</div>
-                  </div>
-                  <div className="text-center">
-                    <div className="font-medium">{formatOutput(activity)}</div>
-                    <div className="text-xs text-gray-500">Output</div>
-                  </div>
-                  <div className="text-center">
-                    <div className="font-medium">{formatAssistance(activity)}</div>
-                    <div className="text-xs text-gray-500">
-                      {activity.type === 'walk' ? 'Assist' : activity.type === 'ride' ? 'Resist' : ''}
-                    </div>
-                  </div>
-                </div>
-              </div>
-            ))}
-          </div>
-        ) : (
-          <div className="text-center py-4 text-gray-500">
-            No mobility activities recorded today
-          </div>
-        )}
+        {/* Trend Chart */}
+        <div className="h-48 mt-4">
+          <ResponsiveContainer width="100%" height="100%">
+            <LineChart data={dailyData.slice(-14)}>
+              <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
+              <XAxis
+                dataKey="date"
+                tickFormatter={(date) => formatDate(date)}
+                fontSize={10}
+                stroke="#6b7280"
+              />
+              <YAxis
+                fontSize={10}
+                stroke="#6b7280"
+                domain={[0, 'auto']}
+              />
+              <Tooltip
+                labelFormatter={(date) => formatDate(date as string)}
+                formatter={(value: number) => [`${value} min`, 'Movement']}
+              />
+              <ReferenceLine
+                y={goalMinutes}
+                stroke="#10B981"
+                strokeDasharray="5 5"
+                label={{ value: 'Goal', position: 'right', fontSize: 10, fill: '#10B981' }}
+              />
+              <Line
+                type="monotone"
+                dataKey="totalMinutes"
+                stroke="#3B82F6"
+                strokeWidth={2}
+                dot={{ fill: '#3B82F6', strokeWidth: 2, r: 3 }}
+                activeDot={{ r: 5, fill: '#3B82F6' }}
+              />
+            </LineChart>
+          </ResponsiveContainer>
+        </div>
 
-        {/* Weekly Stats */}
-        <div className="flex items-center justify-between pt-2 border-t text-sm text-gray-600">
-          <div>
-            <span className="font-medium">7-Day Avg:</span> {weeklyAverage} min/day
+        {/* Activity Breakdown */}
+        <div className="grid grid-cols-4 gap-2 pt-2 border-t">
+          <div className="flex items-center gap-2 p-2 bg-blue-50 rounded">
+            <Bike className="w-4 h-4 text-blue-600" />
+            <div>
+              <div className="text-sm font-semibold text-blue-700">{stats.totalRide}m</div>
+              <div className="text-xs text-gray-500">Cycling</div>
+            </div>
           </div>
-          <div>
-            <span className="font-medium">Streak:</span> {streak} days
+          <div className="flex items-center gap-2 p-2 bg-green-50 rounded">
+            <Footprints className="w-4 h-4 text-green-600" />
+            <div>
+              <div className="text-sm font-semibold text-green-700">{stats.totalWalk}m</div>
+              <div className="text-xs text-gray-500">Walking</div>
+            </div>
+          </div>
+          <div className="flex items-center gap-2 p-2 bg-purple-50 rounded">
+            <Armchair className="w-4 h-4 text-purple-600" />
+            <div>
+              <div className="text-sm font-semibold text-purple-700">{stats.totalSit}m</div>
+              <div className="text-xs text-gray-500">Chair</div>
+            </div>
+          </div>
+          <div className="flex items-center gap-2 p-2 bg-orange-50 rounded">
+            <Activity className="w-4 h-4 text-orange-600" />
+            <div>
+              <div className="text-sm font-semibold text-orange-700">{stats.totalTransfers}x</div>
+              <div className="text-xs text-gray-500">Transfers</div>
+            </div>
+          </div>
+        </div>
+
+        {/* Today's Status */}
+        <div className={`flex items-center justify-between p-3 rounded-lg ${
+          stats.todayGoalPercent >= 100 ? 'bg-green-50 border border-green-200' :
+          stats.todayGoalPercent >= 50 ? 'bg-yellow-50 border border-yellow-200' :
+          'bg-red-50 border border-red-200'
+        }`}>
+          <div className="flex items-center gap-2">
+            <Calendar className="w-4 h-4" />
+            <span className="font-medium">Today</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <span className="text-lg font-bold">{stats.todayMinutes} min</span>
+            <Badge variant={stats.todayGoalPercent >= 100 ? "default" : "secondary"}>
+              {stats.todayGoalPercent}% of goal
+            </Badge>
           </div>
         </div>
 
         {/* Copy Preview */}
-        <div className="mt-4">
-          <details className="group">
-            <summary className="cursor-pointer text-sm text-gray-500 hover:text-gray-700">
-              Preview clipboard text
-            </summary>
-            <pre className="mt-2 p-3 bg-gray-100 rounded text-xs overflow-x-auto whitespace-pre font-mono">
-              {generatePlainTextSummary()}
-            </pre>
-          </details>
-        </div>
+        <details className="group">
+          <summary className="cursor-pointer text-sm text-gray-500 hover:text-gray-700">
+            Preview clipboard text
+          </summary>
+          <pre className="mt-2 p-3 bg-gray-100 rounded text-xs overflow-x-auto whitespace-pre font-mono max-h-64 overflow-y-auto">
+            {generatePlainTextSummary()}
+          </pre>
+        </details>
       </CardContent>
     </Card>
   );
