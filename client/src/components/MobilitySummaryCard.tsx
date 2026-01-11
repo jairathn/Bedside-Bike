@@ -200,96 +200,39 @@ export default function MobilitySummaryCard({
     return lines.join('\n');
   };
 
-  // Generate comprehensive plain text summary for clipboard
+  // Generate clean plain text summary for clipboard (EMR-friendly)
   const generatePlainTextSummary = () => {
-    const today = new Date().toLocaleDateString('en-US', {
-      year: 'numeric', month: 'long', day: 'numeric'
-    });
+    const trendText = stats.trend > 2 ? 'Improving' : stats.trend < -2 ? 'Declining' : 'Stable';
 
-    const header = `
-╔══════════════════════════════════════════════════════════════╗
-║          CLINICAL MOBILITY SUMMARY - HANDOFF REPORT          ║
-╠══════════════════════════════════════════════════════════════╣
-║  Patient: ${patientName.padEnd(48)}║
-║  Report Date: ${today.padEnd(44)}║
-║  Hospital Day: ${String(stats.hospitalDay).padEnd(43)}║
-║  Admission: ${new Date(admissionDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }).padEnd(46)}║
-╚══════════════════════════════════════════════════════════════╝`;
+    // Header line
+    let output = `MOBILITY SUMMARY - Hospital Day ${stats.hospitalDay}\n`;
+    output += `Goal: ${goalMinutes} min/day | Achievement: ${stats.goalAchievementDays}/${stats.hospitalDay} days (${stats.goalAchievementRate}%) | Trend: ${trendText}\n\n`;
 
-    const overview = `
-┌─────────────────────────────────────────────────────────────┐
-│ MOBILITY OVERVIEW                                           │
-├─────────────────────────────────────────────────────────────┤
-│ Daily Goal: ${goalMinutes} min/day                                       │
-│ Goal Achievement: ${stats.goalAchievementDays}/${stats.hospitalDay} days (${stats.goalAchievementRate}%)                           │
-│ Average: ${stats.avgMinutesPerDay} min/day                                        │
-│ Trend: ${stats.trend > 0 ? '↑ IMPROVING' : stats.trend < 0 ? '↓ DECLINING' : '→ STABLE'}                                         │
-│ Days Active: ${stats.daysWithActivity}/${stats.hospitalDay}                                          │
-└─────────────────────────────────────────────────────────────┘`;
-
-    const activityBreakdown = `
-┌─────────────────────────────────────────────────────────────┐
-│ ACTIVITY BREAKDOWN (Total Stay)                             │
-├─────────────────────────────────────────────────────────────┤
-│ 🚴 Cycling:    ${String(stats.totalRide).padStart(4)} min                                      │
-│ 🚶 Walking:    ${String(stats.totalWalk).padStart(4)} min                                      │
-│ 🪑 Chair:      ${String(stats.totalSit).padStart(4)} min                                      │
-│ ↔️ Transfers:  ${String(stats.totalTransfers).padStart(4)}x                                        │
-├─────────────────────────────────────────────────────────────┤
-│ TOTAL:        ${String(stats.totalMinutes).padStart(4)} min                                      │
-└─────────────────────────────────────────────────────────────┘`;
-
-    const asciiGraph = `
-┌─────────────────────────────────────────────────────────────┐
-│ DAILY TREND                                                 │
-├─────────────────────────────────────────────────────────────┤
-${generateASCIIGraph().split('\n').map(line => '│ ' + line.padEnd(60) + '│').join('\n')}
-└─────────────────────────────────────────────────────────────┘`;
-
-    // Daily table (last 7 days)
+    // Simple table with dashes (renders in any system)
     const recentDays = dailyData.slice(-7);
-    let dailyTable = `
-┌─────────────────────────────────────────────────────────────┐
-│ LAST 7 DAYS DETAIL                                          │
-├──────────┬────────┬────────┬────────┬────────┬─────────────┤
-│   Date   │  Ride  │  Walk  │ Chair  │ Total  │ Goal Met    │
-├──────────┼────────┼────────┼────────┼────────┼─────────────┤`;
+
+    output += `DATE        CYCLE   WALK   CHAIR   TOTAL   GOAL\n`;
+    output += `----------- -----   ----   -----   -----   ----\n`;
 
     recentDays.forEach(day => {
-      const date = formatDate(day.date).padEnd(8);
-      const ride = `${day.rideMinutes}m`.padStart(6);
-      const walk = `${day.walkMinutes}m`.padStart(6);
-      const sit = `${day.sitMinutes}m`.padStart(6);
-      const total = `${day.totalMinutes}m`.padStart(6);
-      const goalMet = day.totalMinutes >= goalMinutes ? '    ✓' : '    ✗';
-      dailyTable += `\n│ ${date} │${ride} │${walk} │${sit} │${total} │${goalMet.padEnd(12)}│`;
+      const date = formatDate(day.date).padEnd(11);
+      const ride = `${day.rideMinutes}m`.padStart(5);
+      const walk = `${day.walkMinutes}m`.padStart(4);
+      const sit = `${day.sitMinutes}m`.padStart(5);
+      const total = `${day.totalMinutes}m`.padStart(5);
+      const goalMet = day.totalMinutes >= goalMinutes ? 'Yes' : 'No';
+      output += `${date} ${ride}   ${walk}   ${sit}   ${total}   ${goalMet}\n`;
     });
 
-    dailyTable += `
-├──────────┴────────┴────────┴────────┴────────┴─────────────┤
-│ Goal: ${goalMinutes} min/day                                             │
-└─────────────────────────────────────────────────────────────┘`;
+    output += `----------- -----   ----   -----   -----\n`;
+    output += `TOTAL       ${String(stats.totalRide).padStart(4)}m   ${String(stats.totalWalk).padStart(3)}m   ${String(stats.totalSit).padStart(4)}m   ${String(stats.totalMinutes).padStart(4)}m\n\n`;
 
-    const todaySummary = `
-┌─────────────────────────────────────────────────────────────┐
-│ TODAY'S STATUS                                              │
-├─────────────────────────────────────────────────────────────┤
-│ Movement Today: ${stats.todayMinutes} min (${stats.todayGoalPercent}% of goal)                        │
-│ Status: ${stats.todayGoalPercent >= 100 ? '✓ GOAL MET' : stats.todayGoalPercent >= 50 ? '◐ IN PROGRESS' : '○ NEEDS ATTENTION'}                                           │
-└─────────────────────────────────────────────────────────────┘`;
+    // Today status
+    const todayStatus = stats.todayGoalPercent >= 100 ? 'Goal met' :
+                        stats.todayGoalPercent >= 50 ? 'In progress' : 'Needs attention';
+    output += `Today: ${stats.todayMinutes} min (${stats.todayGoalPercent}% of goal) - ${todayStatus}`;
 
-    const clinicalNote = `
-═══════════════════════════════════════════════════════════════
-CLINICAL NOTE (Copy for EMR):
-Patient ${patientName} on hospital day ${stats.hospitalDay}. Mobility goal: ${goalMinutes} min/day.
-Achievement rate: ${stats.goalAchievementRate}% (${stats.goalAchievementDays}/${stats.hospitalDay} days).
-Avg daily mobility: ${stats.avgMinutesPerDay} min.
-Activity mix: cycling ${stats.totalRide}min, walking ${stats.totalWalk}min, chair ${stats.totalSit}min.
-Trend: ${stats.trend > 2 ? 'Improving' : stats.trend < -2 ? 'Declining - consider intervention' : 'Stable'}.
-Today: ${stats.todayMinutes} min (${stats.todayGoalPercent}% of goal).
-═══════════════════════════════════════════════════════════════`;
-
-    return header + overview + activityBreakdown + asciiGraph + dailyTable + todaySummary + clinicalNote;
+    return output;
   };
 
   const handleCopy = async () => {
