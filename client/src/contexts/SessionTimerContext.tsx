@@ -3,6 +3,12 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/hooks/use-auth";
 import { useToast } from "@/hooks/use-toast";
 
+// Activity types for the mobility platform
+export type ActivityType = 'ride' | 'walk' | 'sit' | 'transfer';
+
+// Assistance levels for walking
+export type AssistanceLevel = 'independent' | 'assisted';
+
 export type SessionGame =
   | 'none'
   | 'scenic-forest'
@@ -23,6 +29,10 @@ export interface SessionTimerState {
   startTime: Date | null;
   elapsedSeconds: number;
   pausedSeconds: number; // Time spent paused
+  // Activity tracking
+  activityType: ActivityType;
+  assistanceLevel: AssistanceLevel | null;
+  // Cycling specific
   baselineResistance: number;
   currentResistance: number;
   selectedGame: SessionGame;
@@ -32,12 +42,19 @@ export interface SessionTimerState {
 
 interface SessionTimerContextType {
   state: SessionTimerState;
-  startSession: (resistance: number, game?: SessionGame) => void;
+  startSession: (options: StartSessionOptions) => void;
   pauseSession: () => void;
   resumeSession: () => void;
   endSession: () => Promise<void>;
   cancelSession: () => void;
   formatTime: (seconds: number) => string;
+}
+
+interface StartSessionOptions {
+  activityType: ActivityType;
+  resistance?: number;
+  assistanceLevel?: AssistanceLevel;
+  game?: SessionGame;
 }
 
 const defaultState: SessionTimerState = {
@@ -46,6 +63,8 @@ const defaultState: SessionTimerState = {
   startTime: null,
   elapsedSeconds: 0,
   pausedSeconds: 0,
+  activityType: 'ride',
+  assistanceLevel: null,
   baselineResistance: 3,
   currentResistance: 3,
   selectedGame: 'none',
@@ -102,8 +121,8 @@ export function SessionTimerProvider({ children }: { children: ReactNode }) {
         setState(prev => {
           const newElapsed = prev.elapsedSeconds + 1;
 
-          // Check for hill interval changes
-          if (prev.selectedGame === 'hill-ride' && prev.hillIntervals.length > 0) {
+          // Check for hill interval changes (only for cycling with hill-ride game)
+          if (prev.activityType === 'ride' && prev.selectedGame === 'hill-ride' && prev.hillIntervals.length > 0) {
             const currentInterval = prev.hillIntervals.find(
               (interval, idx) =>
                 newElapsed >= interval.startTime &&
@@ -137,7 +156,9 @@ export function SessionTimerProvider({ children }: { children: ReactNode }) {
     mutationFn: async (sessionData: {
       patientId: number;
       duration: number;
-      resistance: number;
+      activityType: ActivityType;
+      assistanceLevel?: AssistanceLevel;
+      resistance?: number;
       sessionDate: string;
       startTime: string;
     }) => {
@@ -147,13 +168,17 @@ export function SessionTimerProvider({ children }: { children: ReactNode }) {
         body: JSON.stringify({
           patientId: sessionData.patientId,
           duration: sessionData.duration,
+          activityType: sessionData.activityType,
+          assistanceLevel: sessionData.assistanceLevel,
           resistance: sessionData.resistance,
           sessionDate: sessionData.sessionDate,
           startTime: sessionData.startTime,
           isCompleted: true,
           isManual: false, // This is a timed session
-          avgPower: sessionData.resistance * 5,
-          avgRpm: 50,
+          avgPower: sessionData.activityType === 'ride' && sessionData.resistance
+            ? sessionData.resistance * 5
+            : undefined,
+          avgRpm: sessionData.activityType === 'ride' ? 50 : undefined,
         }),
       });
 
@@ -165,9 +190,16 @@ export function SessionTimerProvider({ children }: { children: ReactNode }) {
       return response.json();
     },
     onSuccess: () => {
+      const activityLabel = {
+        ride: 'cycling',
+        walk: 'walking',
+        sit: 'chair sitting',
+        transfer: 'transfer',
+      }[state.activityType];
+
       toast({
         title: "Session Saved!",
-        description: "Your exercise session has been recorded successfully.",
+        description: `Your ${activityLabel} session has been recorded successfully.`,
       });
       // Refresh dashboard data
       if (currentPatient?.id) {
@@ -183,8 +215,13 @@ export function SessionTimerProvider({ children }: { children: ReactNode }) {
     },
   });
 
-  const startSession = useCallback((resistance: number, game: SessionGame = 'none') => {
-    const hillIntervals = game === 'hill-ride' ? generateHillIntervals() : [];
+  const startSession = useCallback((options: StartSessionOptions) => {
+    const { activityType, resistance = 3, assistanceLevel, game = 'none' } = options;
+
+    // Only generate hill intervals for cycling with hill-ride game
+    const hillIntervals = activityType === 'ride' && game === 'hill-ride'
+      ? generateHillIntervals()
+      : [];
 
     setState({
       isActive: true,
@@ -192,18 +229,29 @@ export function SessionTimerProvider({ children }: { children: ReactNode }) {
       startTime: new Date(),
       elapsedSeconds: 0,
       pausedSeconds: 0,
+      activityType,
+      assistanceLevel: assistanceLevel || null,
       baselineResistance: resistance,
       currentResistance: resistance,
-      selectedGame: game,
+      selectedGame: activityType === 'ride' ? game : 'none', // Games only for cycling
       hillIntervals,
-      currentHillIndex: game === 'hill-ride' ? 0 : -1,
+      currentHillIndex: hillIntervals.length > 0 ? 0 : -1,
     });
+
+    const activityMessages: Record<ActivityType, string> = {
+      ride: game !== 'none'
+        ? `Enjoy your ${game.replace(/-/g, ' ')} ride!`
+        : "Start pedaling! Your session is being timed.",
+      walk: assistanceLevel === 'assisted'
+        ? "Walking with assistance. Stay safe and take your time."
+        : "Walking session started. Be careful and stay safe.",
+      sit: "Chair sitting session started. Great job getting out of bed!",
+      transfer: "Transfer recorded. Keep moving!",
+    };
 
     toast({
       title: "Session Started!",
-      description: game !== 'none'
-        ? `Enjoy your ${game.replace('-', ' ')} ride!`
-        : "Start pedaling! Your session is being timed.",
+      description: activityMessages[activityType],
     });
   }, [toast]);
 
@@ -217,11 +265,13 @@ export function SessionTimerProvider({ children }: { children: ReactNode }) {
 
   const resumeSession = useCallback(() => {
     setState(prev => ({ ...prev, isPaused: false }));
+    const activityVerb = state.activityType === 'ride' ? 'pedaling' :
+      state.activityType === 'walk' ? 'walking' : 'your activity';
     toast({
       title: "Session Resumed",
-      description: "Keep pedaling!",
+      description: `Keep ${activityVerb}!`,
     });
-  }, [toast]);
+  }, [toast, state.activityType]);
 
   const endSession = useCallback(async () => {
     if (!state.startTime || !currentPatient?.id) {
@@ -254,7 +304,9 @@ export function SessionTimerProvider({ children }: { children: ReactNode }) {
     await saveSessionMutation.mutateAsync({
       patientId: currentPatient.id,
       duration: durationMinutes,
-      resistance: state.baselineResistance,
+      activityType: state.activityType,
+      assistanceLevel: state.assistanceLevel || undefined,
+      resistance: state.activityType === 'ride' ? state.baselineResistance : undefined,
       sessionDate,
       startTime: state.startTime.toISOString(),
     });

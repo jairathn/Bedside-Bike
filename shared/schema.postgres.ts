@@ -32,6 +32,11 @@ export const users = pgTable("users", {
   userType: varchar("user_type", { length: 20 }).notNull(), // 'patient' or 'provider'
   dateOfBirth: varchar("date_of_birth", { length: 10 }), // ISO date string
   admissionDate: varchar("admission_date", { length: 10 }), // ISO date string
+  // Patient physical measurements (required for mobility calculations)
+  heightCm: doublePrecision("height_cm"),
+  weightKg: doublePrecision("weight_kg"),
+  heightUnit: varchar("height_unit", { length: 10 }).default('imperial'), // 'imperial' or 'metric'
+  weightUnit: varchar("weight_unit", { length: 10 }).default('imperial'), // 'imperial' or 'metric'
   // Provider specific fields
   providerRole: varchar("provider_role", { length: 50 }),
   credentials: varchar("credentials", { length: 50 }),
@@ -126,7 +131,7 @@ export const devices = pgTable("devices", {
   updatedAt: timestamp("updated_at", { withTimezone: true }).default(sql`NOW()`),
 });
 
-// Exercise sessions
+// Exercise sessions (now supports multiple activity types)
 export const exerciseSessions = pgTable("exercise_sessions", {
   id: serial("id").primaryKey(),
   patientId: integer("patient_id").notNull().references(() => users.id),
@@ -142,6 +147,11 @@ export const exerciseSessions = pgTable("exercise_sessions", {
   stopsAndStarts: integer("stops_and_starts").default(0),
   isCompleted: boolean("is_completed").default(false),
   isManual: boolean("is_manual").default(false), // true = manually recorded, false = auto-generated/device
+  // Activity type tracking (mobility platform expansion)
+  activityType: varchar("activity_type", { length: 20 }).default('ride'), // 'ride', 'walk', 'sit', 'transfer'
+  assistanceLevel: varchar("assistance_level", { length: 20 }), // 'independent', 'assisted' (for walking)
+  equivalentWatts: doublePrecision("equivalent_watts"), // calculated watts for walking/sitting
+  transferCount: integer("transfer_count"), // number of transfers (for transfer activity type)
   // Real-time tracking fields
   currentRpm: doublePrecision("current_rpm"),
   currentPower: doublePrecision("current_power"),
@@ -562,6 +572,14 @@ export const patientRegistrationSchema = loginSchema.extend({
   userType: z.literal("patient"),
   tosAccepted: z.boolean().refine(val => val === true, "You must accept the Terms of Service"),
   tosVersion: z.string().optional(),
+  // Physical measurements required for mobility calculations
+  heightFeet: z.number().min(3).max(8).optional(),
+  heightInches: z.number().min(0).max(11).optional(),
+  heightCm: z.number().min(100).max(250).optional(),
+  weightLbs: z.number().min(50).max(500).optional(),
+  weightKg: z.number().min(20).max(250).optional(),
+  heightUnit: z.enum(['imperial', 'metric']).default('imperial'),
+  weightUnit: z.enum(['imperial', 'metric']).default('imperial'),
 });
 
 export const providerRegistrationSchema = loginSchema.extend({

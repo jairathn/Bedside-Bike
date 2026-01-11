@@ -17,7 +17,8 @@ import {
   kudosLimiter
 } from "./rate-limit";
 import { registerPersonalizationRoutes } from "./personalization/routes";
-import { 
+import { calculateEquivalentWatts, feetInchesToCm, lbsToKg } from "./watts-calculator";
+import {
   loginSchema,
   patientRegistrationSchema,
   providerRegistrationSchema,
@@ -100,10 +101,24 @@ export async function registerRoutes(app: Express): Promise<Server> {
           return res.status(400).json({ error: "Patient already exists with this email" });
         }
 
-        // Create patient with ToS acceptance timestamp
-        const { tosAccepted: _, ...patientDataWithoutTos } = patientData;
+        // Convert height/weight to metric if provided in imperial
+        let heightCm = patientData.heightCm;
+        let weightKg = patientData.weightKg;
+
+        if (patientData.heightUnit === 'imperial' && patientData.heightFeet !== undefined) {
+          heightCm = feetInchesToCm(patientData.heightFeet, patientData.heightInches || 0);
+        }
+
+        if (patientData.weightUnit === 'imperial' && patientData.weightLbs !== undefined) {
+          weightKg = lbsToKg(patientData.weightLbs);
+        }
+
+        // Create patient with ToS acceptance timestamp and physical measurements
+        const { tosAccepted: _, heightFeet, heightInches, weightLbs, ...patientDataWithoutTos } = patientData as any;
         const patient = await storage.createUser({
           ...patientDataWithoutTos,
+          heightCm,
+          weightKg,
           tosAcceptedAt: new Date(),
           tosVersion: tosVersion || '1.0.0',
         });
@@ -430,6 +445,22 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
       if (typeof body.endTime === 'string') {
         body.endTime = new Date(body.endTime);
+      }
+
+      // Set default activity type if not provided
+      if (!body.activityType) {
+        body.activityType = 'ride';
+      }
+
+      // Calculate equivalent watts for walking/sitting based on patient weight
+      if (body.activityType === 'walk' || body.activityType === 'sit') {
+        const patient = await storage.getUser(body.patientId);
+        if (patient?.weightKg) {
+          body.equivalentWatts = calculateEquivalentWatts(body.activityType, patient.weightKg);
+        } else {
+          // Use default weight of 70kg if not set
+          body.equivalentWatts = calculateEquivalentWatts(body.activityType, 70);
+        }
       }
 
       console.log("Parsed body:", JSON.stringify({ ...body, startTime: body.startTime?.toISOString?.() }, null, 2));
