@@ -1137,14 +1137,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
         });
       }
 
+      // Only include patients who have actually exercised today
+      const activeToday = leaderboardData.filter(p => p.todayMinutes > 0);
+
       // Today's Leaders - sorted by today's minutes
-      const todayLeaders = [...leaderboardData]
+      const todayLeaders = [...activeToday]
         .sort((a, b) => b.todayMinutes - a.todayMinutes)
         .slice(0, 10)
         .map((p, i) => ({ ...p, rank: i + 1 }));
 
       // Goal Crushers - sorted by goal achievement percentage
-      const goalCrushers = [...leaderboardData]
+      const goalCrushers = [...activeToday]
         .sort((a, b) => b.goalPercent - a.goalPercent)
         .slice(0, 10)
         .map((p, i) => ({ ...p, rank: i + 1 }));
