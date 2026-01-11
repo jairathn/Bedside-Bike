@@ -11,7 +11,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { Play, Pause, Square, Timer, Mountain, TreePine, Waves, Bike, TrendingUp } from "lucide-react";
+import { Play, Pause, Square, Timer, Mountain, TreePine, Waves, Bike, TrendingUp, Footprints, Armchair } from "lucide-react";
 
 export default function SessionTimerBanner() {
   const { state, pauseSession, resumeSession, endSession, cancelSession, formatTime } = useSessionTimer();
@@ -32,38 +32,106 @@ export default function SessionTimerBanner() {
     }
   };
 
-  const getGameIcon = () => {
-    switch (state.selectedGame) {
-      case 'scenic-forest':
-        return <TreePine className="w-5 h-5 text-green-400" />;
-      case 'scenic-beach':
-        return <Waves className="w-5 h-5 text-blue-300" />;
-      case 'scenic-mountains':
-        return <Mountain className="w-5 h-5 text-slate-300" />;
-      case 'hill-ride':
-        return <TrendingUp className="w-5 h-5 text-orange-400" />;
+  const getActivityIcon = () => {
+    switch (state.activityType) {
+      case 'walk':
+        return <Footprints className="w-5 h-5 text-green-300" />;
+      case 'sit':
+        return <Armchair className="w-5 h-5 text-purple-300" />;
+      case 'ride':
       default:
-        return <Bike className="w-5 h-5 text-white" />;
+        switch (state.selectedGame) {
+          case 'scenic-forest':
+            return <TreePine className="w-5 h-5 text-green-400" />;
+          case 'scenic-beach':
+            return <Waves className="w-5 h-5 text-blue-300" />;
+          case 'scenic-mountains':
+            return <Mountain className="w-5 h-5 text-slate-300" />;
+          case 'hill-ride':
+            return <TrendingUp className="w-5 h-5 text-orange-400" />;
+          default:
+            return <Bike className="w-5 h-5 text-white" />;
+        }
     }
   };
 
-  const getGameLabel = () => {
-    switch (state.selectedGame) {
-      case 'scenic-forest':
-        return 'Forest Path';
-      case 'scenic-beach':
-        return 'Beach Cruise';
-      case 'scenic-mountains':
-        return 'Mountain Vista';
-      case 'hill-ride':
-        return 'Hill Ride';
+  const getActivityLabel = () => {
+    switch (state.activityType) {
+      case 'walk':
+        return state.assistanceLevel === 'assisted' ? 'Walking (Assisted)' : 'Walking';
+      case 'sit':
+        return 'Chair Sitting';
+      case 'ride':
       default:
-        return 'Free Ride';
+        switch (state.selectedGame) {
+          case 'scenic-forest':
+            return 'Forest Path';
+          case 'scenic-beach':
+            return 'Beach Cruise';
+          case 'scenic-mountains':
+            return 'Mountain Vista';
+          case 'hill-ride':
+            return 'Hill Ride';
+          default:
+            return 'Free Ride';
+        }
+    }
+  };
+
+  const getBannerColor = () => {
+    if (state.isPaused) return 'bg-yellow-600';
+    switch (state.activityType) {
+      case 'walk':
+        return 'bg-green-600';
+      case 'sit':
+        return 'bg-purple-600';
+      case 'ride':
+      default:
+        return 'bg-blue-600';
+    }
+  };
+
+  const getSecondaryColor = () => {
+    if (state.isPaused) return 'bg-yellow-500';
+    switch (state.activityType) {
+      case 'walk':
+        return 'bg-green-500';
+      case 'sit':
+        return 'bg-purple-500';
+      case 'ride':
+      default:
+        return 'bg-blue-500';
+    }
+  };
+
+  const getDividerColor = () => {
+    if (state.isPaused) return 'bg-yellow-400';
+    switch (state.activityType) {
+      case 'walk':
+        return 'bg-green-400';
+      case 'sit':
+        return 'bg-purple-400';
+      case 'ride':
+      default:
+        return 'bg-blue-400';
+    }
+  };
+
+  const getTimerIconColor = () => {
+    if (state.isPaused) return 'text-yellow-200';
+    switch (state.activityType) {
+      case 'walk':
+        return 'text-green-200';
+      case 'sit':
+        return 'text-purple-200';
+      case 'ride':
+      default:
+        return 'text-blue-200';
     }
   };
 
   const getCurrentHillStatus = () => {
-    if (state.selectedGame !== 'hill-ride' || state.hillIntervals.length === 0) {
+    if (state.activityType !== 'ride' || state.selectedGame !== 'hill-ride' || state.hillIntervals.length === 0) {
       return null;
     }
 
@@ -84,39 +152,41 @@ export default function SessionTimerBanner() {
 
   return (
     <>
-      <div className={`sticky top-0 z-50 ${state.isPaused ? 'bg-yellow-600' : 'bg-blue-600'} text-white shadow-lg transition-colors`}>
+      <div className={`sticky top-0 z-50 ${getBannerColor()} text-white shadow-lg transition-colors`}>
         <div className="max-w-7xl mx-auto px-4 py-3">
           <div className="flex flex-wrap items-center justify-between gap-3">
-            {/* Timer and Game Info */}
+            {/* Timer and Activity Info */}
             <div className="flex items-center space-x-4">
               {/* Timer */}
               <div className="flex items-center space-x-2">
-                <Timer className={`w-6 h-6 ${state.isPaused ? 'text-yellow-200' : 'text-blue-200'}`} />
+                <Timer className={`w-6 h-6 ${getTimerIconColor()}`} />
                 <span className="text-2xl sm:text-3xl font-bold font-mono tracking-wider">
                   {formatTime(state.elapsedSeconds)}
                 </span>
               </div>
 
               {/* Divider */}
-              <div className={`hidden sm:block h-8 w-px ${state.isPaused ? 'bg-yellow-400' : 'bg-blue-400'}`} />
+              <div className={`hidden sm:block h-8 w-px ${getDividerColor()}`} />
 
-              {/* Game Info */}
+              {/* Activity Info */}
               <div className="hidden sm:flex items-center space-x-2">
-                {getGameIcon()}
-                <span className="font-medium">{getGameLabel()}</span>
+                {getActivityIcon()}
+                <span className="font-medium">{getActivityLabel()}</span>
               </div>
 
-              {/* Resistance */}
-              <div className={`hidden sm:block px-2 py-1 rounded ${state.isPaused ? 'bg-yellow-500' : 'bg-blue-500'}`}>
-                <span className="text-sm">
-                  R: {state.currentResistance}
-                  {state.selectedGame === 'hill-ride' && state.currentResistance !== state.baselineResistance && (
-                    <span className="text-orange-300 ml-1">
-                      ({state.currentResistance > state.baselineResistance ? '+1 Uphill' : 'Flat'})
-                    </span>
-                  )}
-                </span>
-              </div>
+              {/* Resistance (only for cycling) */}
+              {state.activityType === 'ride' && (
+                <div className={`hidden sm:block px-2 py-1 rounded ${getSecondaryColor()}`}>
+                  <span className="text-sm">
+                    R: {state.currentResistance}
+                    {state.selectedGame === 'hill-ride' && state.currentResistance !== state.baselineResistance && (
+                      <span className="text-orange-300 ml-1">
+                        ({state.currentResistance > state.baselineResistance ? '+1 Uphill' : 'Flat'})
+                      </span>
+                    )}
+                  </span>
+                </div>
+              )}
 
               {/* Hill Ride Status */}
               {hillStatus && (
@@ -174,12 +244,14 @@ export default function SessionTimerBanner() {
           {/* Mobile: Show additional info below */}
           <div className="sm:hidden mt-2 flex items-center justify-between text-sm">
             <div className="flex items-center space-x-2">
-              {getGameIcon()}
-              <span>{getGameLabel()}</span>
+              {getActivityIcon()}
+              <span>{getActivityLabel()}</span>
             </div>
-            <div className={`px-2 py-1 rounded ${state.isPaused ? 'bg-yellow-500' : 'bg-blue-500'}`}>
-              Resistance: {state.currentResistance}
-            </div>
+            {state.activityType === 'ride' && (
+              <div className={`px-2 py-1 rounded ${getSecondaryColor()}`}>
+                Resistance: {state.currentResistance}
+              </div>
+            )}
           </div>
 
           {/* Mobile: Hill status */}
@@ -201,13 +273,18 @@ export default function SessionTimerBanner() {
       <AlertDialog open={showEndConfirm} onOpenChange={setShowEndConfirm}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>End Exercise Session?</AlertDialogTitle>
+            <AlertDialogTitle>End {getActivityLabel()} Session?</AlertDialogTitle>
             <AlertDialogDescription className="space-y-2">
               <p>Your session will be saved with the following details:</p>
               <div className="bg-gray-100 rounded-lg p-3 mt-2">
+                <p><strong>Activity:</strong> {getActivityLabel()}</p>
                 <p><strong>Duration:</strong> {formatTime(state.elapsedSeconds)} ({Math.round(state.elapsedSeconds / 60)} minutes)</p>
-                <p><strong>Resistance:</strong> Level {state.baselineResistance}</p>
-                <p><strong>Ride:</strong> {getGameLabel()}</p>
+                {state.activityType === 'ride' && (
+                  <p><strong>Resistance:</strong> Level {state.baselineResistance}</p>
+                )}
+                {state.activityType === 'walk' && state.assistanceLevel && (
+                  <p><strong>Assistance:</strong> {state.assistanceLevel === 'assisted' ? 'Assisted' : 'Independent'}</p>
+                )}
               </div>
               {state.elapsedSeconds < 60 && (
                 <p className="text-yellow-600 text-sm mt-2">
@@ -218,7 +295,7 @@ export default function SessionTimerBanner() {
           </AlertDialogHeader>
           <AlertDialogFooter className="flex-col sm:flex-row gap-2">
             <AlertDialogCancel disabled={isEnding}>
-              Continue Riding
+              Continue
             </AlertDialogCancel>
             <Button
               variant="outline"
@@ -234,7 +311,11 @@ export default function SessionTimerBanner() {
             <AlertDialogAction
               onClick={handleEndSession}
               disabled={isEnding}
-              className="bg-blue-600 hover:bg-blue-700"
+              className={`${
+                state.activityType === 'walk' ? 'bg-green-600 hover:bg-green-700' :
+                state.activityType === 'sit' ? 'bg-purple-600 hover:bg-purple-700' :
+                'bg-blue-600 hover:bg-blue-700'
+              }`}
             >
               {isEnding ? "Saving..." : "End & Save"}
             </AlertDialogAction>
