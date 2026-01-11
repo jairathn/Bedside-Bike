@@ -634,7 +634,7 @@ export function ProviderGoalEditor({ patientGoals = [], patientId, onUpdateGoals
           {/* Resistance Input */}
           <div className="space-y-2">
             <Label className="text-sm font-medium">
-              Resistance Level
+              Resistance Level (if cycling)
             </Label>
             <Input
               type="text"
