@@ -150,6 +150,9 @@ export const exerciseSessions = sqliteTable("exercise_sessions", {
   durationSeconds: integer("duration_seconds"),
   currentStatus: text("current_status"), // 'active' | 'paused' | 'completed'
   targetDuration: integer("target_duration"), // Target duration in seconds
+  // Session logging attribution (caregiver feature)
+  loggedById: integer("logged_by_id").references(() => users.id), // Who logged the session
+  loggerType: text("logger_type"), // 'patient', 'caregiver', 'provider', 'device'
   createdAt: integer("created_at", { mode: 'timestamp' }).default(sql`(unixepoch())`),
   updatedAt: integer("updated_at", { mode: 'timestamp' }).default(sql`(unixepoch())`),
 });
@@ -679,13 +682,107 @@ export const patientProtocolAssignments = sqliteTable("patient_protocol_assignme
   updatedAt: integer("updated_at", { mode: 'timestamp' }).default(sql`(unixepoch())`),
 });
 
+// ============================================================================
+// CAREGIVER ENGAGEMENT SYSTEM
+// ============================================================================
+
+// Caregiver-Patient relationships
+export const caregiverPatients = sqliteTable("caregiver_patients", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  caregiverId: integer("caregiver_id").notNull().references(() => users.id),
+  patientId: integer("patient_id").notNull().references(() => users.id),
+  relationshipType: text("relationship_type").notNull(), // 'spouse', 'child', 'parent', 'sibling', 'friend', 'other_family', 'professional_caregiver'
+  accessStatus: text("access_status").default('pending'), // 'pending', 'approved', 'denied', 'revoked'
+  requestedAt: integer("requested_at", { mode: 'timestamp' }).default(sql`(unixepoch())`),
+  approvedAt: integer("approved_at", { mode: 'timestamp' }),
+  revokedAt: integer("revoked_at", { mode: 'timestamp' }),
+  // Permissions
+  canLogSessions: integer("can_log_sessions", { mode: 'boolean' }).default(true),
+  canViewReports: integer("can_view_reports", { mode: 'boolean' }).default(true),
+  canSendNudges: integer("can_send_nudges", { mode: 'boolean' }).default(true),
+  // Gamification for caregivers
+  supporterXp: integer("supporter_xp").default(0),
+  supporterLevel: integer("supporter_level").default(1),
+  createdAt: integer("created_at", { mode: 'timestamp' }).default(sql`(unixepoch())`),
+});
+
+// Caregiver observations - structured feedback from family members
+export const caregiverObservations = sqliteTable("caregiver_observations", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  caregiverId: integer("caregiver_id").notNull().references(() => users.id),
+  patientId: integer("patient_id").notNull().references(() => users.id),
+  observationDate: text("observation_date").notNull(), // ISO date string
+  // Structured observations
+  moodLevel: text("mood_level"), // 'great', 'good', 'fair', 'poor'
+  painLevel: integer("pain_level"), // 0-10
+  energyLevel: text("energy_level"), // 'high', 'medium', 'low'
+  appetite: text("appetite"), // 'good', 'fair', 'poor'
+  sleepQuality: text("sleep_quality"), // 'good', 'fair', 'poor'
+  mobilityObservations: text("mobility_observations"), // Free text
+  // Free text fields
+  notes: text("notes"),
+  concerns: text("concerns"),
+  questionsForProvider: text("questions_for_provider"),
+  // AI-generated copy-pasteable summary for provider notes
+  aiSummary: text("ai_summary"),
+  createdAt: integer("created_at", { mode: 'timestamp' }).default(sql`(unixepoch())`),
+});
+
+// Discharge checklists - preparation for going home
+export const dischargeChecklists = sqliteTable("discharge_checklists", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  patientId: integer("patient_id").notNull().references(() => users.id),
+  caregiverId: integer("caregiver_id").references(() => users.id),
+  // Checklist items stored as JSON text for flexibility
+  equipmentNeeds: text("equipment_needs").default('{}'), // { wheelchair: { needed: true, acquired: false }, ... }
+  homeModifications: text("home_modifications").default('{}'), // { grab_bars: { needed: true, installed: false }, ... }
+  medicationReview: text("medication_review").default('{}'), // { understood: true, pharmacy_confirmed: true, ... }
+  followUpAppointments: text("follow_up_appointments").default('[]'), // [{ type: 'PT', scheduled: true, date: '...' }, ...]
+  emergencyContacts: text("emergency_contacts").default('[]'), // [{ name: '...', phone: '...', relationship: '...' }]
+  warningSigns: text("warning_signs").default('{}'), // { reviewed: true, understood: true }
+  homeExercisePlan: text("home_exercise_plan").default('{}'), // { reviewed: true, printed: false }
+  dietRestrictions: text("diet_restrictions").default('{}'), // { reviewed: true, understood: true }
+  // Completion tracking
+  completionPercent: integer("completion_percent").default(0),
+  completedAt: integer("completed_at", { mode: 'timestamp' }),
+  createdAt: integer("created_at", { mode: 'timestamp' }).default(sql`(unixepoch())`),
+  updatedAt: integer("updated_at", { mode: 'timestamp' }).default(sql`(unixepoch())`),
+});
+
+// Caregiver notifications - in-app notifications for caregivers
+export const caregiverNotifications = sqliteTable("caregiver_notifications", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  caregiverId: integer("caregiver_id").notNull().references(() => users.id),
+  patientId: integer("patient_id").notNull().references(() => users.id),
+  notificationType: text("notification_type").notNull(), // 'goal_completed', 'streak_extended', 'session_logged', 'access_approved', 'access_request'
+  title: text("title").notNull(),
+  message: text("message").notNull(),
+  metadata: text("metadata").default('{}'),
+  isRead: integer("is_read", { mode: 'boolean' }).default(false),
+  createdAt: integer("created_at", { mode: 'timestamp' }).default(sql`(unixepoch())`),
+});
+
+// Caregiver achievements - gamification badges for supporters
+export const caregiverAchievements = sqliteTable("caregiver_achievements", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  caregiverId: integer("caregiver_id").notNull().references(() => users.id),
+  patientId: integer("patient_id").notNull().references(() => users.id),
+  type: text("type").notNull(), // 'first_checkin', 'consistent_supporter', 'encouragement_champion', 'discharge_ready', 'super_supporter'
+  title: text("title").notNull(),
+  description: text("description").notNull(),
+  xpReward: integer("xp_reward").default(0),
+  isUnlocked: integer("is_unlocked", { mode: 'boolean' }).default(false),
+  unlockedAt: integer("unlocked_at", { mode: 'timestamp' }),
+  createdAt: integer("created_at", { mode: 'timestamp' }).default(sql`(unixepoch())`),
+});
+
 // Validation schemas (reuse from main schema)
 export const loginSchema = z.object({
   email: z.string().email("Please enter a valid email address"),
   firstName: z.string().min(1, "First name is required").optional(),
   lastName: z.string().min(1, "Last name is required").optional(),
   dateOfBirth: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Date must be in YYYY-MM-DD format").optional(),
-  userType: z.enum(["patient", "provider"]),
+  userType: z.enum(["patient", "provider", "caregiver"]),
 });
 
 export const patientRegistrationSchema = loginSchema.extend({
@@ -698,6 +795,47 @@ export const providerRegistrationSchema = loginSchema.extend({
   specialty: z.string().min(1, "Specialty is required"),
   licenseNumber: z.string().optional(),
   userType: z.literal("provider"),
+});
+
+export const caregiverRegistrationSchema = loginSchema.extend({
+  userType: z.literal("caregiver"),
+  tosAccepted: z.boolean().refine(val => val === true, "You must accept the Terms of Service"),
+  tosVersion: z.string().optional(),
+  // Patient identification for access request
+  patientFirstName: z.string().min(1, "Patient first name is required"),
+  patientLastName: z.string().min(1, "Patient last name is required"),
+  patientDateOfBirth: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Date must be in YYYY-MM-DD format"),
+  relationshipType: z.enum(["spouse", "partner", "child", "parent", "sibling", "friend", "other_family", "professional_caregiver"]),
+  phoneNumber: z.string().optional(),
+});
+
+export const caregiverObservationSchema = z.object({
+  patientId: z.number().int().positive(),
+  observationDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Date must be in YYYY-MM-DD format"),
+  moodLevel: z.enum(["great", "good", "fair", "poor"]).optional(),
+  painLevel: z.number().min(0).max(10).optional(),
+  energyLevel: z.enum(["high", "medium", "low"]).optional(),
+  appetite: z.enum(["good", "fair", "poor"]).optional(),
+  sleepQuality: z.enum(["good", "fair", "poor"]).optional(),
+  mobilityObservations: z.string().optional(),
+  notes: z.string().optional(),
+  concerns: z.string().optional(),
+  questionsForProvider: z.string().optional(),
+});
+
+export const caregiverAccessRequestSchema = z.object({
+  patientFirstName: z.string().min(1, "Patient first name is required"),
+  patientLastName: z.string().min(1, "Patient last name is required"),
+  patientDateOfBirth: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Date must be in YYYY-MM-DD format"),
+  relationshipType: z.enum(["spouse", "partner", "child", "parent", "sibling", "friend", "other_family", "professional_caregiver"]),
+});
+
+export const caregiverInviteSchema = z.object({
+  caregiverEmail: z.string().email("Please enter a valid email address"),
+  caregiverFirstName: z.string().min(1, "First name is required"),
+  caregiverLastName: z.string().min(1, "Last name is required"),
+  relationshipType: z.enum(["spouse", "partner", "child", "parent", "sibling", "friend", "other_family", "professional_caregiver"]),
+  phoneNumber: z.string().optional(),
 });
 
 export const riskAssessmentInputSchema = z.object({
@@ -888,3 +1026,33 @@ export type InsertPatientProtocolAssignment = typeof patientProtocolAssignments.
 
 export type Alert = typeof alerts.$inferSelect;
 export type InsertAlert = typeof alerts.$inferInsert;
+
+// ============================================================================
+// CAREGIVER ENGAGEMENT SYSTEM - Insert Schemas and Types
+// ============================================================================
+
+export const insertCaregiverPatientSchema = createInsertSchema(caregiverPatients);
+export const insertCaregiverObservationSchema = createInsertSchema(caregiverObservations);
+export const insertDischargeChecklistSchema = createInsertSchema(dischargeChecklists);
+export const insertCaregiverNotificationSchema = createInsertSchema(caregiverNotifications);
+export const insertCaregiverAchievementSchema = createInsertSchema(caregiverAchievements);
+
+export type CaregiverPatient = typeof caregiverPatients.$inferSelect;
+export type InsertCaregiverPatient = typeof caregiverPatients.$inferInsert;
+
+export type CaregiverObservation = typeof caregiverObservations.$inferSelect;
+export type InsertCaregiverObservation = typeof caregiverObservations.$inferInsert;
+
+export type DischargeChecklist = typeof dischargeChecklists.$inferSelect;
+export type InsertDischargeChecklist = typeof dischargeChecklists.$inferInsert;
+
+export type CaregiverNotification = typeof caregiverNotifications.$inferSelect;
+export type InsertCaregiverNotification = typeof caregiverNotifications.$inferInsert;
+
+export type CaregiverAchievement = typeof caregiverAchievements.$inferSelect;
+export type InsertCaregiverAchievement = typeof caregiverAchievements.$inferInsert;
+
+export type CaregiverRegistration = z.infer<typeof caregiverRegistrationSchema>;
+export type CaregiverObservationInput = z.infer<typeof caregiverObservationSchema>;
+export type CaregiverAccessRequest = z.infer<typeof caregiverAccessRequestSchema>;
+export type CaregiverInvite = z.infer<typeof caregiverInviteSchema>;
