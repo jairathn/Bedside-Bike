@@ -14,13 +14,21 @@ import {
   AlertTriangle,
   Dumbbell,
   CheckCircle2,
-  Circle,
   ChevronDown,
-  ChevronUp
+  ChevronUp,
+  ShoppingBag,
+  Heart,
+  Utensils,
+  Shield
 } from "lucide-react";
 import { useAuth } from "@/hooks/use-auth";
 import { useToast } from "@/hooks/use-toast";
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+
+interface ChecklistItem {
+  id: string;
+  label: string;
+  tip?: string;
+}
 
 interface ChecklistSection {
   id: string;
@@ -30,12 +38,120 @@ interface ChecklistSection {
   items: ChecklistItem[];
 }
 
-interface ChecklistItem {
-  id: string;
-  label: string;
-  completed: boolean;
-  notes?: string;
-}
+// Standard discharge checklist - same for all patients
+const STANDARD_CHECKLIST: ChecklistSection[] = [
+  {
+    id: "equipment",
+    title: "Equipment & Supplies",
+    icon: ShoppingBag,
+    description: "Medical equipment and supplies needed at home",
+    items: [
+      { id: "eq_walker", label: "Walker or cane (if prescribed)", tip: "Make sure it's adjusted to the right height" },
+      { id: "eq_wheelchair", label: "Wheelchair (if needed)", tip: "Practice folding and transporting" },
+      { id: "eq_commode", label: "Bedside commode (if needed)" },
+      { id: "eq_shower", label: "Shower chair or bath bench" },
+      { id: "eq_reacher", label: "Reacher/grabber tool" },
+      { id: "eq_pillbox", label: "Pill organizer/weekly pillbox" },
+      { id: "eq_bp", label: "Blood pressure monitor (if recommended)" },
+    ]
+  },
+  {
+    id: "home_safety",
+    title: "Home Safety",
+    icon: Home,
+    description: "Make the home safe to prevent falls",
+    items: [
+      { id: "home_rugs", label: "Remove or secure loose rugs and cords" },
+      { id: "home_grab", label: "Install grab bars in bathroom", tip: "Near toilet and in shower/tub" },
+      { id: "home_toilet", label: "Raised toilet seat (if needed)" },
+      { id: "home_lighting", label: "Ensure good lighting, especially at night" },
+      { id: "home_clutter", label: "Clear pathways of clutter" },
+      { id: "home_stairs", label: "Plan for stairs - consider main floor living if possible" },
+      { id: "home_phone", label: "Phone accessible from bed/chair" },
+    ]
+  },
+  {
+    id: "medications",
+    title: "Medications",
+    icon: Pill,
+    description: "Understand and organize all medications",
+    items: [
+      { id: "med_list", label: "Have written list of all medications", tip: "Include dose, frequency, and purpose" },
+      { id: "med_understand", label: "Understand what each medication is for" },
+      { id: "med_schedule", label: "Know the schedule - which meds and when" },
+      { id: "med_filled", label: "Prescriptions filled before discharge" },
+      { id: "med_sideeffects", label: "Know common side effects to watch for" },
+      { id: "med_interactions", label: "Asked about food/drug interactions" },
+      { id: "med_refills", label: "Know how to get refills" },
+    ]
+  },
+  {
+    id: "followup",
+    title: "Follow-up Care",
+    icon: Calendar,
+    description: "Appointments and ongoing care plans",
+    items: [
+      { id: "fu_pcp", label: "Primary care follow-up scheduled", tip: "Usually within 7-14 days" },
+      { id: "fu_specialist", label: "Specialist appointments scheduled (if needed)" },
+      { id: "fu_pt", label: "Physical therapy appointments scheduled (if prescribed)" },
+      { id: "fu_homehealth", label: "Home health services arranged (if prescribed)" },
+      { id: "fu_labs", label: "Know about any lab tests needed" },
+      { id: "fu_transport", label: "Transportation planned for appointments" },
+    ]
+  },
+  {
+    id: "warning_signs",
+    title: "Warning Signs",
+    icon: AlertTriangle,
+    description: "Know when to seek help",
+    items: [
+      { id: "warn_911", label: "Know when to call 911", tip: "Chest pain, difficulty breathing, stroke symptoms" },
+      { id: "warn_doctor", label: "Know when to call the doctor", tip: "Fever, increasing pain, wound changes" },
+      { id: "warn_written", label: "Have warning signs written down" },
+      { id: "warn_numbers", label: "Emergency numbers posted visibly" },
+      { id: "warn_infection", label: "Know signs of infection", tip: "Redness, swelling, fever, discharge" },
+    ]
+  },
+  {
+    id: "daily_care",
+    title: "Daily Care & Activities",
+    icon: Heart,
+    description: "Understanding daily care needs",
+    items: [
+      { id: "care_bathing", label: "Understand bathing/showering assistance needed" },
+      { id: "care_dressing", label: "Understand dressing assistance needed" },
+      { id: "care_mobility", label: "Know safe transfer and mobility techniques" },
+      { id: "care_exercise", label: "Understand home exercise program", tip: "Ask PT to demonstrate" },
+      { id: "care_rest", label: "Know activity restrictions and rest needs" },
+      { id: "care_wound", label: "Understand wound care (if applicable)" },
+    ]
+  },
+  {
+    id: "nutrition",
+    title: "Nutrition & Diet",
+    icon: Utensils,
+    description: "Dietary needs and restrictions",
+    items: [
+      { id: "nutr_restrictions", label: "Understand any dietary restrictions" },
+      { id: "nutr_fluids", label: "Know fluid intake recommendations" },
+      { id: "nutr_meals", label: "Plan for meal preparation" },
+      { id: "nutr_swallow", label: "Understand any swallowing precautions" },
+    ]
+  },
+  {
+    id: "emergency",
+    title: "Emergency Preparedness",
+    icon: Shield,
+    description: "Be ready for emergencies",
+    items: [
+      { id: "emerg_contacts", label: "Emergency contact list completed" },
+      { id: "emerg_medlist", label: "Medication list in wallet/purse" },
+      { id: "emerg_allergies", label: "Allergies documented and accessible" },
+      { id: "emerg_insurance", label: "Insurance cards accessible" },
+      { id: "emerg_advance", label: "Advance directives discussed (if appropriate)" },
+    ]
+  }
+];
 
 export default function CaregiverDischargeChecklistPage() {
   const [, setLocation] = useLocation();
@@ -43,160 +159,47 @@ export default function CaregiverDischargeChecklistPage() {
   const patientId = params.patientId ? parseInt(params.patientId) : null;
   const { user, caregiverPatients } = useAuth();
   const { toast } = useToast();
-  const queryClient = useQueryClient();
-  const [expandedSections, setExpandedSections] = useState<Set<string>>(new Set(["equipment", "home", "medications"]));
+
+  // Track completed items in localStorage per patient
+  const storageKey = `discharge-checklist-${patientId}`;
+  const [completedItems, setCompletedItems] = useState<Set<string>>(new Set());
+  const [expandedSections, setExpandedSections] = useState<Set<string>>(
+    new Set(["equipment", "home_safety", "medications"])
+  );
 
   const selectedPatient = caregiverPatients?.find(p => p.id === patientId);
 
-  // Fetch discharge checklist
-  const { data: checklist, isLoading } = useQuery({
-    queryKey: ["/api/patients", patientId, "discharge-checklist"],
-    queryFn: async () => {
-      if (!patientId) return null;
-      const res = await fetch(`/api/patients/${patientId}/discharge-checklist`);
-      if (!res.ok) throw new Error("Failed to fetch checklist");
-      return res.json();
-    },
-    enabled: !!patientId
-  });
-
-  // Mutation to update checklist
-  const updateMutation = useMutation({
-    mutationFn: async (updates: any) => {
-      const res = await fetch(`/api/patients/${patientId}/discharge-checklist`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(updates)
-      });
-      if (!res.ok) throw new Error("Failed to update checklist");
-      return res.json();
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/patients", patientId, "discharge-checklist"] });
-      toast({
-        title: "Progress Saved",
-        description: "Your checklist has been updated."
-      });
+  // Load saved progress from localStorage
+  useEffect(() => {
+    if (patientId) {
+      const saved = localStorage.getItem(storageKey);
+      if (saved) {
+        try {
+          setCompletedItems(new Set(JSON.parse(saved)));
+        } catch (e) {
+          console.error("Error loading checklist progress:", e);
+        }
+      }
     }
-  });
+  }, [patientId, storageKey]);
 
-  // Parse checklist data into sections
-  const sections: ChecklistSection[] = checklist ? [
-    {
-      id: "equipment",
-      title: "Equipment Needs",
-      icon: Dumbbell,
-      description: "Medical equipment needed at home",
-      items: Object.entries(JSON.parse(checklist.equipmentNeeds || "{}")).map(([key, value]: [string, any]) => ({
-        id: `equipment_${key}`,
-        label: key.replace(/_/g, " ").replace(/\b\w/g, l => l.toUpperCase()),
-        completed: value?.acquired || false,
-        notes: value?.notes
-      }))
-    },
-    {
-      id: "home",
-      title: "Home Modifications",
-      icon: Home,
-      description: "Safety modifications for the home",
-      items: Object.entries(JSON.parse(checklist.homeModifications || "{}")).map(([key, value]: [string, any]) => ({
-        id: `home_${key}`,
-        label: key.replace(/_/g, " ").replace(/\b\w/g, l => l.toUpperCase()),
-        completed: value?.installed || value?.arranged || false
-      }))
-    },
-    {
-      id: "medications",
-      title: "Medication Review",
-      icon: Pill,
-      description: "Understanding medications and schedules",
-      items: [
-        {
-          id: "med_reviewed",
-          label: "Medications reviewed with care team",
-          completed: JSON.parse(checklist.medicationReview || "{}")?.reviewed || false
-        },
-        {
-          id: "med_pillbox",
-          label: "Pillbox/organizer set up",
-          completed: JSON.parse(checklist.medicationReview || "{}")?.pillbox_organized || false
-        }
-      ]
-    },
-    {
-      id: "appointments",
-      title: "Follow-up Appointments",
-      icon: Calendar,
-      description: "Scheduled post-discharge visits",
-      items: (JSON.parse(checklist.followUpAppointments || "[]") as any[]).map((apt, idx) => ({
-        id: `apt_${idx}`,
-        label: `${apt.type} appointment`,
-        completed: apt.scheduled || false,
-        notes: apt.date
-      }))
-    },
-    {
-      id: "contacts",
-      title: "Emergency Contacts",
-      icon: Phone,
-      description: "Important phone numbers documented",
-      items: (JSON.parse(checklist.emergencyContacts || "[]") as any[]).map((contact, idx) => ({
-        id: `contact_${idx}`,
-        label: `${contact.name} (${contact.relationship})`,
-        completed: true,
-        notes: contact.phone
-      }))
-    },
-    {
-      id: "warning",
-      title: "Warning Signs",
-      icon: AlertTriangle,
-      description: "Know when to call for help",
-      items: [
-        {
-          id: "warning_911",
-          label: "I know when to call 911",
-          completed: (JSON.parse(checklist.warningSigns || "{}")?.call_911?.length || 0) > 0
-        },
-        {
-          id: "warning_doctor",
-          label: "I know when to call the doctor",
-          completed: (JSON.parse(checklist.warningSigns || "{}")?.call_doctor?.length || 0) > 0
-        }
-      ]
-    },
-    {
-      id: "exercise",
-      title: "Home Exercise Plan",
-      icon: Dumbbell,
-      description: "Exercise routine for home",
-      items: [
-        {
-          id: "exercise_understood",
-          label: "Exercise plan explained and understood",
-          completed: JSON.parse(checklist.homeExercisePlan || "{}")?.understood || false
-        },
-        {
-          id: "exercise_equipment",
-          label: "Exercise equipment available at home",
-          completed: JSON.parse(checklist.homeExercisePlan || "{}")?.equipment_at_home || false
-        },
-        {
-          id: "exercise_trained",
-          label: "Caregiver trained on exercises",
-          completed: JSON.parse(checklist.homeExercisePlan || "{}")?.caregiver_trained || false
-        }
-      ]
-    }
-  ] : [];
+  // Save progress to localStorage
+  const saveProgress = (items: Set<string>) => {
+    localStorage.setItem(storageKey, JSON.stringify([...items]));
+  };
 
-  // Calculate completion percentage
-  const totalItems = sections.reduce((acc, section) => acc + section.items.length, 0);
-  const completedItems = sections.reduce(
-    (acc, section) => acc + section.items.filter(item => item.completed).length,
-    0
-  );
-  const completionPercent = totalItems > 0 ? Math.round((completedItems / totalItems) * 100) : 0;
+  const toggleItem = (itemId: string) => {
+    setCompletedItems(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(itemId)) {
+        newSet.delete(itemId);
+      } else {
+        newSet.add(itemId);
+      }
+      saveProgress(newSet);
+      return newSet;
+    });
+  };
 
   const toggleSection = (sectionId: string) => {
     setExpandedSections(prev => {
@@ -209,6 +212,11 @@ export default function CaregiverDischargeChecklistPage() {
       return newSet;
     });
   };
+
+  // Calculate completion stats
+  const totalItems = STANDARD_CHECKLIST.reduce((acc, section) => acc + section.items.length, 0);
+  const completedCount = completedItems.size;
+  const completionPercent = totalItems > 0 ? Math.round((completedCount / totalItems) * 100) : 0;
 
   if (!user || !caregiverPatients) {
     return (
@@ -230,9 +238,9 @@ export default function CaregiverDischargeChecklistPage() {
             <ArrowLeft size={20} />
             Back to Dashboard
           </button>
-          <h1 className="text-xl font-bold">Discharge Preparation</h1>
+          <h1 className="text-xl font-bold">Discharge Preparation Checklist</h1>
           <p className="text-rose-100 text-sm">
-            Checklist for {selectedPatient?.firstName}'s transition home
+            Preparing for {selectedPatient?.firstName}'s transition home
           </p>
         </div>
       </header>
@@ -242,7 +250,7 @@ export default function CaregiverDischargeChecklistPage() {
         <Card className="mb-6 border-l-4 border-l-purple-500">
           <CardContent className="p-5">
             <div className="flex items-center justify-between mb-3">
-              <h2 className="text-lg font-semibold text-gray-900">Overall Progress</h2>
+              <h2 className="text-lg font-semibold text-gray-900">Your Progress</h2>
               <Badge
                 variant="outline"
                 className={`${
@@ -258,113 +266,131 @@ export default function CaregiverDischargeChecklistPage() {
             </div>
             <Progress value={completionPercent} className="h-3" />
             <p className="text-sm text-gray-600 mt-2">
-              {completedItems} of {totalItems} items completed
+              {completedCount} of {totalItems} items checked
             </p>
           </CardContent>
         </Card>
 
-        {isLoading ? (
-          <div className="space-y-4">
-            {[1, 2, 3].map(i => (
-              <Card key={i} className="animate-pulse">
-                <CardContent className="p-4">
-                  <div className="h-6 bg-gray-200 rounded w-1/3 mb-4"></div>
-                  <div className="space-y-2">
-                    <div className="h-4 bg-gray-200 rounded w-full"></div>
-                    <div className="h-4 bg-gray-200 rounded w-3/4"></div>
-                  </div>
-                </CardContent>
-              </Card>
-            ))}
-          </div>
-        ) : (
-          <div className="space-y-4">
-            {sections.map(section => {
-              const SectionIcon = section.icon;
-              const sectionComplete = section.items.every(item => item.completed);
-              const isExpanded = expandedSections.has(section.id);
+        {/* Intro Card */}
+        <Card className="mb-6 bg-blue-50 border-blue-200">
+          <CardContent className="p-4">
+            <p className="text-sm text-blue-800">
+              <strong>Use this checklist</strong> to make sure you're ready for your loved one's return home.
+              Check off items as you complete them. Your progress is saved automatically.
+            </p>
+          </CardContent>
+        </Card>
 
-              return (
-                <Card key={section.id} className={sectionComplete ? "border-l-4 border-l-green-500" : ""}>
-                  <CardHeader
-                    className="cursor-pointer hover:bg-gray-50 transition-colors"
-                    onClick={() => toggleSection(section.id)}
-                  >
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-3">
-                        <div className={`p-2 rounded-lg ${
-                          sectionComplete ? "bg-green-100" : "bg-gray-100"
-                        }`}>
-                          <SectionIcon className={sectionComplete ? "text-green-600" : "text-gray-600"} size={20} />
-                        </div>
-                        <div>
-                          <CardTitle className="text-base flex items-center gap-2">
-                            {section.title}
-                            {sectionComplete && (
-                              <CheckCircle2 className="text-green-500" size={16} />
-                            )}
-                          </CardTitle>
-                          <p className="text-sm text-gray-500">{section.description}</p>
-                        </div>
+        {/* Checklist Sections */}
+        <div className="space-y-4">
+          {STANDARD_CHECKLIST.map(section => {
+            const SectionIcon = section.icon;
+            const sectionItemIds = section.items.map(i => i.id);
+            const sectionCompleted = sectionItemIds.filter(id => completedItems.has(id)).length;
+            const sectionTotal = section.items.length;
+            const allComplete = sectionCompleted === sectionTotal;
+            const isExpanded = expandedSections.has(section.id);
+
+            return (
+              <Card key={section.id} className={allComplete ? "border-l-4 border-l-green-500" : ""}>
+                <CardHeader
+                  className="cursor-pointer hover:bg-gray-50 transition-colors py-4"
+                  onClick={() => toggleSection(section.id)}
+                >
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                      <div className={`p-2 rounded-lg ${allComplete ? "bg-green-100" : "bg-gray-100"}`}>
+                        <SectionIcon className={allComplete ? "text-green-600" : "text-gray-600"} size={20} />
                       </div>
+                      <div>
+                        <CardTitle className="text-base flex items-center gap-2">
+                          {section.title}
+                          {allComplete && <CheckCircle2 className="text-green-500" size={16} />}
+                        </CardTitle>
+                        <p className="text-sm text-gray-500">{section.description}</p>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-3">
+                      <span className="text-sm text-gray-500">{sectionCompleted}/{sectionTotal}</span>
                       {isExpanded ? <ChevronUp size={20} /> : <ChevronDown size={20} />}
                     </div>
-                  </CardHeader>
+                  </div>
+                </CardHeader>
 
-                  {isExpanded && (
-                    <CardContent className="pt-0">
-                      <div className="space-y-3 border-t pt-4">
-                        {section.items.length > 0 ? (
-                          section.items.map(item => (
-                            <div
-                              key={item.id}
-                              className="flex items-start gap-3 p-2 rounded-lg hover:bg-gray-50"
-                            >
-                              <div className="mt-0.5">
-                                {item.completed ? (
-                                  <CheckCircle2 className="text-green-500" size={20} />
-                                ) : (
-                                  <Circle className="text-gray-300" size={20} />
-                                )}
-                              </div>
-                              <div className="flex-1">
-                                <p className={`${item.completed ? "text-gray-600" : "text-gray-900"}`}>
-                                  {item.label}
-                                </p>
-                                {item.notes && (
-                                  <p className="text-sm text-gray-500 mt-0.5">{item.notes}</p>
-                                )}
-                              </div>
+                {isExpanded && (
+                  <CardContent className="pt-0 pb-4">
+                    <div className="space-y-1 border-t pt-4">
+                      {section.items.map(item => {
+                        const isChecked = completedItems.has(item.id);
+                        return (
+                          <div
+                            key={item.id}
+                            className={`flex items-start gap-3 p-3 rounded-lg cursor-pointer transition-colors ${
+                              isChecked ? "bg-green-50" : "hover:bg-gray-50"
+                            }`}
+                            onClick={() => toggleItem(item.id)}
+                          >
+                            <Checkbox
+                              checked={isChecked}
+                              onCheckedChange={() => toggleItem(item.id)}
+                              className="mt-0.5"
+                            />
+                            <div className="flex-1">
+                              <p className={`${isChecked ? "text-gray-500 line-through" : "text-gray-900"}`}>
+                                {item.label}
+                              </p>
+                              {item.tip && (
+                                <p className="text-xs text-gray-500 mt-0.5">{item.tip}</p>
+                              )}
                             </div>
-                          ))
-                        ) : (
-                          <p className="text-gray-500 text-sm italic">No items in this section yet</p>
-                        )}
-                      </div>
-                    </CardContent>
-                  )}
-                </Card>
-              );
-            })}
-          </div>
-        )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </CardContent>
+                )}
+              </Card>
+            );
+          })}
+        </div>
 
-        {/* Info Box */}
+        {/* Help Card */}
         <Card className="mt-6 bg-purple-50 border-purple-200">
           <CardContent className="p-4">
             <div className="flex items-start gap-3">
               <AlertTriangle className="text-purple-600 flex-shrink-0 mt-0.5" size={20} />
               <div>
-                <h3 className="font-medium text-purple-900">Need Help?</h3>
+                <h3 className="font-medium text-purple-900">Questions?</h3>
                 <p className="text-sm text-purple-700 mt-1">
-                  This checklist helps ensure a safe transition home. Work with the care team to address any
-                  incomplete items before discharge. The social worker or case manager can help arrange
-                  equipment and services.
+                  Don't hesitate to ask the care team about any items on this list. The nurse, case manager,
+                  or social worker can help arrange equipment, services, and answer questions about
+                  caring for your loved one at home.
                 </p>
               </div>
             </div>
           </CardContent>
         </Card>
+
+        {/* Reset Button */}
+        <div className="mt-6 text-center">
+          <Button
+            variant="ghost"
+            size="sm"
+            className="text-gray-500"
+            onClick={() => {
+              if (confirm("Reset all checklist progress? This cannot be undone.")) {
+                setCompletedItems(new Set());
+                localStorage.removeItem(storageKey);
+                toast({
+                  title: "Checklist Reset",
+                  description: "All items have been unchecked."
+                });
+              }
+            }}
+          >
+            Reset Checklist
+          </Button>
+        </div>
       </main>
     </div>
   );
