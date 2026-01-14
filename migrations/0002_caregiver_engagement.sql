@@ -150,9 +150,10 @@ CREATE INDEX IF NOT EXISTS idx_caregiver_achievements_unlocked ON caregiver_achi
 -- =====================================================
 
 -- Add columns to track who logged the session
-ALTER TABLE exercise_sessions ADD COLUMN IF NOT EXISTS logged_by_user_id INTEGER REFERENCES users(id);
-ALTER TABLE exercise_sessions ADD COLUMN IF NOT EXISTS logged_by_user_type VARCHAR(20)
-  CHECK (logged_by_user_type IN ('patient', 'provider', 'caregiver', 'device'));
+-- Note: Column names must match Drizzle schema: logged_by_id, logger_type
+ALTER TABLE exercise_sessions ADD COLUMN IF NOT EXISTS logged_by_id INTEGER REFERENCES users(id);
+ALTER TABLE exercise_sessions ADD COLUMN IF NOT EXISTS logger_type VARCHAR(20)
+  CHECK (logger_type IN ('patient', 'provider', 'caregiver', 'device'));
 
 -- =====================================================
 -- 8. ROW LEVEL SECURITY (RLS) POLICIES FOR SUPABASE

@@ -2639,26 +2639,73 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const caregiverId = parseInt(req.params.caregiverId);
       const patientId = parseInt(req.params.patientId);
 
+      console.log(`[Caregiver Dashboard] Fetching for caregiver ${caregiverId}, patient ${patientId}`);
+
       // Verify caregiver has access to this patient
-      const relation = await storage.getCaregiverPatientRelation(caregiverId, patientId);
+      let relation;
+      try {
+        relation = await storage.getCaregiverPatientRelation(caregiverId, patientId);
+        console.log(`[Caregiver Dashboard] Relation found:`, relation ? 'yes' : 'no', relation?.accessStatus);
+      } catch (e) {
+        console.error("[Caregiver Dashboard] Error in getCaregiverPatientRelation:", e);
+        throw e;
+      }
+
       if (!relation || relation.accessStatus !== 'approved') {
         return res.status(403).json({ error: "Access denied" });
       }
 
-      // Get patient data (same as patient dashboard)
-      const patient = await storage.getPatient(patientId);
-      const goals = await storage.getGoalsByPatient(patientId);
-      const stats = await storage.getPatientStats(patientId);
-      const sessions = await storage.getSessionsByPatient(patientId);
-      const recentSessions = sessions.slice(0, 10);
-      const usageData = await storage.getDailyUsageData(patientId, 30);
+      // Get patient data with individual error handling
+      let patient, goals, stats, sessions, usageData;
+
+      try {
+        patient = await storage.getPatient(patientId);
+        console.log(`[Caregiver Dashboard] Patient found:`, patient ? 'yes' : 'no');
+      } catch (e) {
+        console.error("[Caregiver Dashboard] Error in getPatient:", e);
+        throw e;
+      }
+
+      try {
+        goals = await storage.getGoalsByPatient(patientId);
+        console.log(`[Caregiver Dashboard] Goals found:`, goals?.length || 0);
+      } catch (e) {
+        console.error("[Caregiver Dashboard] Error in getGoalsByPatient:", e);
+        throw e;
+      }
+
+      try {
+        stats = await storage.getPatientStats(patientId);
+        console.log(`[Caregiver Dashboard] Stats found:`, stats ? 'yes' : 'no');
+      } catch (e) {
+        console.error("[Caregiver Dashboard] Error in getPatientStats:", e);
+        throw e;
+      }
+
+      try {
+        sessions = await storage.getSessionsByPatient(patientId);
+        console.log(`[Caregiver Dashboard] Sessions found:`, sessions?.length || 0);
+      } catch (e) {
+        console.error("[Caregiver Dashboard] Error in getSessionsByPatient:", e);
+        throw e;
+      }
+
+      const recentSessions = sessions?.slice(0, 10) || [];
+
+      try {
+        usageData = await storage.getDailyUsageData(patientId, 30);
+        console.log(`[Caregiver Dashboard] Usage data entries:`, usageData?.length || 0);
+      } catch (e) {
+        console.error("[Caregiver Dashboard] Error in getDailyUsageData:", e);
+        throw e;
+      }
 
       res.json({
         patient,
-        goals,
-        stats,
+        goals: goals || [],
+        stats: stats || null,
         recentSessions,
-        usageData,
+        usageData: usageData || [],
         caregiverRelation: relation
       });
     } catch (error) {
