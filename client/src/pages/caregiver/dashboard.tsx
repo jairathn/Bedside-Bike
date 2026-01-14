@@ -94,10 +94,15 @@ export default function CaregiverDashboard() {
     );
   }
 
-  // Format duration from seconds to minutes
-  const formatDuration = (seconds: number) => {
+  // Format duration from seconds to minutes (for session duration)
+  const formatDurationFromSeconds = (seconds: number) => {
     const mins = Math.floor(seconds / 60);
     return mins > 0 ? `${mins} min` : "< 1 min";
+  };
+
+  // Format duration that's already in minutes (for stats.totalDuration)
+  const formatDurationMinutes = (minutes: number) => {
+    return minutes > 0 ? `${Math.round(minutes)} min` : "< 1 min";
   };
 
   return (
@@ -225,7 +230,7 @@ export default function CaregiverDashboard() {
                       <Clock className="text-blue-500" size={20} />
                     </div>
                     <p className="text-2xl font-bold text-gray-900">
-                      {formatDuration(dashboardData.stats?.totalDuration || 0)}
+                      {formatDurationMinutes(dashboardData.stats?.totalDuration || 0)}
                     </p>
                     <p className="text-xs text-gray-500">cumulative</p>
                   </CardContent>
@@ -360,7 +365,7 @@ export default function CaregiverDashboard() {
                             </div>
                             <div>
                               <p className="font-medium text-gray-900">
-                                {formatDuration(session.duration)} cycling session
+                                {formatDurationMinutes(session.duration)} cycling session
                               </p>
                               <p className="text-xs text-gray-500">
                                 {new Date(session.sessionDate).toLocaleDateString('en-US', {
