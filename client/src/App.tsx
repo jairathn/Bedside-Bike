@@ -21,6 +21,13 @@ import ProviderAccessPage from "@/pages/provider-access";
 import AnonymousRiskCalculator from "@/pages/anonymous-risk-calculator";
 import PublicDischargeReadinessPage from "@/pages/public-discharge-readiness";
 
+// Caregiver Pages
+import CaregiverLoginPage from "@/pages/caregiver-login";
+import CaregiverDashboard from "@/pages/caregiver/dashboard";
+import CaregiverRegisterPage from "@/pages/caregiver/register";
+import CaregiverObservationsPage from "@/pages/caregiver/observations";
+import CaregiverDischargeChecklistPage from "@/pages/caregiver/discharge-checklist";
+
 // Personalization Module Pages
 import PersonalizedPrescriptionPage from "@/pages/personalization/personalized-prescription";
 import FatigueMonitorPage from "@/pages/personalization/fatigue-monitor";
@@ -36,15 +43,20 @@ function Router() {
   const [location, setLocation] = useLocation();
   const { user, isLoading, setUser } = useAuth();
 
+  // Public routes that don't require authentication
+  const publicRoutes = ["/", "/auth", "/anonymous-risk-calculator", "/public-discharge-readiness", "/caregiver/login", "/caregiver/register"];
+
   useEffect(() => {
     if (!isLoading) {
       if (user && location === "/") {
         if (user.userType === 'provider') {
           setLocation("/provider-dashboard");
+        } else if (user.userType === 'caregiver') {
+          setLocation("/caregiver/dashboard");
         } else {
           setLocation("/dashboard");
         }
-      } else if (!user && location !== "/" && location !== "/auth" && location !== "/anonymous-risk-calculator" && location !== "/public-discharge-readiness") {
+      } else if (!user && !publicRoutes.includes(location)) {
         setLocation("/");
       }
     }
@@ -70,6 +82,8 @@ function Router() {
     console.log('🎯 localStorage user:', localStorage.getItem('user'));
     if (userData.userType === 'provider') {
       setLocation("/provider-dashboard");
+    } else if (userData.userType === 'caregiver') {
+      setLocation("/caregiver/dashboard");
     } else {
       setLocation("/dashboard");
     }
@@ -90,6 +104,13 @@ function Router() {
       <Route path="/provider-dashboard" component={user?.userType === 'provider' ? ProviderDashboard : () => <AuthPage onAuthSuccess={handleAuthSuccess} />} />
       <Route path="/anonymous-risk-calculator" component={AnonymousRiskCalculator} />
       <Route path="/public-discharge-readiness" component={PublicDischargeReadinessPage} />
+
+      {/* Caregiver Routes */}
+      <Route path="/caregiver/login" component={CaregiverLoginPage} />
+      <Route path="/caregiver/register" component={CaregiverRegisterPage} />
+      <Route path="/caregiver/dashboard" component={user?.userType === 'caregiver' ? CaregiverDashboard : CaregiverLoginPage} />
+      <Route path="/caregiver/observations" component={user?.userType === 'caregiver' ? CaregiverObservationsPage : CaregiverLoginPage} />
+      <Route path="/caregiver/discharge-checklist/:patientId" component={user?.userType === 'caregiver' ? CaregiverDischargeChecklistPage : CaregiverLoginPage} />
 
       {/* Personalization Module Routes (Provider Only) */}
       <Route path="/personalized-prescription" component={user?.userType === 'provider' ? PersonalizedPrescriptionPage : () => <AuthPage onAuthSuccess={handleAuthSuccess} />} />

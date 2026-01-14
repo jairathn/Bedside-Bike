@@ -1,4 +1,4 @@
-import { 
+import {
   users,
   patientProfiles,
   providerPatients,
@@ -9,6 +9,11 @@ import {
   riskAssessments,
   devices,
   deviceSessions,
+  caregiverPatients,
+  caregiverObservations,
+  caregiverNotifications,
+  caregiverAchievements,
+  dischargeChecklists,
   type User,
   type InsertUser,
   type UpsertUser,
@@ -30,6 +35,16 @@ import {
   type InsertDevice,
   type DeviceSession,
   type InsertDeviceSession,
+  type CaregiverPatient,
+  type InsertCaregiverPatient,
+  type CaregiverObservation,
+  type InsertCaregiverObservation,
+  type CaregiverNotification,
+  type InsertCaregiverNotification,
+  type CaregiverAchievement,
+  type InsertCaregiverAchievement,
+  type DischargeChecklist,
+  type InsertDischargeChecklist,
   // Legacy compatibility
   type Patient,
   type InsertPatient,
@@ -1020,6 +1035,295 @@ export class DatabaseStorage implements IStorage {
   async createDeviceSession(deviceSession: InsertDeviceSession): Promise<DeviceSession> {
     const result = await db.insert(deviceSessions).values(deviceSession).returning();
     return result[0];
+  }
+
+  // ============================================================================
+  // CAREGIVER ENGAGEMENT OPERATIONS
+  // ============================================================================
+
+  // Caregiver-Patient Relationship Operations
+  async createCaregiverPatientRelation(relation: InsertCaregiverPatient): Promise<CaregiverPatient> {
+    const [newRelation] = await db.insert(caregiverPatients).values(relation).returning();
+    return newRelation;
+  }
+
+  async getCaregiverPatientRelation(caregiverId: number, patientId: number): Promise<CaregiverPatient | undefined> {
+    const [relation] = await db
+      .select()
+      .from(caregiverPatients)
+      .where(and(
+        eq(caregiverPatients.caregiverId, caregiverId),
+        eq(caregiverPatients.patientId, patientId)
+      ));
+    return relation;
+  }
+
+  async getPatientsByCaregiverId(caregiverId: number): Promise<Array<User & { relationship: CaregiverPatient }>> {
+    const relations = await db
+      .select()
+      .from(caregiverPatients)
+      .innerJoin(users, eq(caregiverPatients.patientId, users.id))
+      .where(and(
+        eq(caregiverPatients.caregiverId, caregiverId),
+        eq(caregiverPatients.accessStatus, 'approved')
+      ));
+
+    return relations.map(r => ({
+      ...r.users,
+      relationship: r.caregiver_patients
+    }));
+  }
+
+  async getCaregiversByPatientId(patientId: number): Promise<Array<User & { relationship: CaregiverPatient }>> {
+    const relations = await db
+      .select()
+      .from(caregiverPatients)
+      .innerJoin(users, eq(caregiverPatients.caregiverId, users.id))
+      .where(eq(caregiverPatients.patientId, patientId));
+
+    return relations.map(r => ({
+      ...r.users,
+      relationship: r.caregiver_patients
+    }));
+  }
+
+  async getPendingCaregiverRequests(patientId: number): Promise<Array<User & { relationship: CaregiverPatient }>> {
+    const relations = await db
+      .select()
+      .from(caregiverPatients)
+      .innerJoin(users, eq(caregiverPatients.caregiverId, users.id))
+      .where(and(
+        eq(caregiverPatients.patientId, patientId),
+        eq(caregiverPatients.accessStatus, 'pending')
+      ));
+
+    return relations.map(r => ({
+      ...r.users,
+      relationship: r.caregiver_patients
+    }));
+  }
+
+  async updateCaregiverAccessStatus(
+    relationId: number,
+    status: 'approved' | 'denied' | 'revoked'
+  ): Promise<CaregiverPatient | undefined> {
+    const updateData: Partial<CaregiverPatient> = {
+      accessStatus: status,
+    };
+
+    if (status === 'approved') {
+      updateData.approvedAt = new Date();
+    } else if (status === 'revoked') {
+      updateData.revokedAt = new Date();
+    }
+
+    const [updated] = await db
+      .update(caregiverPatients)
+      .set(updateData)
+      .where(eq(caregiverPatients.id, relationId))
+      .returning();
+
+    return updated;
+  }
+
+  async updateCaregiverXp(relationId: number, xpToAdd: number): Promise<CaregiverPatient | undefined> {
+    // Get current XP
+    const [current] = await db
+      .select()
+      .from(caregiverPatients)
+      .where(eq(caregiverPatients.id, relationId));
+
+    if (!current) return undefined;
+
+    const newXp = (current.supporterXp || 0) + xpToAdd;
+    const newLevel = Math.floor(newXp / 100) + 1; // Level up every 100 XP
+
+    const [updated] = await db
+      .update(caregiverPatients)
+      .set({
+        supporterXp: newXp,
+        supporterLevel: newLevel
+      })
+      .where(eq(caregiverPatients.id, relationId))
+      .returning();
+
+    return updated;
+  }
+
+  // Caregiver Observation Operations
+  async createCaregiverObservation(observation: InsertCaregiverObservation): Promise<CaregiverObservation> {
+    const [newObs] = await db.insert(caregiverObservations).values(observation).returning();
+    return newObs;
+  }
+
+  async getCaregiverObservationsByPatient(patientId: number, limit = 10): Promise<CaregiverObservation[]> {
+    return await db
+      .select()
+      .from(caregiverObservations)
+      .where(eq(caregiverObservations.patientId, patientId))
+      .orderBy(desc(caregiverObservations.createdAt))
+      .limit(limit);
+  }
+
+  async getCaregiverObservationsByCaregiver(caregiverId: number, limit = 10): Promise<CaregiverObservation[]> {
+    return await db
+      .select()
+      .from(caregiverObservations)
+      .where(eq(caregiverObservations.caregiverId, caregiverId))
+      .orderBy(desc(caregiverObservations.createdAt))
+      .limit(limit);
+  }
+
+  async updateObservationAiSummary(observationId: number, aiSummary: string): Promise<CaregiverObservation | undefined> {
+    const [updated] = await db
+      .update(caregiverObservations)
+      .set({ aiSummary })
+      .where(eq(caregiverObservations.id, observationId))
+      .returning();
+    return updated;
+  }
+
+  // Caregiver Notification Operations
+  async createCaregiverNotification(notification: InsertCaregiverNotification): Promise<CaregiverNotification> {
+    const [newNotif] = await db.insert(caregiverNotifications).values(notification).returning();
+    return newNotif;
+  }
+
+  async getCaregiverNotifications(caregiverId: number, unreadOnly = false): Promise<CaregiverNotification[]> {
+    if (unreadOnly) {
+      return await db
+        .select()
+        .from(caregiverNotifications)
+        .where(and(
+          eq(caregiverNotifications.caregiverId, caregiverId),
+          eq(caregiverNotifications.isRead, false)
+        ))
+        .orderBy(desc(caregiverNotifications.createdAt));
+    }
+
+    return await db
+      .select()
+      .from(caregiverNotifications)
+      .where(eq(caregiverNotifications.caregiverId, caregiverId))
+      .orderBy(desc(caregiverNotifications.createdAt));
+  }
+
+  async markCaregiverNotificationRead(notificationId: number): Promise<CaregiverNotification | undefined> {
+    const [updated] = await db
+      .update(caregiverNotifications)
+      .set({ isRead: true })
+      .where(eq(caregiverNotifications.id, notificationId))
+      .returning();
+    return updated;
+  }
+
+  async markAllCaregiverNotificationsRead(caregiverId: number): Promise<void> {
+    await db
+      .update(caregiverNotifications)
+      .set({ isRead: true })
+      .where(eq(caregiverNotifications.caregiverId, caregiverId));
+  }
+
+  // Caregiver Achievement Operations
+  async createCaregiverAchievement(achievement: InsertCaregiverAchievement): Promise<CaregiverAchievement> {
+    const [newAch] = await db.insert(caregiverAchievements).values(achievement).returning();
+    return newAch;
+  }
+
+  async getCaregiverAchievements(caregiverId: number, patientId?: number): Promise<CaregiverAchievement[]> {
+    if (patientId) {
+      return await db
+        .select()
+        .from(caregiverAchievements)
+        .where(and(
+          eq(caregiverAchievements.caregiverId, caregiverId),
+          eq(caregiverAchievements.patientId, patientId)
+        ))
+        .orderBy(desc(caregiverAchievements.createdAt));
+    }
+
+    return await db
+      .select()
+      .from(caregiverAchievements)
+      .where(eq(caregiverAchievements.caregiverId, caregiverId))
+      .orderBy(desc(caregiverAchievements.createdAt));
+  }
+
+  async unlockCaregiverAchievement(achievementId: number): Promise<CaregiverAchievement | undefined> {
+    const [updated] = await db
+      .update(caregiverAchievements)
+      .set({
+        isUnlocked: true,
+        unlockedAt: new Date()
+      })
+      .where(eq(caregiverAchievements.id, achievementId))
+      .returning();
+    return updated;
+  }
+
+  // Discharge Checklist Operations
+  async getOrCreateDischargeChecklist(patientId: number, caregiverId?: number): Promise<DischargeChecklist> {
+    // Check if checklist exists
+    const [existing] = await db
+      .select()
+      .from(dischargeChecklists)
+      .where(eq(dischargeChecklists.patientId, patientId));
+
+    if (existing) {
+      return existing;
+    }
+
+    // Create new checklist with defaults
+    const [newChecklist] = await db.insert(dischargeChecklists).values({
+      patientId,
+      caregiverId: caregiverId || null,
+      equipmentNeeds: '{}',
+      homeModifications: '{}',
+      medicationReview: '{}',
+      followUpAppointments: '[]',
+      emergencyContacts: '[]',
+      warningSigns: '{}',
+      homeExercisePlan: '{}',
+      dietRestrictions: '{}',
+      completionPercent: 0
+    }).returning();
+
+    return newChecklist;
+  }
+
+  async updateDischargeChecklist(
+    checklistId: number,
+    updates: Partial<InsertDischargeChecklist>
+  ): Promise<DischargeChecklist | undefined> {
+    const [updated] = await db
+      .update(dischargeChecklists)
+      .set({
+        ...updates,
+        updatedAt: new Date()
+      })
+      .where(eq(dischargeChecklists.id, checklistId))
+      .returning();
+    return updated;
+  }
+
+  async getDischargeChecklistByPatient(patientId: number): Promise<DischargeChecklist | undefined> {
+    const [checklist] = await db
+      .select()
+      .from(dischargeChecklists)
+      .where(eq(dischargeChecklists.patientId, patientId));
+    return checklist;
+  }
+
+  // Check for active session (for conflict detection)
+  async getActiveSessionForPatient(patientId: number): Promise<ExerciseSession | undefined> {
+    const [session] = await db
+      .select()
+      .from(exerciseSessions)
+      .where(and(
+        eq(exerciseSessions.patientId, patientId),
+        eq(exerciseSessions.currentStatus, 'active')
+      ));
+    return session;
   }
 }
 
