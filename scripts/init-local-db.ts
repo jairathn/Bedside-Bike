@@ -18,6 +18,11 @@ console.log('🗄️  Initializing local SQLite database...\n');
 
 // Drop all tables (in reverse dependency order)
 const dropTables = `
+DROP TABLE IF EXISTS caregiver_achievements;
+DROP TABLE IF EXISTS caregiver_notifications;
+DROP TABLE IF EXISTS discharge_checklists;
+DROP TABLE IF EXISTS caregiver_observations;
+DROP TABLE IF EXISTS caregiver_patients;
 DROP TABLE IF EXISTS protocol_matching_criteria;
 DROP TABLE IF EXISTS patient_protocol_assignments;
 DROP TABLE IF EXISTS clinical_protocols;
@@ -57,14 +62,17 @@ CREATE TABLE users (
     email TEXT UNIQUE NOT NULL,
     first_name TEXT NOT NULL,
     last_name TEXT NOT NULL,
-    user_type TEXT NOT NULL CHECK(user_type IN ('patient', 'provider')),
+    user_type TEXT NOT NULL CHECK(user_type IN ('patient', 'provider', 'caregiver')),
     date_of_birth TEXT,
     admission_date TEXT,
+    phone_number TEXT,
     provider_role TEXT CHECK(provider_role IN ('physician', 'nurse', 'physical_therapist', 'mobility_tech', 'other')),
     credentials TEXT,
     specialty TEXT,
     license_number TEXT,
     is_active INTEGER DEFAULT 1,
+    tos_accepted_at INTEGER,
+    tos_version TEXT,
     created_at INTEGER DEFAULT (unixepoch()),
     updated_at INTEGER DEFAULT (unixepoch())
 );
@@ -165,6 +173,7 @@ CREATE TABLE exercise_sessions (
     end_time INTEGER,
     stops_and_starts INTEGER DEFAULT 0,
     is_completed INTEGER DEFAULT 0,
+    is_manual INTEGER DEFAULT 0,
     -- Real-time tracking fields
     current_rpm REAL,
     current_power REAL,
@@ -172,6 +181,9 @@ CREATE TABLE exercise_sessions (
     duration_seconds INTEGER,
     current_status TEXT CHECK(current_status IN ('active', 'paused', 'completed')),
     target_duration INTEGER,
+    -- Session logging attribution (caregiver feature)
+    logged_by_id INTEGER REFERENCES users(id),
+    logger_type TEXT CHECK(logger_type IN ('patient', 'caregiver', 'provider', 'device')),
     created_at INTEGER DEFAULT (unixepoch()),
     updated_at INTEGER DEFAULT (unixepoch())
 );
@@ -327,6 +339,93 @@ CREATE TABLE kudos_reactions (
     created_at INTEGER DEFAULT (unixepoch())
 );
 
+-- =====================================================
+-- CAREGIVER ENGAGEMENT SYSTEM
+-- =====================================================
+
+-- Caregiver-Patient relationships
+CREATE TABLE caregiver_patients (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    caregiver_id INTEGER NOT NULL REFERENCES users(id),
+    patient_id INTEGER NOT NULL REFERENCES users(id),
+    relationship_type TEXT NOT NULL CHECK(relationship_type IN ('spouse', 'partner', 'child', 'parent', 'sibling', 'friend', 'other_family', 'professional_caregiver')),
+    access_status TEXT DEFAULT 'pending' CHECK(access_status IN ('pending', 'approved', 'denied', 'revoked')),
+    requested_at INTEGER DEFAULT (unixepoch()),
+    approved_at INTEGER,
+    revoked_at INTEGER,
+    can_log_sessions INTEGER DEFAULT 1,
+    can_view_reports INTEGER DEFAULT 1,
+    can_send_nudges INTEGER DEFAULT 1,
+    supporter_xp INTEGER DEFAULT 0,
+    supporter_level INTEGER DEFAULT 1,
+    created_at INTEGER DEFAULT (unixepoch())
+);
+
+-- Caregiver observations
+CREATE TABLE caregiver_observations (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    caregiver_id INTEGER NOT NULL REFERENCES users(id),
+    patient_id INTEGER NOT NULL REFERENCES users(id),
+    observation_date TEXT NOT NULL,
+    mood_level TEXT CHECK(mood_level IN ('great', 'good', 'fair', 'poor')),
+    pain_level INTEGER CHECK(pain_level >= 0 AND pain_level <= 10),
+    energy_level TEXT CHECK(energy_level IN ('high', 'medium', 'low')),
+    appetite TEXT CHECK(appetite IN ('good', 'fair', 'poor')),
+    sleep_quality TEXT CHECK(sleep_quality IN ('good', 'fair', 'poor')),
+    mobility_observations TEXT,
+    notes TEXT,
+    concerns TEXT,
+    questions_for_provider TEXT,
+    ai_summary TEXT,
+    created_at INTEGER DEFAULT (unixepoch())
+);
+
+-- Discharge checklists
+CREATE TABLE discharge_checklists (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    patient_id INTEGER NOT NULL REFERENCES users(id),
+    caregiver_id INTEGER REFERENCES users(id),
+    equipment_needs TEXT DEFAULT '{}',
+    home_modifications TEXT DEFAULT '{}',
+    medication_review TEXT DEFAULT '{}',
+    follow_up_appointments TEXT DEFAULT '[]',
+    emergency_contacts TEXT DEFAULT '[]',
+    warning_signs TEXT DEFAULT '{}',
+    home_exercise_plan TEXT DEFAULT '{}',
+    diet_restrictions TEXT DEFAULT '{}',
+    completion_percent INTEGER DEFAULT 0,
+    completed_at INTEGER,
+    created_at INTEGER DEFAULT (unixepoch()),
+    updated_at INTEGER DEFAULT (unixepoch())
+);
+
+-- Caregiver notifications
+CREATE TABLE caregiver_notifications (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    caregiver_id INTEGER NOT NULL REFERENCES users(id),
+    patient_id INTEGER NOT NULL REFERENCES users(id),
+    notification_type TEXT NOT NULL CHECK(notification_type IN ('goal_completed', 'streak_extended', 'session_logged', 'access_approved', 'access_request', 'access_denied')),
+    title TEXT NOT NULL,
+    message TEXT NOT NULL,
+    metadata TEXT DEFAULT '{}',
+    is_read INTEGER DEFAULT 0,
+    created_at INTEGER DEFAULT (unixepoch())
+);
+
+-- Caregiver achievements
+CREATE TABLE caregiver_achievements (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    caregiver_id INTEGER NOT NULL REFERENCES users(id),
+    patient_id INTEGER NOT NULL REFERENCES users(id),
+    type TEXT NOT NULL CHECK(type IN ('first_checkin', 'consistent_supporter', 'encouragement_champion', 'discharge_ready', 'super_supporter', 'week_streak', 'observation_master')),
+    title TEXT NOT NULL,
+    description TEXT NOT NULL,
+    xp_reward INTEGER DEFAULT 0,
+    is_unlocked INTEGER DEFAULT 0,
+    unlocked_at INTEGER,
+    created_at INTEGER DEFAULT (unixepoch())
+);
+
 -- Create indexes
 CREATE INDEX idx_sessions_expire ON sessions(expire);
 CREATE INDEX idx_patient_profiles_user_id ON patient_profiles(user_id);
@@ -340,6 +439,16 @@ CREATE INDEX idx_patient_stats_patient_id ON patient_stats(patient_id);
 CREATE INDEX idx_feed_items_patient_id ON feed_items(patient_id);
 CREATE INDEX idx_feed_items_unit ON feed_items(unit);
 CREATE INDEX idx_kudos_reactions_feed_item_id ON kudos_reactions(feed_item_id);
+
+-- Caregiver indexes
+CREATE INDEX idx_caregiver_patients_caregiver_id ON caregiver_patients(caregiver_id);
+CREATE INDEX idx_caregiver_patients_patient_id ON caregiver_patients(patient_id);
+CREATE INDEX idx_caregiver_patients_access_status ON caregiver_patients(access_status);
+CREATE INDEX idx_caregiver_observations_patient_id ON caregiver_observations(patient_id);
+CREATE INDEX idx_caregiver_observations_date ON caregiver_observations(observation_date);
+CREATE INDEX idx_caregiver_notifications_caregiver_id ON caregiver_notifications(caregiver_id);
+CREATE INDEX idx_caregiver_notifications_is_read ON caregiver_notifications(is_read);
+CREATE INDEX idx_discharge_checklists_patient_id ON discharge_checklists(patient_id);
 `;
 
 console.log('📊 Creating tables...');

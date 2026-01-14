@@ -22,12 +22,20 @@ import {
   loginSchema,
   patientRegistrationSchema,
   providerRegistrationSchema,
+  caregiverRegistrationSchema,
+  caregiverObservationSchema,
+  caregiverAccessRequestSchema,
+  caregiverInviteSchema,
   riskAssessmentInputSchema,
   insertExerciseSessionSchema,
   insertPatientGoalSchema,
+  caregiverPatients,
+  caregiverObservations,
+  caregiverNotifications,
   type LoginData,
   type PatientRegistration,
   type ProviderRegistration,
+  type CaregiverRegistration,
   type RiskAssessmentInput,
   type InsertExerciseSession,
   type InsertPatientGoal
@@ -2387,6 +2395,488 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   // Register Personalization Routes (Tier 1 & Tier 2 Patent Features)
   registerPersonalizationRoutes(app);
+
+  // ============================================================================
+  // CAREGIVER ENGAGEMENT SYSTEM ROUTES
+  // ============================================================================
+
+  // Caregiver Registration (self-registration with access request)
+  app.post("/api/auth/register/caregiver", authLimiter, async (req, res) => {
+    try {
+      const parsed = caregiverRegistrationSchema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ error: parsed.error.errors[0].message });
+      }
+
+      const data = parsed.data;
+
+      // Check if caregiver email already exists
+      const existingCaregiver = await storage.getUserByEmail(data.email);
+      if (existingCaregiver) {
+        return res.status(400).json({ error: "An account with this email already exists" });
+      }
+
+      // Find the patient by name and DOB
+      const patient = await storage.getPatientByName(
+        data.patientFirstName,
+        data.patientLastName,
+        data.patientDateOfBirth
+      );
+
+      if (!patient) {
+        return res.status(404).json({ error: "No patient found with the provided information" });
+      }
+
+      // Create caregiver user
+      const newCaregiver = await storage.createUser({
+        email: data.email,
+        firstName: data.firstName || '',
+        lastName: data.lastName || '',
+        userType: 'caregiver',
+        isActive: true
+      });
+
+      // Create pending access request
+      await storage.createCaregiverPatientRelation({
+        caregiverId: newCaregiver.id,
+        patientId: patient.id,
+        relationshipType: data.relationshipType,
+        accessStatus: 'pending'
+      });
+
+      // Create notification for patient about access request
+      await storage.createCaregiverNotification({
+        caregiverId: newCaregiver.id,
+        patientId: patient.id,
+        notificationType: 'access_request',
+        title: 'Caregiver Access Request',
+        message: `${data.firstName} ${data.lastName} (${data.relationshipType}) has requested access to view your progress.`,
+        metadata: JSON.stringify({ caregiverName: `${data.firstName} ${data.lastName}`, relationshipType: data.relationshipType })
+      });
+
+      res.status(201).json({
+        message: "Registration successful. Access request sent to patient.",
+        userId: newCaregiver.id,
+        patientId: patient.id,
+        accessStatus: 'pending'
+      });
+    } catch (error) {
+      console.error("Caregiver registration error:", error);
+      res.status(500).json({ error: "Failed to register caregiver" });
+    }
+  });
+
+  // Caregiver Login
+  app.post("/api/auth/login/caregiver", authLimiter, async (req, res) => {
+    try {
+      const { email } = req.body;
+      if (!email) {
+        return res.status(400).json({ error: "Email is required" });
+      }
+
+      const caregiver = await storage.getUserByEmail(email);
+      if (!caregiver || caregiver.userType !== 'caregiver') {
+        return res.status(401).json({ error: "Invalid caregiver credentials" });
+      }
+
+      // Get patients this caregiver has access to
+      const patients = await storage.getPatientsByCaregiverId(caregiver.id);
+
+      // Get unread notifications
+      const notifications = await storage.getCaregiverNotifications(caregiver.id, true);
+
+      res.json({
+        user: caregiver,
+        patients,
+        unreadNotifications: notifications.length
+      });
+    } catch (error) {
+      console.error("Caregiver login error:", error);
+      res.status(500).json({ error: "Failed to login" });
+    }
+  });
+
+  // Patient invites caregiver (patient-initiated)
+  app.post("/api/patients/:patientId/invite-caregiver", async (req, res) => {
+    try {
+      const patientId = parseInt(req.params.patientId);
+      const parsed = caregiverInviteSchema.safeParse(req.body);
+
+      if (!parsed.success) {
+        return res.status(400).json({ error: parsed.error.errors[0].message });
+      }
+
+      const data = parsed.data;
+
+      // Check if caregiver already exists
+      let caregiver = await storage.getUserByEmail(data.caregiverEmail);
+
+      if (!caregiver) {
+        // Create new caregiver user (pre-approved since patient initiated)
+        caregiver = await storage.createUser({
+          email: data.caregiverEmail,
+          firstName: data.caregiverFirstName,
+          lastName: data.caregiverLastName,
+          userType: 'caregiver',
+          isActive: true
+        });
+      }
+
+      // Check if relationship already exists
+      const existingRelation = await storage.getCaregiverPatientRelation(caregiver.id, patientId);
+      if (existingRelation) {
+        return res.status(400).json({ error: "This caregiver already has a relationship with this patient" });
+      }
+
+      // Create pre-approved relationship (since patient initiated)
+      const relation = await storage.createCaregiverPatientRelation({
+        caregiverId: caregiver.id,
+        patientId,
+        relationshipType: data.relationshipType,
+        accessStatus: 'approved',
+        approvedAt: new Date()
+      });
+
+      // Create notification for caregiver
+      const patient = await storage.getPatient(patientId);
+      await storage.createCaregiverNotification({
+        caregiverId: caregiver.id,
+        patientId,
+        notificationType: 'access_approved',
+        title: 'You\'ve Been Added as a Caregiver',
+        message: `${patient?.firstName} ${patient?.lastName} has added you as a caregiver. You can now view their progress.`,
+        metadata: JSON.stringify({ patientName: `${patient?.firstName} ${patient?.lastName}` })
+      });
+
+      res.status(201).json({
+        message: "Caregiver invited successfully",
+        caregiverId: caregiver.id,
+        relationshipId: relation.id
+      });
+    } catch (error) {
+      console.error("Error inviting caregiver:", error);
+      res.status(500).json({ error: "Failed to invite caregiver" });
+    }
+  });
+
+  // Get pending access requests for a patient
+  app.get("/api/patients/:patientId/caregiver-requests", async (req, res) => {
+    try {
+      const patientId = parseInt(req.params.patientId);
+      const requests = await storage.getPendingCaregiverRequests(patientId);
+      res.json(requests);
+    } catch (error) {
+      console.error("Error fetching caregiver requests:", error);
+      res.status(500).json({ error: "Failed to fetch caregiver requests" });
+    }
+  });
+
+  // Get all caregivers for a patient
+  app.get("/api/patients/:patientId/caregivers", async (req, res) => {
+    try {
+      const patientId = parseInt(req.params.patientId);
+      const caregivers = await storage.getCaregiversByPatientId(patientId);
+      res.json(caregivers);
+    } catch (error) {
+      console.error("Error fetching caregivers:", error);
+      res.status(500).json({ error: "Failed to fetch caregivers" });
+    }
+  });
+
+  // Approve/Deny/Revoke caregiver access
+  app.patch("/api/caregiver-relations/:relationId/status", async (req, res) => {
+    try {
+      const relationId = parseInt(req.params.relationId);
+      const { status } = req.body;
+
+      if (!['approved', 'denied', 'revoked'].includes(status)) {
+        return res.status(400).json({ error: "Invalid status. Must be 'approved', 'denied', or 'revoked'" });
+      }
+
+      const updated = await storage.updateCaregiverAccessStatus(relationId, status);
+      if (!updated) {
+        return res.status(404).json({ error: "Relationship not found" });
+      }
+
+      // Create notification for caregiver
+      const notificationType = status === 'approved' ? 'access_approved' : 'access_denied';
+      const title = status === 'approved' ? 'Access Approved' : 'Access Request Update';
+      const message = status === 'approved'
+        ? 'Your request to view patient progress has been approved.'
+        : 'Your access request was not approved at this time.';
+
+      await storage.createCaregiverNotification({
+        caregiverId: updated.caregiverId,
+        patientId: updated.patientId,
+        notificationType,
+        title,
+        message,
+        metadata: '{}'
+      });
+
+      res.json(updated);
+    } catch (error) {
+      console.error("Error updating caregiver status:", error);
+      res.status(500).json({ error: "Failed to update caregiver status" });
+    }
+  });
+
+  // Get caregiver's patients and their data (caregiver dashboard)
+  app.get("/api/caregivers/:caregiverId/patients", async (req, res) => {
+    try {
+      const caregiverId = parseInt(req.params.caregiverId);
+      const patients = await storage.getPatientsByCaregiverId(caregiverId);
+      res.json(patients);
+    } catch (error) {
+      console.error("Error fetching caregiver's patients:", error);
+      res.status(500).json({ error: "Failed to fetch patients" });
+    }
+  });
+
+  // Get caregiver dashboard data for specific patient
+  app.get("/api/caregivers/:caregiverId/patients/:patientId/dashboard", async (req, res) => {
+    try {
+      const caregiverId = parseInt(req.params.caregiverId);
+      const patientId = parseInt(req.params.patientId);
+
+      // Verify caregiver has access to this patient
+      const relation = await storage.getCaregiverPatientRelation(caregiverId, patientId);
+      if (!relation || relation.accessStatus !== 'approved') {
+        return res.status(403).json({ error: "Access denied" });
+      }
+
+      // Get patient data (same as patient dashboard)
+      const patient = await storage.getPatient(patientId);
+      const goals = await storage.getGoalsByPatient(patientId);
+      const stats = await storage.getPatientStats(patientId);
+      const sessions = await storage.getSessionsByPatient(patientId);
+      const recentSessions = sessions.slice(0, 10);
+      const usageData = await storage.getDailyUsageData(patientId, 30);
+
+      res.json({
+        patient,
+        goals,
+        stats,
+        recentSessions,
+        usageData,
+        caregiverRelation: relation
+      });
+    } catch (error) {
+      console.error("Error fetching caregiver dashboard:", error);
+      res.status(500).json({ error: "Failed to fetch dashboard data" });
+    }
+  });
+
+  // Caregiver Observations
+  app.post("/api/caregivers/:caregiverId/observations", async (req, res) => {
+    try {
+      const caregiverId = parseInt(req.params.caregiverId);
+      const parsed = caregiverObservationSchema.safeParse(req.body);
+
+      if (!parsed.success) {
+        return res.status(400).json({ error: parsed.error.errors[0].message });
+      }
+
+      const data = parsed.data;
+
+      // Verify caregiver has access to this patient
+      const relation = await storage.getCaregiverPatientRelation(caregiverId, data.patientId);
+      if (!relation || relation.accessStatus !== 'approved') {
+        return res.status(403).json({ error: "Access denied" });
+      }
+
+      // Create observation
+      const observation = await storage.createCaregiverObservation({
+        caregiverId,
+        patientId: data.patientId,
+        observationDate: data.observationDate,
+        moodLevel: data.moodLevel || null,
+        painLevel: data.painLevel || null,
+        energyLevel: data.energyLevel || null,
+        appetite: data.appetite || null,
+        sleepQuality: data.sleepQuality || null,
+        mobilityObservations: data.mobilityObservations || null,
+        notes: data.notes || null,
+        concerns: data.concerns || null,
+        questionsForProvider: data.questionsForProvider || null
+      });
+
+      // Generate AI summary
+      const summaryParts = [];
+      if (data.moodLevel) summaryParts.push(`Mood: ${data.moodLevel}`);
+      if (data.painLevel !== undefined) summaryParts.push(`Pain level: ${data.painLevel}/10`);
+      if (data.energyLevel) summaryParts.push(`Energy: ${data.energyLevel}`);
+      if (data.appetite) summaryParts.push(`Appetite: ${data.appetite}`);
+      if (data.sleepQuality) summaryParts.push(`Sleep: ${data.sleepQuality}`);
+      if (data.mobilityObservations) summaryParts.push(`Mobility notes: ${data.mobilityObservations}`);
+      if (data.concerns) summaryParts.push(`Concerns: ${data.concerns}`);
+      if (data.questionsForProvider) summaryParts.push(`Questions for provider: ${data.questionsForProvider}`);
+
+      const aiSummary = `Caregiver observation from ${data.observationDate}: ${summaryParts.join('. ')}`;
+
+      await storage.updateObservationAiSummary(observation.id, aiSummary);
+
+      // Award XP for observation
+      await storage.updateCaregiverXp(relation.id, 10);
+
+      res.status(201).json({
+        ...observation,
+        aiSummary
+      });
+    } catch (error) {
+      console.error("Error creating observation:", error);
+      res.status(500).json({ error: "Failed to create observation" });
+    }
+  });
+
+  // Get observations for a patient
+  app.get("/api/patients/:patientId/observations", async (req, res) => {
+    try {
+      const patientId = parseInt(req.params.patientId);
+      const limit = parseInt(req.query.limit as string) || 10;
+      const observations = await storage.getCaregiverObservationsByPatient(patientId, limit);
+      res.json(observations);
+    } catch (error) {
+      console.error("Error fetching observations:", error);
+      res.status(500).json({ error: "Failed to fetch observations" });
+    }
+  });
+
+  // Caregiver Notifications
+  app.get("/api/caregivers/:caregiverId/notifications", async (req, res) => {
+    try {
+      const caregiverId = parseInt(req.params.caregiverId);
+      const unreadOnly = req.query.unreadOnly === 'true';
+      const notifications = await storage.getCaregiverNotifications(caregiverId, unreadOnly);
+      res.json(notifications);
+    } catch (error) {
+      console.error("Error fetching notifications:", error);
+      res.status(500).json({ error: "Failed to fetch notifications" });
+    }
+  });
+
+  app.patch("/api/caregiver-notifications/:notificationId/read", async (req, res) => {
+    try {
+      const notificationId = parseInt(req.params.notificationId);
+      const updated = await storage.markCaregiverNotificationRead(notificationId);
+      res.json(updated);
+    } catch (error) {
+      console.error("Error marking notification read:", error);
+      res.status(500).json({ error: "Failed to mark notification read" });
+    }
+  });
+
+  app.post("/api/caregivers/:caregiverId/notifications/read-all", async (req, res) => {
+    try {
+      const caregiverId = parseInt(req.params.caregiverId);
+      await storage.markAllCaregiverNotificationsRead(caregiverId);
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Error marking all notifications read:", error);
+      res.status(500).json({ error: "Failed to mark notifications read" });
+    }
+  });
+
+  // Discharge Checklist
+  app.get("/api/patients/:patientId/discharge-checklist", async (req, res) => {
+    try {
+      const patientId = parseInt(req.params.patientId);
+      const caregiverId = req.query.caregiverId ? parseInt(req.query.caregiverId as string) : undefined;
+      const checklist = await storage.getOrCreateDischargeChecklist(patientId, caregiverId);
+      res.json(checklist);
+    } catch (error) {
+      console.error("Error fetching discharge checklist:", error);
+      res.status(500).json({ error: "Failed to fetch discharge checklist" });
+    }
+  });
+
+  app.patch("/api/discharge-checklists/:checklistId", async (req, res) => {
+    try {
+      const checklistId = parseInt(req.params.checklistId);
+      const updates = req.body;
+
+      // Calculate completion percentage
+      const fields = ['equipmentNeeds', 'homeModifications', 'medicationReview',
+                      'followUpAppointments', 'emergencyContacts', 'warningSigns',
+                      'homeExercisePlan', 'dietRestrictions'];
+
+      let completedCount = 0;
+      for (const field of fields) {
+        if (updates[field]) {
+          const data = typeof updates[field] === 'string' ? JSON.parse(updates[field]) : updates[field];
+          if (Array.isArray(data) ? data.length > 0 : Object.keys(data).length > 0) {
+            completedCount++;
+          }
+        }
+      }
+      updates.completionPercent = Math.round((completedCount / fields.length) * 100);
+
+      const updated = await storage.updateDischargeChecklist(checklistId, updates);
+      res.json(updated);
+    } catch (error) {
+      console.error("Error updating discharge checklist:", error);
+      res.status(500).json({ error: "Failed to update discharge checklist" });
+    }
+  });
+
+  // Check for active session (conflict detection)
+  app.get("/api/patients/:patientId/active-session", async (req, res) => {
+    try {
+      const patientId = parseInt(req.params.patientId);
+      const activeSession = await storage.getActiveSessionForPatient(patientId);
+      res.json({ hasActiveSession: !!activeSession, session: activeSession || null });
+    } catch (error) {
+      console.error("Error checking active session:", error);
+      res.status(500).json({ error: "Failed to check active session" });
+    }
+  });
+
+  // Caregiver Achievements
+  app.get("/api/caregivers/:caregiverId/achievements", async (req, res) => {
+    try {
+      const caregiverId = parseInt(req.params.caregiverId);
+      const patientId = req.query.patientId ? parseInt(req.query.patientId as string) : undefined;
+      const achievements = await storage.getCaregiverAchievements(caregiverId, patientId);
+      res.json(achievements);
+    } catch (error) {
+      console.error("Error fetching caregiver achievements:", error);
+      res.status(500).json({ error: "Failed to fetch achievements" });
+    }
+  });
+
+  // Caregiver nudge to patient
+  app.post("/api/caregivers/:caregiverId/nudge/:patientId", kudosLimiter, async (req, res) => {
+    try {
+      const caregiverId = parseInt(req.params.caregiverId);
+      const patientId = parseInt(req.params.patientId);
+      const { message } = req.body;
+
+      // Verify caregiver has access
+      const relation = await storage.getCaregiverPatientRelation(caregiverId, patientId);
+      if (!relation || relation.accessStatus !== 'approved' || !relation.canSendNudges) {
+        return res.status(403).json({ error: "Access denied" });
+      }
+
+      // Get caregiver info for the nudge
+      const caregiver = await storage.getUser(caregiverId);
+
+      // Create nudge using existing nudge system
+      const nudge = await kudosService.sendNudge(
+        caregiverId,
+        patientId,
+        'caregiver_encouragement',
+        message || `${caregiver?.firstName} is cheering you on!`
+      );
+
+      // Award XP for sending nudge
+      await storage.updateCaregiverXp(relation.id, 5);
+
+      res.status(201).json(nudge);
+    } catch (error) {
+      console.error("Error sending caregiver nudge:", error);
+      res.status(500).json({ error: "Failed to send nudge" });
+    }
+  });
 
   const httpServer = createServer(app);
   return httpServer;

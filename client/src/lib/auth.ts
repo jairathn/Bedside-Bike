@@ -1,5 +1,8 @@
-import { Patient } from "@shared/schema";
+import { User } from "@shared/schema";
 import { useState, useEffect } from "react";
+
+// Patient is just a User with userType 'patient'
+type Patient = User & { userType: 'patient' };
 
 export interface AuthState {
   patient: Patient | null;
@@ -71,9 +74,9 @@ export class AuthService {
 
   isSessionValid(patient: Patient | null): boolean {
     if (!patient) return false;
-    
+
     // Check if patient data has required fields
-    return !!(patient.id && patient.patientId && patient.name && patient.isActive);
+    return !!(patient.id && patient.firstName && patient.lastName && patient.isActive);
   }
 
   getDaysSinceStart(startDate: string | Date): number {

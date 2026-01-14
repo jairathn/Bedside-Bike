@@ -634,6 +634,398 @@ console.log(`✅ SNF Patient: ${snfPatient.first_name} ${snfPatient.last_name} (
 // These will be added when those features are implemented
 console.log('\n✅ Skipping cross-patient interactions (tables not yet created)');
 
+// ==========================================
+// CAREGIVER USERS
+// ==========================================
+
+console.log('\n👪 Creating demo caregivers...');
+
+// Clean up existing demo caregivers
+const caregiverEmails = [
+  'maria.martinez@caregiver.local',
+  'michael.chen@caregiver.local',
+  'sarah.thompson@caregiver.local'
+];
+
+for (const email of caregiverEmails) {
+  const existingCaregiver = db.prepare('SELECT id FROM users WHERE email = ?').get(email) as any;
+  if (existingCaregiver) {
+    db.prepare('DELETE FROM caregiver_achievements WHERE caregiver_id = ?').run(existingCaregiver.id);
+    db.prepare('DELETE FROM caregiver_notifications WHERE caregiver_id = ?').run(existingCaregiver.id);
+    db.prepare('DELETE FROM discharge_checklists WHERE caregiver_id = ?').run(existingCaregiver.id);
+    db.prepare('DELETE FROM caregiver_observations WHERE caregiver_id = ?').run(existingCaregiver.id);
+    db.prepare('DELETE FROM caregiver_patients WHERE caregiver_id = ?').run(existingCaregiver.id);
+    db.prepare('DELETE FROM users WHERE id = ?').run(existingCaregiver.id);
+    console.log(`  Deleted existing caregiver: ${email}`);
+  }
+}
+
+// 1. Maria Martinez - Robert's spouse
+const mariaDOB = `${currentYear - 68}-05-15`;
+const mariaCaregiver = db.prepare(`
+  INSERT INTO users (
+    email, first_name, last_name, date_of_birth, user_type,
+    phone_number, is_active, tos_accepted_at, tos_version
+  ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+  RETURNING *
+`).get(
+  'maria.martinez@caregiver.local',
+  'Maria',
+  'Martinez',
+  mariaDOB,
+  'caregiver',
+  '555-0101',
+  1,
+  Math.floor(Date.now() / 1000),
+  '1.0'
+) as any;
+
+// Create caregiver-patient relationship (approved)
+db.prepare(`
+  INSERT INTO caregiver_patients (
+    caregiver_id, patient_id, relationship_type, access_status,
+    requested_at, approved_at, can_log_sessions, can_view_reports,
+    can_send_nudges, supporter_xp, supporter_level
+  ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+`).run(
+  mariaCaregiver.id,
+  hospitalPatient.id,
+  'spouse',
+  'approved',
+  Math.floor((Date.now() - 5 * 24 * 60 * 60 * 1000) / 1000), // 5 days ago
+  Math.floor((Date.now() - 5 * 24 * 60 * 60 * 1000) / 1000), // same day
+  1, 1, 1,
+  150, // Some XP from engagement
+  1
+);
+
+// Add some caregiver observations for Maria
+const mariaNow = new Date();
+const mariaObsDate = new Date(mariaNow);
+mariaObsDate.setDate(mariaObsDate.getDate() - 1);
+
+db.prepare(`
+  INSERT INTO caregiver_observations (
+    caregiver_id, patient_id, observation_date, mood_level,
+    pain_level, energy_level, appetite, sleep_quality,
+    mobility_observations, notes, concerns
+  ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+`).run(
+  mariaCaregiver.id,
+  hospitalPatient.id,
+  mariaObsDate.toISOString().split('T')[0],
+  'fair',
+  4,
+  'low',
+  'fair',
+  'poor',
+  'Robert needed more help getting to chair today. Shakiness seems worse in morning.',
+  'He is trying hard but gets frustrated. The Parkinson tremors make the biking harder.',
+  'Worried about his breathing - seems more labored after exercise.'
+);
+
+// Add notification for Maria
+db.prepare(`
+  INSERT INTO caregiver_notifications (
+    caregiver_id, patient_id, notification_type, title, message,
+    metadata, is_read
+  ) VALUES (?, ?, ?, ?, ?, ?, ?)
+`).run(
+  mariaCaregiver.id,
+  hospitalPatient.id,
+  'session_logged',
+  'Robert completed a session!',
+  'Robert just finished a 7-minute cycling session. Great progress!',
+  JSON.stringify({ session_duration: 420, session_date: mariaObsDate.toISOString().split('T')[0] }),
+  0
+);
+
+console.log(`✅ Caregiver: Maria Martinez (spouse to Robert) - ID: ${mariaCaregiver.id}`);
+
+// 2. Michael Chen - Dorothy's adult son
+const michaelDOB = `${currentYear - 55}-08-22`;
+const michaelCaregiver = db.prepare(`
+  INSERT INTO users (
+    email, first_name, last_name, date_of_birth, user_type,
+    phone_number, is_active, tos_accepted_at, tos_version
+  ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+  RETURNING *
+`).get(
+  'michael.chen@caregiver.local',
+  'Michael',
+  'Chen',
+  michaelDOB,
+  'caregiver',
+  '555-0202',
+  1,
+  Math.floor(Date.now() / 1000),
+  '1.0'
+) as any;
+
+// Create caregiver-patient relationship (approved)
+db.prepare(`
+  INSERT INTO caregiver_patients (
+    caregiver_id, patient_id, relationship_type, access_status,
+    requested_at, approved_at, can_log_sessions, can_view_reports,
+    can_send_nudges, supporter_xp, supporter_level
+  ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+`).run(
+  michaelCaregiver.id,
+  rehabPatient.id,
+  'child',
+  'approved',
+  Math.floor((Date.now() - 12 * 24 * 60 * 60 * 1000) / 1000), // 12 days ago
+  Math.floor((Date.now() - 12 * 24 * 60 * 60 * 1000) / 1000),
+  1, 1, 1,
+  450, // More XP - longer engagement
+  2
+);
+
+// Add caregiver observations for Michael
+const michaelObsDate = new Date();
+michaelObsDate.setDate(michaelObsDate.getDate() - 2);
+
+db.prepare(`
+  INSERT INTO caregiver_observations (
+    caregiver_id, patient_id, observation_date, mood_level,
+    pain_level, energy_level, appetite, sleep_quality,
+    mobility_observations, notes, concerns, questions_for_provider
+  ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+`).run(
+  michaelCaregiver.id,
+  rehabPatient.id,
+  michaelObsDate.toISOString().split('T')[0],
+  'good',
+  3,
+  'medium',
+  'good',
+  'fair',
+  'Mom is walking further with the walker. She got from bed to bathroom independently today.',
+  'Very motivated - she wants to go home and see her grandchildren. The PT sessions seem to be helping.',
+  'Blood sugar was 180 before lunch - should we adjust insulin?',
+  'When can she start bearing more weight? She wants to try without the walker.'
+);
+
+// Add achievement for Michael
+db.prepare(`
+  INSERT INTO caregiver_achievements (
+    caregiver_id, patient_id, type, title, description,
+    xp_reward, is_unlocked, unlocked_at
+  ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+`).run(
+  michaelCaregiver.id,
+  rehabPatient.id,
+  'week_streak',
+  'Week of Support',
+  'Checked in on your loved one for 7 consecutive days',
+  100,
+  1,
+  Math.floor(Date.now() / 1000) - 5 * 24 * 60 * 60
+);
+
+// Add notifications for Michael (read)
+db.prepare(`
+  INSERT INTO caregiver_notifications (
+    caregiver_id, patient_id, notification_type, title, message,
+    metadata, is_read
+  ) VALUES (?, ?, ?, ?, ?, ?, ?)
+`).run(
+  michaelCaregiver.id,
+  rehabPatient.id,
+  'goal_completed',
+  'Dorothy reached her daily goal!',
+  'Dorothy completed 15 minutes of cycling today - meeting her target!',
+  JSON.stringify({ goal_type: 'duration', target: 900, achieved: 920 }),
+  1
+);
+
+console.log(`✅ Caregiver: Michael Chen (son to Dorothy) - ID: ${michaelCaregiver.id}`);
+
+// 3. Sarah Thompson - James's daughter
+const sarahDOB = `${currentYear - 38}-11-03`;
+const sarahCaregiver = db.prepare(`
+  INSERT INTO users (
+    email, first_name, last_name, date_of_birth, user_type,
+    phone_number, is_active, tos_accepted_at, tos_version
+  ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+  RETURNING *
+`).get(
+  'sarah.thompson@caregiver.local',
+  'Sarah',
+  'Thompson',
+  sarahDOB,
+  'caregiver',
+  '555-0303',
+  1,
+  Math.floor(Date.now() / 1000),
+  '1.0'
+) as any;
+
+// Create caregiver-patient relationship (approved)
+db.prepare(`
+  INSERT INTO caregiver_patients (
+    caregiver_id, patient_id, relationship_type, access_status,
+    requested_at, approved_at, can_log_sessions, can_view_reports,
+    can_send_nudges, supporter_xp, supporter_level
+  ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+`).run(
+  sarahCaregiver.id,
+  snfPatient.id,
+  'child',
+  'approved',
+  Math.floor((Date.now() - 17 * 24 * 60 * 60 * 1000) / 1000), // 17 days ago
+  Math.floor((Date.now() - 17 * 24 * 60 * 60 * 1000) / 1000),
+  1, 1, 1,
+  680, // Most XP - longest engagement
+  3
+);
+
+// Add multiple observations for Sarah (more engaged caregiver)
+const sarahObsDate1 = new Date();
+sarahObsDate1.setDate(sarahObsDate1.getDate() - 3);
+
+db.prepare(`
+  INSERT INTO caregiver_observations (
+    caregiver_id, patient_id, observation_date, mood_level,
+    pain_level, energy_level, appetite, sleep_quality,
+    mobility_observations, notes, concerns, questions_for_provider
+  ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+`).run(
+  sarahCaregiver.id,
+  snfPatient.id,
+  sarahObsDate1.toISOString().split('T')[0],
+  'fair',
+  2,
+  'low',
+  'fair',
+  'fair',
+  'Dad is recovering from the setback. Walking shorter distances but less winded.',
+  'The CHF flare-up scared him. He is being more careful about salt intake now.',
+  'His legs are more swollen than usual - is this from the CHF or lack of movement?',
+  'Should we be worried about readmission? What warning signs should I watch for?'
+);
+
+const sarahObsDate2 = new Date();
+sarahObsDate2.setDate(sarahObsDate2.getDate() - 1);
+
+db.prepare(`
+  INSERT INTO caregiver_observations (
+    caregiver_id, patient_id, observation_date, mood_level,
+    pain_level, energy_level, appetite, sleep_quality,
+    mobility_observations, notes, concerns
+  ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+`).run(
+  sarahCaregiver.id,
+  snfPatient.id,
+  sarahObsDate2.toISOString().split('T')[0],
+  'good',
+  2,
+  'medium',
+  'good',
+  'good',
+  'Better day today! Dad walked to the dayroom and back with his walker.',
+  'His spirits are up. He video called with the grandkids and that motivated him.',
+  'Still watching the leg swelling but it seems better today.'
+);
+
+// Add discharge checklist for Sarah (partially started)
+db.prepare(`
+  INSERT INTO discharge_checklists (
+    patient_id, caregiver_id, equipment_needs, home_modifications,
+    medication_review, follow_up_appointments, emergency_contacts,
+    warning_signs, home_exercise_plan, completion_percent
+  ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+`).run(
+  snfPatient.id,
+  sarahCaregiver.id,
+  JSON.stringify({
+    walker: { needed: true, acquired: true },
+    shower_chair: { needed: true, acquired: false },
+    hospital_bed: { needed: false, acquired: false },
+    oxygen: { needed: true, acquired: true, notes: 'PRN only' }
+  }),
+  JSON.stringify({
+    grab_bars: { needed: true, installed: false },
+    ramp: { needed: false, installed: false },
+    bedroom_on_first_floor: { needed: true, arranged: true }
+  }),
+  JSON.stringify({
+    reviewed: true,
+    questions: ['Furosemide timing with other meds?'],
+    pillbox_organized: false
+  }),
+  JSON.stringify([
+    { type: 'PCP', scheduled: true, date: null },
+    { type: 'Cardiology', scheduled: false, date: null },
+    { type: 'Physical Therapy', scheduled: true, date: null }
+  ]),
+  JSON.stringify([
+    { name: 'Sarah Thompson', phone: '555-0303', relationship: 'daughter', primary: true },
+    { name: 'Mark Thompson', phone: '555-0304', relationship: 'son', primary: false }
+  ]),
+  JSON.stringify({
+    call_911: ['Chest pain', 'Severe shortness of breath', 'Sudden confusion'],
+    call_doctor: ['Weight gain >3 lbs overnight', 'Increased leg swelling', 'Fever >101']
+  }),
+  JSON.stringify({
+    understood: true,
+    equipment_at_home: false,
+    caregiver_trained: false
+  }),
+  45 // 45% complete
+);
+
+// Add achievements for Sarah
+db.prepare(`
+  INSERT INTO caregiver_achievements (
+    caregiver_id, patient_id, type, title, description,
+    xp_reward, is_unlocked, unlocked_at
+  ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+`).run(
+  sarahCaregiver.id,
+  snfPatient.id,
+  'consistent_supporter',
+  'Consistent Supporter',
+  'Logged observations for 14 consecutive days',
+  200,
+  1,
+  Math.floor(Date.now() / 1000) - 3 * 24 * 60 * 60
+);
+
+db.prepare(`
+  INSERT INTO caregiver_achievements (
+    caregiver_id, patient_id, type, title, description,
+    xp_reward, is_unlocked, unlocked_at
+  ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+`).run(
+  sarahCaregiver.id,
+  snfPatient.id,
+  'first_checkin',
+  'First Check-in',
+  'Completed your first daily observation',
+  50,
+  1,
+  Math.floor(Date.now() / 1000) - 17 * 24 * 60 * 60
+);
+
+// Add notifications for Sarah
+db.prepare(`
+  INSERT INTO caregiver_notifications (
+    caregiver_id, patient_id, notification_type, title, message,
+    metadata, is_read
+  ) VALUES (?, ?, ?, ?, ?, ?, ?)
+`).run(
+  sarahCaregiver.id,
+  snfPatient.id,
+  'streak_extended',
+  'Keep it up!',
+  'James has been cycling consistently for 4 days in a row!',
+  JSON.stringify({ streak_days: 4 }),
+  0
+);
+
+console.log(`✅ Caregiver: Sarah Thompson (daughter to James) - ID: ${sarahCaregiver.id}`);
+
 db.close();
 
 console.log('\n🎉 Demo ecosystem complete!');
@@ -644,8 +1036,15 @@ console.log('   • SNF Patient: James Thompson (65yo, Sepsis + CHF, 17 days wit
 console.log('\n   All patients assigned to Heidi Kissane, DPT');
 console.log('   Full schema populated with realistic data');
 console.log('   Cross-patient interactions enabled');
+console.log('\n👪 Demo Caregivers:');
+console.log('   • Maria Martinez (spouse) → Robert Martinez');
+console.log('   • Michael Chen (son) → Dorothy Chen');
+console.log('   • Sarah Thompson (daughter) → James Thompson');
 console.log('\n🔑 Login credentials:');
 console.log('   Provider: heidikissane@hospital.com');
 console.log('   Hospital Patient: Robert Martinez, DOB: ' + hospitalPatientDOB);
 console.log('   Rehab Patient: Dorothy Chen, DOB: ' + rehabPatientDOB);
 console.log('   SNF Patient: James Thompson, DOB: ' + snfPatientDOB);
+console.log('\n   Caregiver: Maria Martinez, DOB: ' + mariaDOB);
+console.log('   Caregiver: Michael Chen, DOB: ' + michaelDOB);
+console.log('   Caregiver: Sarah Thompson, DOB: ' + sarahDOB);
