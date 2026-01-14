@@ -460,6 +460,17 @@ export default function Auth({ onAuthSuccess }: AuthProps) {
                 </TabsTrigger>
               </TabsList>
 
+              {/* Caregiver Link */}
+              <div className="mt-4 text-center">
+                <a
+                  href="/caregiver/login"
+                  className="text-sm text-purple-600 hover:text-purple-700 hover:underline inline-flex items-center gap-1"
+                >
+                  <Heart className="w-3 h-3" />
+                  Are you a family member or caregiver? Sign in here
+                </a>
+              </div>
+
               {/* Patient Auth */}
               <TabsContent value="patient" className="mt-6">
                 <Tabs defaultValue="login" className="w-full">
