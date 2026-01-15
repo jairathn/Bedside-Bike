@@ -3440,38 +3440,49 @@ function calculateCurrentStreak(sessions: any[]): number {
   if (sessions.length === 0) return 0;
 
   // Group sessions by date (unique dates only)
-  const sessionDates = new Set(sessions.map(s => s.sessionDate));
+  const sessionDates = new Set(sessions.map(s => s.sessionDate).filter(d => d));
   const sortedDates = Array.from(sessionDates).sort().reverse(); // Most recent first
 
-  const today = new Date();
-  today.setHours(0, 0, 0, 0); // Normalize to start of day
+  if (sortedDates.length === 0) return 0;
+
+  // Get today in America/New_York timezone as YYYY-MM-DD
+  const todayStr = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'America/New_York',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit'
+  }).format(new Date());
+
+  // Helper to subtract days from a YYYY-MM-DD string
+  const subtractDay = (dateStr: string): string => {
+    const [year, month, day] = dateStr.split('-').map(Number);
+    const date = new Date(year, month - 1, day); // Local date, no UTC shift
+    date.setDate(date.getDate() - 1);
+    return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+  };
 
   let streak = 0;
-  let expectedDate = new Date(today);
+  let expectedDate = todayStr;
 
   for (const dateStr of sortedDates) {
-    const sessionDate = new Date(dateStr);
-    sessionDate.setHours(0, 0, 0, 0); // Normalize to start of day
-
-    // Check if session date matches expected date
-    if (sessionDate.getTime() === expectedDate.getTime()) {
+    // Compare as strings (both are YYYY-MM-DD format)
+    if (dateStr === expectedDate) {
       streak++;
-      // Move expected date back one day
-      expectedDate.setDate(expectedDate.getDate() - 1);
-    } else if (sessionDate.getTime() < expectedDate.getTime()) {
+      expectedDate = subtractDay(expectedDate);
+    } else if (dateStr < expectedDate) {
       // Gap in streak found
       break;
     }
-    // If sessionDate > expectedDate, skip it (future date, shouldn't happen)
+    // If dateStr > expectedDate, skip it (future date, shouldn't happen)
   }
 
   // If we didn't find any sessions today or yesterday, streak is 0
   // (streak must be current to count)
   if (streak > 0) {
-    const mostRecentSession = new Date(sortedDates[0]);
-    mostRecentSession.setHours(0, 0, 0, 0);
-    const daysSinceLastSession = Math.floor((today.getTime() - mostRecentSession.getTime()) / (1000 * 60 * 60 * 24));
-    if (daysSinceLastSession > 1) {
+    const mostRecentDate = sortedDates[0];
+    // Check if most recent session is today or yesterday
+    const yesterdayStr = subtractDay(todayStr);
+    if (mostRecentDate !== todayStr && mostRecentDate !== yesterdayStr) {
       // Streak is broken if last session was more than yesterday
       return 0;
     }
