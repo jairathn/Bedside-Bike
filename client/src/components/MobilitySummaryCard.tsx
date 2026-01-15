@@ -134,8 +134,13 @@ export default function MobilitySummaryCard({
     const totalSit = dailyData.reduce((sum, d) => sum + d.sitMinutes, 0);
     const totalTransfers = dailyData.reduce((sum, d) => sum + d.transfers, 0);
 
-    // Today's data
-    const todayStr = new Date().toISOString().split('T')[0];
+    // Today's data - use America/New_York timezone to match server-side session storage
+    const todayStr = new Intl.DateTimeFormat('en-CA', {
+      timeZone: 'America/New_York',
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit'
+    }).format(new Date());
     const todayData = dailyData.find(d => d.date === todayStr);
 
     return {
