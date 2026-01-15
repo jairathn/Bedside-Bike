@@ -2970,7 +2970,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const patientId = parseInt(req.params.patientId);
 
       // Ensure caregiver can only remove their own relationships
-      if ((req.user as User).id !== caregiverId) {
+      if (req.authenticatedUser!.id !== caregiverId) {
         return res.status(403).json({ error: "Access denied" });
       }
 
@@ -2990,7 +2990,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const caregiverId = parseInt(req.params.caregiverId);
 
       // Ensure caregiver can only see their own invitations
-      if ((req.user as User).id !== caregiverId) {
+      if (req.authenticatedUser!.id !== caregiverId) {
         return res.status(403).json({ error: "Access denied" });
       }
 
@@ -3010,7 +3010,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const { status } = req.body;
 
       // Ensure caregiver can only respond to their own invitations
-      if ((req.user as User).id !== caregiverId) {
+      if (req.authenticatedUser!.id !== caregiverId) {
         return res.status(403).json({ error: "Access denied" });
       }
 
@@ -3357,7 +3357,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Provider requests access to a patient (provider initiates)
   app.post("/api/provider-access-requests", requireAuth, requireProvider, async (req, res) => {
     try {
-      const providerId = (req.user as User).id;
+      const providerId = req.authenticatedUser!.id;
       const parsed = providerAccessRequestSchema.safeParse(req.body);
 
       if (!parsed.success) {
@@ -3440,7 +3440,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const providerId = parseInt(req.params.providerId);
 
       // Ensure provider can only see their own requests
-      if ((req.user as User).id !== providerId) {
+      if (req.authenticatedUser!.id !== providerId) {
         return res.status(403).json({ error: "Access denied" });
       }
 
@@ -3565,7 +3565,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const { status } = req.body;
 
       // Ensure provider can only respond to their own requests
-      if ((req.user as User).id !== providerId) {
+      if (req.authenticatedUser!.id !== providerId) {
         return res.status(403).json({ error: "Access denied" });
       }
 
@@ -3617,7 +3617,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const providerId = parseInt(req.params.providerId);
 
       // Ensure provider can only see their own notifications
-      if ((req.user as User).id !== providerId) {
+      if (req.authenticatedUser!.id !== providerId) {
         return res.status(403).json({ error: "Access denied" });
       }
 
@@ -3646,7 +3646,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const providerId = parseInt(req.params.providerId);
 
       // Ensure provider can only mark their own notifications as read
-      if ((req.user as User).id !== providerId) {
+      if (req.authenticatedUser!.id !== providerId) {
         return res.status(403).json({ error: "Access denied" });
       }
 
