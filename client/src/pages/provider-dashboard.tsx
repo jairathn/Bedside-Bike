@@ -36,8 +36,11 @@ import {
   X,
   ClipboardCheck,
   UserPlus,
-  Bell
+  Bell,
+  Trash2,
+  Settings
 } from "lucide-react";
+import { Checkbox } from "@/components/ui/checkbox";
 import { apiRequest } from "@/lib/queryClient";
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar } from 'recharts';
 import { ProviderGoalEditor } from "@/components/provider-goal-editor";
@@ -265,6 +268,11 @@ export default function ProviderDashboard() {
   // Pending patient requests modal state
   const [pendingRequestsOpen, setPendingRequestsOpen] = useState(false);
 
+  // Patient removal state
+  const [selectedPatientsForRemoval, setSelectedPatientsForRemoval] = useState<Set<number>>(new Set());
+  const [removeConfirmOpen, setRemoveConfirmOpen] = useState(false);
+  const [isManageMode, setIsManageMode] = useState(false);
+
   // Check if user can edit goals (all provider types can edit)
   const canEditGoals = (user: any) => {
     return user?.userType === 'provider';
@@ -342,6 +350,54 @@ export default function ProviderDashboard() {
       });
     },
   });
+
+  // Remove patients mutation
+  const removePatientsMutation = useMutation({
+    mutationFn: async (relationshipIds: number[]) => {
+      // Remove each relationship
+      await Promise.all(
+        relationshipIds.map(id =>
+          apiRequest(`/api/provider-relationships/${id}`, {
+            method: 'DELETE',
+          })
+        )
+      );
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: [`/api/providers/${user?.id}/patients`] });
+      setSelectedPatientsForRemoval(new Set());
+      setIsManageMode(false);
+      setRemoveConfirmOpen(false);
+      // Clear selected patient if it was removed
+      if (selectedPatient && selectedPatientsForRemoval.has(selectedPatient.relationshipId)) {
+        setSelectedPatient(null);
+      }
+      toast({
+        title: "Patients Removed",
+        description: "Selected patients have been removed from your list.",
+      });
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Removal Failed",
+        description: error.message || "Failed to remove patients",
+        variant: "destructive",
+      });
+    },
+  });
+
+  // Toggle patient selection for removal
+  const togglePatientSelection = (relationshipId: number) => {
+    setSelectedPatientsForRemoval(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(relationshipId)) {
+        newSet.delete(relationshipId);
+      } else {
+        newSet.add(relationshipId);
+      }
+      return newSet;
+    });
+  };
 
   // Debug logging for provider dashboard
   useEffect(() => {
@@ -616,37 +672,85 @@ export default function ProviderDashboard() {
                         </span>
                       </Button>
                     )}
-                    <Button
-                      variant="default"
-                      size="sm"
-                      onClick={() => setAddPatientOpen(true)}
-                    >
-                      <UserPlus className="w-4 h-4 mr-1" />
-                      Add Patient
-                    </Button>
+                    {patients && patients.length > 0 && (
+                      <Button
+                        variant={isManageMode ? "secondary" : "outline"}
+                        size="sm"
+                        onClick={() => {
+                          setIsManageMode(!isManageMode);
+                          setSelectedPatientsForRemoval(new Set());
+                        }}
+                      >
+                        <Settings className="w-4 h-4 mr-1" />
+                        {isManageMode ? "Done" : "Manage"}
+                      </Button>
+                    )}
+                    {!isManageMode && (
+                      <Button
+                        variant="default"
+                        size="sm"
+                        onClick={() => setAddPatientOpen(true)}
+                      >
+                        <UserPlus className="w-4 h-4 mr-1" />
+                        Add Patient
+                      </Button>
+                    )}
                   </div>
                 </div>
+                {/* Remove Selected button when in manage mode */}
+                {isManageMode && selectedPatientsForRemoval.size > 0 && (
+                  <div className="mt-3">
+                    <Button
+                      variant="destructive"
+                      size="sm"
+                      className="w-full"
+                      onClick={() => setRemoveConfirmOpen(true)}
+                    >
+                      <Trash2 className="w-4 h-4 mr-2" />
+                      Remove Selected ({selectedPatientsForRemoval.size})
+                    </Button>
+                  </div>
+                )}
               </CardHeader>
               <CardContent className="space-y-3">
                 {patients?.map((patient: any) => (
                   <div
                     key={patient.id}
-                    className={`p-3 rounded-lg border cursor-pointer transition-colors ${
-                      selectedPatient?.id === patient.id
-                        ? 'border-blue-500 bg-blue-50'
-                        : 'border-gray-200 hover:border-gray-300'
+                    className={`p-3 rounded-lg border transition-colors ${
+                      isManageMode
+                        ? selectedPatientsForRemoval.has(patient.relationshipId)
+                          ? 'border-red-500 bg-red-50'
+                          : 'border-gray-200 hover:border-gray-300'
+                        : selectedPatient?.id === patient.id
+                          ? 'border-blue-500 bg-blue-50'
+                          : 'border-gray-200 hover:border-gray-300 cursor-pointer'
                     }`}
-                    onClick={() => setSelectedPatient(patient)}
+                    onClick={() => {
+                      if (isManageMode) {
+                        togglePatientSelection(patient.relationshipId);
+                      } else {
+                        setSelectedPatient(patient);
+                      }
+                    }}
                   >
                     <div className="flex justify-between items-start">
-                      <div>
-                        <p className="font-medium">{patient.firstName} {patient.lastName}</p>
-                        <p className="text-sm text-gray-500">
-                          Admitted: {new Date(patient.admissionDate).toLocaleDateString()}
-                        </p>
-                        <p className="text-sm text-gray-500">
-                          Day {Math.floor((Date.now() - new Date(patient.admissionDate).getTime()) / (1000 * 60 * 60 * 24))}
-                        </p>
+                      <div className="flex items-start gap-3">
+                        {isManageMode && (
+                          <Checkbox
+                            checked={selectedPatientsForRemoval.has(patient.relationshipId)}
+                            onCheckedChange={() => togglePatientSelection(patient.relationshipId)}
+                            className="mt-1"
+                          />
+                        )}
+                        <div>
+                          <p className="font-medium">{patient.firstName} {patient.lastName}</p>
+                          <p className="text-sm text-gray-500">
+                            Admitted: {new Date(patient.admissionDate).toLocaleDateString()}
+                          </p>
+                          <p className="text-sm text-gray-500">
+                            Day {Math.floor((Date.now() - new Date(patient.admissionDate).getTime()) / (1000 * 60 * 60 * 24))}
+                          </p>
+                        </div>
                       </div>
                       <Badge variant="secondary" className="text-xs">
                         Active
@@ -1012,6 +1116,47 @@ export default function ProviderDashboard() {
           <DialogFooter>
             <Button variant="outline" onClick={() => setPendingRequestsOpen(false)}>
               Close
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Remove Patients Confirmation Dialog */}
+      <Dialog open={removeConfirmOpen} onOpenChange={setRemoveConfirmOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center text-red-600">
+              <AlertTriangle className="w-5 h-5 mr-2" />
+              Remove Patients
+            </DialogTitle>
+            <DialogDescription>
+              Are you sure you want to remove {selectedPatientsForRemoval.size} patient{selectedPatientsForRemoval.size > 1 ? 's' : ''} from your list?
+              You will no longer be able to view their data. This action cannot be undone.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="py-4">
+            <div className="bg-gray-50 rounded-lg p-3 max-h-40 overflow-y-auto space-y-2">
+              {patients?.filter((p: any) => selectedPatientsForRemoval.has(p.relationshipId)).map((patient: any) => (
+                <div key={patient.id} className="flex items-center gap-2 text-sm">
+                  <span className="w-2 h-2 bg-red-500 rounded-full"></span>
+                  <span>{patient.firstName} {patient.lastName}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+          <DialogFooter className="gap-2">
+            <Button
+              variant="outline"
+              onClick={() => setRemoveConfirmOpen(false)}
+            >
+              Cancel
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={() => removePatientsMutation.mutate(Array.from(selectedPatientsForRemoval))}
+              disabled={removePatientsMutation.isPending}
+            >
+              {removePatientsMutation.isPending ? "Removing..." : "Remove Patients"}
             </Button>
           </DialogFooter>
         </DialogContent>

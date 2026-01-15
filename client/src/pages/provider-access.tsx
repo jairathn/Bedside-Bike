@@ -85,7 +85,7 @@ export default function ProviderAccessPage() {
     enabled: !!user,
   });
 
-  // Grant access mutation
+  // Grant access mutation (creates pending request for provider to accept)
   const grantAccessMutation = useMutation({
     mutationFn: async (providerId: string) => {
       if (!user?.id) {
@@ -106,10 +106,11 @@ export default function ProviderAccessPage() {
       await queryClient.invalidateQueries({ queryKey: ['/api/provider-relationships', { patientId: user?.id }] });
 
       toast({
-        title: "Invitation Sent",
-        description: "Your provider will be notified and can accept the invitation to view your progress.",
+        title: "Access Granted",
+        description: "Your provider will be notified and can view your data on their next login",
       });
       setShowGrantDialog(false);
+      setShowAddProviderDialog(false);
       setSelectedProvider("");
     },
     onError: (error: any) => {
@@ -387,7 +388,7 @@ export default function ProviderAccessPage() {
                     </div>
 
                     <div className="flex space-x-3">
-                      <Button 
+                      <Button
                         onClick={() => grantAccessMutation.mutate(selectedProvider)}
                         disabled={!selectedProvider || selectedProvider === "no-providers" || grantAccessMutation.isPending}
                         className="flex-1"
@@ -571,7 +572,7 @@ export default function ProviderAccessPage() {
                               </SelectContent>
                             </Select>
                           </div>
-                          
+
                           <div className="bg-blue-50 p-4 rounded-lg">
                             <h4 className="font-semibold text-blue-900 mb-2">What access will they have?</h4>
                             <ul className="text-sm text-blue-800 space-y-1">
@@ -583,7 +584,7 @@ export default function ProviderAccessPage() {
                           </div>
 
                           <div className="flex space-x-3">
-                            <Button 
+                            <Button
                               onClick={() => {
                                 if (selectedProvider) {
                                   grantAccessMutation.mutate(selectedProvider);
@@ -648,7 +649,7 @@ export default function ProviderAccessPage() {
                           </SelectContent>
                         </Select>
                       </div>
-                      
+
                       <div className="bg-blue-50 p-4 rounded-lg">
                         <h4 className="font-semibold text-blue-900 mb-2">What access will they have?</h4>
                         <ul className="text-sm text-blue-800 space-y-1">
@@ -660,7 +661,7 @@ export default function ProviderAccessPage() {
                       </div>
 
                       <div className="flex space-x-3">
-                        <Button 
+                        <Button
                           onClick={() => {
                             if (selectedProvider) {
                               grantAccessMutation.mutate(selectedProvider);
@@ -671,8 +672,8 @@ export default function ProviderAccessPage() {
                         >
                           {grantAccessMutation.isPending ? "Sending Invitation..." : "Send Invitation"}
                         </Button>
-                        <Button 
-                          variant="outline" 
+                        <Button
+                          variant="outline"
                           onClick={() => setShowGrantDialog(false)}
                           className="flex-1"
                         >

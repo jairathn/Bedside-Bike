@@ -1986,7 +1986,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Grant provider access
+  // Send provider access invitation (creates pending request for provider to accept)
   app.post("/api/provider-relationships", async (req, res) => {
     try {
       // Get patient ID from request body (sent from frontend based on logged-in user)
@@ -2013,50 +2013,39 @@ export async function registerRoutes(app: Express): Promise<Server> {
         .limit(1);
 
       if (existingRelationship.length > 0) {
-        return res.status(400).json({ error: "Provider already has access to this patient" });
+        const existing = existingRelationship[0];
+        if (existing.accessStatus === 'pending') {
+          return res.status(400).json({ error: "A pending invitation already exists for this provider" });
+        }
+        if (existing.accessStatus === 'approved' && existing.permissionGranted) {
+          return res.status(400).json({ error: "Provider already has access to this patient" });
+        }
       }
 
-      // Check for existing pending relationship
-      const existingPending = await db.select()
-        .from(providerPatients)
-        .where(
-          and(
-            eq(providerPatients.patientId, patientId),
-            eq(providerPatients.providerId, providerId),
-            eq(providerPatients.accessStatus, 'pending')
-          )
-        )
-        .limit(1);
-
-      if (existingPending.length > 0) {
-        return res.status(400).json({ error: "An invitation is already pending for this provider" });
-      }
-
-      // Create pending relationship - provider needs to accept
-      const [relationship] = await db.insert(providerPatients).values({
-        patientId,
-        providerId,
-        permissionGranted: false,
-        isActive: false,
-        accessStatus: 'pending',
-        requestedBy: 'patient',
-        requestedAt: new Date()
-      }).returning();
+      // Create a pending invitation instead of immediately granting access
+      const relationship = await storage.createPatientAccessRequest(providerId, patientId);
 
       // Create notification for provider
-      await storage.createCaregiverNotification({
-        caregiverId: providerId, // Using caregiver notification system for providers too
+      const patient = await storage.getUser(patientId);
+      await storage.createProviderNotification({
+        providerId,
         patientId,
         notificationType: 'access_request',
-        title: 'Patient Access Request',
-        message: `A patient has invited you to view their mobility data. Please review and accept the invitation.`,
-        metadata: JSON.stringify({ requestedBy: 'patient' })
+        title: 'Patient Access Invitation',
+        message: `${patient?.firstName} ${patient?.lastName} has invited you to view their mobility data.`,
+        metadata: JSON.stringify({ patientName: `${patient?.firstName} ${patient?.lastName}` })
+      });
+
+      logger.info("Patient sent provider invitation", {
+        patientId,
+        providerId,
+        relationId: relationship.id
       });
 
       res.json(relationship);
     } catch (error) {
-      logger.error("Grant access error", { error: (error as Error).message });
-      res.status(500).json({ error: "Failed to grant provider access" });
+      logger.error("Send invitation error", { error: (error as Error).message });
+      res.status(500).json({ error: "Failed to send provider invitation" });
     }
   });
 
@@ -2919,6 +2908,27 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       logger.error("Error fetching caregiver's patients", { error: (error as Error).message });
       res.status(500).json({ error: "Failed to fetch patients" });
+    }
+  });
+
+  // Caregiver removes their access to a patient
+  app.delete("/api/caregivers/:caregiverId/patients/:patientId", requireAuth, requireCaregiver, async (req, res) => {
+    try {
+      const caregiverId = parseInt(req.params.caregiverId);
+      const patientId = parseInt(req.params.patientId);
+
+      // Ensure caregiver can only remove their own relationships
+      if ((req.user as User).id !== caregiverId) {
+        return res.status(403).json({ error: "Access denied" });
+      }
+
+      await storage.deleteCaregiverPatientRelationship(caregiverId, patientId);
+
+      logger.info("Caregiver removed patient access", { caregiverId, patientId });
+      res.json({ success: true });
+    } catch (error) {
+      logger.error("Error removing caregiver patient access", { error: (error as Error).message });
+      res.status(500).json({ error: "Failed to remove patient access" });
     }
   });
 

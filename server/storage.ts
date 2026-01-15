@@ -1569,6 +1569,22 @@ export class DatabaseStorage implements IStorage {
     return updated;
   }
 
+  async deleteCaregiverPatientRelationship(caregiverId: number, patientId: number): Promise<void> {
+    await db
+      .update(caregiverPatients)
+      .set({
+        isActive: false,
+        accessStatus: 'revoked',
+        revokedAt: new Date()
+      })
+      .where(
+        and(
+          eq(caregiverPatients.caregiverId, caregiverId),
+          eq(caregiverPatients.patientId, patientId)
+        )
+      );
+  }
+
   // Caregiver Observation Operations
   async createCaregiverObservation(observation: InsertCaregiverObservation): Promise<CaregiverObservation> {
     const [newObs] = await db.insert(caregiverObservations).values(observation).returning();
