@@ -395,7 +395,7 @@ export class DatabaseStorage implements IStorage {
     return updatedRelation;
   }
 
-  async getPatientsByProvider(providerId: number): Promise<User[]> {
+  async getPatientsByProvider(providerId: number): Promise<any[]> {
     return await db
       .select({
         id: users.id,
@@ -412,6 +412,7 @@ export class DatabaseStorage implements IStorage {
         isActive: users.isActive,
         createdAt: users.createdAt,
         updatedAt: users.updatedAt,
+        relationshipId: providerPatients.id,
       })
       .from(users)
       .innerJoin(providerPatients, eq(users.id, providerPatients.patientId))
