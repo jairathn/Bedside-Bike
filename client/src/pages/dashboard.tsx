@@ -179,6 +179,27 @@ export default function DashboardPage() {
     enabled: !!currentPatient?.id && currentPatient?.userType === 'patient',
   });
 
+  // Get patient notifications (provider/caregiver accepted/declined)
+  const { data: patientNotifications = [] } = useQuery({
+    queryKey: [`/api/patients/${currentPatient?.id}/notifications`],
+    enabled: !!currentPatient?.id && currentPatient?.userType === 'patient',
+  });
+
+  const unreadNotifications = patientNotifications.filter((n: any) => !n.isRead);
+  const [showNotifications, setShowNotifications] = useState(false);
+
+  // Mark all notifications as read mutation
+  const markAllNotificationsReadMutation = useMutation({
+    mutationFn: async () => {
+      return await apiRequest(`/api/patients/${currentPatient?.id}/notifications/read-all`, {
+        method: 'POST',
+      });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: [`/api/patients/${currentPatient?.id}/notifications`] });
+    },
+  });
+
   // Show provider requests modal when there are pending requests on first load
   useEffect(() => {
     if (pendingProviderRequests.length > 0 && !showProviderRequests) {
@@ -449,6 +470,21 @@ export default function DashboardPage() {
               <p className="text-sm sm:text-base lg:text-lg text-gray-600">Let's pedal!</p>
             </div>
             <div className="flex items-center gap-2 sm:gap-3">
+              {/* Notifications (invitation responses) */}
+              {unreadNotifications.length > 0 && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="relative bg-blue-50 border-blue-300 hover:bg-blue-100"
+                  onClick={() => setShowNotifications(true)}
+                >
+                  <Bell className="w-4 h-4 text-blue-600" />
+                  <span className="absolute -top-1 -right-1 w-5 h-5 bg-blue-500 text-white text-xs rounded-full flex items-center justify-center">
+                    {unreadNotifications.length}
+                  </span>
+                </Button>
+              )}
+              {/* Pending provider requests */}
               {pendingProviderRequests.length > 0 && (
                 <Button
                   variant="outline"
@@ -456,8 +492,8 @@ export default function DashboardPage() {
                   className="relative bg-orange-50 border-orange-300 hover:bg-orange-100"
                   onClick={() => setShowProviderRequests(true)}
                 >
-                  <Bell className="w-4 h-4 text-orange-600" />
-                  <span className="absolute -top-1 -right-1 w-5 h-5 bg-red-500 text-white text-xs rounded-full flex items-center justify-center">
+                  <UserCheck className="w-4 h-4 text-orange-600" />
+                  <span className="absolute -top-1 -right-1 w-5 h-5 bg-orange-500 text-white text-xs rounded-full flex items-center justify-center">
                     {pendingProviderRequests.length}
                   </span>
                 </Button>
@@ -1407,6 +1443,72 @@ export default function DashboardPage() {
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setShowProviderRequests(false)}>
+              Close
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Patient Notifications Dialog */}
+      <Dialog open={showNotifications} onOpenChange={setShowNotifications}>
+        <DialogContent className="sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle className="flex items-center">
+              <Bell className="w-5 h-5 mr-2 text-blue-600" />
+              Notifications
+            </DialogTitle>
+            <DialogDescription>
+              Updates about your provider and caregiver invitations.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3 py-4 max-h-96 overflow-y-auto">
+            {patientNotifications.map((notification: any) => (
+              <div
+                key={notification.id}
+                className={`p-4 rounded-lg border ${
+                  notification.isRead ? 'bg-gray-50 border-gray-200' : 'bg-blue-50 border-blue-200'
+                }`}
+              >
+                <div className="flex items-start justify-between">
+                  <div className="flex-1">
+                    <p className={`font-medium ${notification.isRead ? 'text-gray-700' : 'text-blue-900'}`}>
+                      {notification.title}
+                    </p>
+                    <p className={`text-sm mt-1 ${notification.isRead ? 'text-gray-600' : 'text-blue-700'}`}>
+                      {notification.message}
+                    </p>
+                    <p className="text-xs text-gray-400 mt-2">
+                      {new Date(notification.createdAt).toLocaleDateString('en-US', {
+                        month: 'short',
+                        day: 'numeric',
+                        hour: 'numeric',
+                        minute: '2-digit'
+                      })}
+                    </p>
+                  </div>
+                  {!notification.isRead && (
+                    <span className="w-2 h-2 bg-blue-500 rounded-full flex-shrink-0 mt-2"></span>
+                  )}
+                </div>
+              </div>
+            ))}
+            {patientNotifications.length === 0 && (
+              <p className="text-center text-gray-500 py-4">
+                No notifications yet
+              </p>
+            )}
+          </div>
+          <DialogFooter className="gap-2">
+            {unreadNotifications.length > 0 && (
+              <Button
+                variant="outline"
+                onClick={() => markAllNotificationsReadMutation.mutate()}
+                disabled={markAllNotificationsReadMutation.isPending}
+              >
+                Mark All Read
+              </Button>
+            )}
+            <Button variant="outline" onClick={() => setShowNotifications(false)}>
               Close
             </Button>
           </DialogFooter>
