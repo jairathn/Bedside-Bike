@@ -1532,7 +1532,7 @@ export class DatabaseStorage implements IStorage {
       .where(and(
         eq(caregiverPatients.caregiverId, caregiverId),
         eq(caregiverPatients.accessStatus, 'pending'),
-        eq(caregiverPatients.requestedBy, 'patient')
+        eq(caregiverPatients.isActive, true)
       ));
 
     return relations.map(r => ({
