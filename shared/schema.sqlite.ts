@@ -70,6 +70,12 @@ export const providerPatients = sqliteTable("provider_patients", {
   permissionGranted: integer("permission_granted", { mode: 'boolean' }).default(false),
   grantedAt: integer("granted_at", { mode: 'timestamp' }),
   isActive: integer("is_active", { mode: 'boolean' }).default(true),
+  // Access request workflow fields (similar to caregiverPatients)
+  accessStatus: text("access_status").default('pending'), // 'pending', 'approved', 'denied', 'revoked'
+  requestedBy: text("requested_by").default('patient'), // 'patient' or 'provider' - who initiated the request
+  requestedAt: integer("requested_at", { mode: 'timestamp' }).default(sql`(unixepoch())`),
+  approvedAt: integer("approved_at", { mode: 'timestamp' }),
+  deniedAt: integer("denied_at", { mode: 'timestamp' }),
   createdAt: integer("created_at", { mode: 'timestamp' }).default(sql`(unixepoch())`),
 });
 
@@ -705,6 +711,7 @@ export const caregiverPatients = sqliteTable("caregiver_patients", {
   patientId: integer("patient_id").notNull().references(() => users.id),
   relationshipType: text("relationship_type").notNull(), // 'spouse', 'child', 'parent', 'sibling', 'friend', 'other_family', 'professional_caregiver'
   accessStatus: text("access_status").default('pending'), // 'pending', 'approved', 'denied', 'revoked'
+  requestedBy: text("requested_by").default('caregiver'), // 'caregiver' or 'patient' - who initiated the request
   requestedAt: integer("requested_at", { mode: 'timestamp' }).default(sql`(unixepoch())`),
   approvedAt: integer("approved_at", { mode: 'timestamp' }),
   revokedAt: integer("revoked_at", { mode: 'timestamp' }),
@@ -788,6 +795,23 @@ export const caregiverAchievements = sqliteTable("caregiver_achievements", {
   createdAt: integer("created_at", { mode: 'timestamp' }).default(sql`(unixepoch())`),
 });
 
+// ============================================================================
+// PROVIDER NOTIFICATION SYSTEM
+// ============================================================================
+
+// Provider notifications - in-app notifications for providers (e.g., patient access requests)
+export const providerNotifications = sqliteTable("provider_notifications", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  providerId: integer("provider_id").notNull().references(() => users.id),
+  patientId: integer("patient_id").notNull().references(() => users.id),
+  notificationType: text("notification_type").notNull(), // 'access_request', 'access_approved', 'access_denied', 'access_revoked'
+  title: text("title").notNull(),
+  message: text("message").notNull(),
+  metadata: text("metadata").default('{}'),
+  isRead: integer("is_read", { mode: 'boolean' }).default(false),
+  createdAt: integer("created_at", { mode: 'timestamp' }).default(sql`(unixepoch())`),
+});
+
 // Validation schemas (reuse from main schema)
 export const loginSchema = z.object({
   email: z.string().email("Please enter a valid email address"),
@@ -848,6 +872,18 @@ export const caregiverInviteSchema = z.object({
   caregiverLastName: z.string().min(1, "Last name is required"),
   relationshipType: z.enum(["spouse", "partner", "child", "parent", "sibling", "friend", "other_family", "professional_caregiver"]),
   phoneNumber: z.string().optional(),
+});
+
+// Provider access request schema - for providers requesting access to patients
+export const providerAccessRequestSchema = z.object({
+  patientFirstName: z.string().min(1, "Patient first name is required"),
+  patientLastName: z.string().min(1, "Patient last name is required"),
+  patientDateOfBirth: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Date must be in YYYY-MM-DD format"),
+});
+
+// Provider invite schema - for patients inviting providers
+export const providerInviteSchema = z.object({
+  providerEmail: z.string().email("Please enter a valid email address"),
 });
 
 export const riskAssessmentInputSchema = z.object({
@@ -1068,3 +1104,15 @@ export type CaregiverRegistration = z.infer<typeof caregiverRegistrationSchema>;
 export type CaregiverObservationInput = z.infer<typeof caregiverObservationSchema>;
 export type CaregiverAccessRequest = z.infer<typeof caregiverAccessRequestSchema>;
 export type CaregiverInvite = z.infer<typeof caregiverInviteSchema>;
+
+// ============================================================================
+// PROVIDER NOTIFICATION SYSTEM - Insert Schemas and Types
+// ============================================================================
+
+export const insertProviderNotificationSchema = createInsertSchema(providerNotifications);
+
+export type ProviderNotification = typeof providerNotifications.$inferSelect;
+export type InsertProviderNotification = typeof providerNotifications.$inferInsert;
+
+export type ProviderAccessRequest = z.infer<typeof providerAccessRequestSchema>;
+export type ProviderInvite = z.infer<typeof providerInviteSchema>;

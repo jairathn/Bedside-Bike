@@ -5,11 +5,12 @@ import { useAuth } from "@/hooks/use-auth";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
-import { Target, MessageCircle, LogOut, Calculator, Gamepad2, TrendingUp, Play, Trophy, Menu, Lightbulb, ChevronDown, ChevronUp, ChevronLeft, ChevronRight, HelpCircle, Heart, Activity, Info, ClipboardPlus, Clock, Calendar, Bike, Footprints, Armchair } from "lucide-react";
+import { Target, MessageCircle, LogOut, Calculator, Gamepad2, TrendingUp, Play, Trophy, Menu, Lightbulb, ChevronDown, ChevronUp, ChevronLeft, ChevronRight, HelpCircle, Heart, Activity, Info, ClipboardPlus, Clock, Calendar, Bike, Footprints, Armchair, Bell, UserCheck } from "lucide-react";
+import { apiRequest } from "@/lib/queryClient";
 import { ProgressRing } from "@/components/progress-ring";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import StartSessionModal from "@/components/StartSessionModal";
@@ -167,9 +168,49 @@ export default function DashboardPage() {
   const [showMETsExplanation, setShowMETsExplanation] = useState(false);
   const [showManualSession, setShowManualSession] = useState(false);
   const [showStartSession, setShowStartSession] = useState(false);
+  const [showProviderRequests, setShowProviderRequests] = useState(false);
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const { state: sessionState } = useSessionTimer();
+
+  // Get pending provider requests (providers who have requested access to this patient)
+  const { data: pendingProviderRequests = [] } = useQuery({
+    queryKey: [`/api/patients/${currentPatient?.id}/provider-requests`],
+    enabled: !!currentPatient?.id && currentPatient?.userType === 'patient',
+  });
+
+  // Show provider requests modal when there are pending requests on first load
+  useEffect(() => {
+    if (pendingProviderRequests.length > 0 && !showProviderRequests) {
+      setShowProviderRequests(true);
+    }
+  }, [pendingProviderRequests]);
+
+  // Respond to provider access request mutation
+  const respondToProviderRequestMutation = useMutation({
+    mutationFn: async ({ relationId, status }: { relationId: number; status: 'approved' | 'denied' }) => {
+      return await apiRequest(`/api/provider-relations/${relationId}/status`, {
+        method: 'PATCH',
+        body: JSON.stringify({ status }),
+      });
+    },
+    onSuccess: (_, variables) => {
+      queryClient.invalidateQueries({ queryKey: [`/api/patients/${currentPatient?.id}/provider-requests`] });
+      toast({
+        title: variables.status === 'approved' ? "Access Granted" : "Request Denied",
+        description: variables.status === 'approved'
+          ? "The provider now has access to your mobility data."
+          : "The provider's access request has been denied.",
+      });
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Action Failed",
+        description: error.message || "Failed to respond to request",
+        variant: "destructive",
+      });
+    },
+  });
 
   // Manual session form state
   const getDefaultDateTime = () => {
@@ -408,6 +449,19 @@ export default function DashboardPage() {
               <p className="text-sm sm:text-base lg:text-lg text-gray-600">Let's pedal!</p>
             </div>
             <div className="flex items-center gap-2 sm:gap-3">
+              {pendingProviderRequests.length > 0 && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="relative bg-orange-50 border-orange-300 hover:bg-orange-100"
+                  onClick={() => setShowProviderRequests(true)}
+                >
+                  <Bell className="w-4 h-4 text-orange-600" />
+                  <span className="absolute -top-1 -right-1 w-5 h-5 bg-red-500 text-white text-xs rounded-full flex items-center justify-center">
+                    {pendingProviderRequests.length}
+                  </span>
+                </Button>
+              )}
               <Button variant="ghost" size="sm" onClick={() => setLocation("/provider-access")} className="flex-1 sm:flex-none">
                 <Target className="w-4 h-4 sm:w-5 sm:h-5 mr-2" />
                 <span className="text-xs sm:text-sm">My Providers</span>
@@ -1283,6 +1337,81 @@ export default function DashboardPage() {
         open={showStartSession}
         onOpenChange={setShowStartSession}
       />
+
+      {/* Pending Provider Requests Dialog */}
+      <Dialog open={showProviderRequests} onOpenChange={setShowProviderRequests}>
+        <DialogContent className="sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle className="flex items-center">
+              <UserCheck className="w-5 h-5 mr-2 text-blue-600" />
+              Provider Access Requests
+            </DialogTitle>
+            <DialogDescription>
+              The following healthcare providers have requested access to view your mobility data.
+              You can approve or deny each request.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3 py-4 max-h-96 overflow-y-auto">
+            {pendingProviderRequests.map((request: any) => (
+              <div
+                key={request.relationship.id}
+                className="p-4 border rounded-lg bg-blue-50"
+              >
+                <div className="flex justify-between items-start">
+                  <div>
+                    <p className="font-medium text-gray-900">
+                      {request.credentials && `${request.credentials} `}
+                      {request.firstName} {request.lastName}
+                    </p>
+                    {request.specialty && (
+                      <p className="text-sm text-gray-600">
+                        {request.specialty}
+                      </p>
+                    )}
+                    <p className="text-xs text-gray-400 mt-1">
+                      Requested: {new Date(request.relationship.requestedAt).toLocaleDateString()}
+                    </p>
+                  </div>
+                  <div className="flex gap-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => respondToProviderRequestMutation.mutate({
+                        relationId: request.relationship.id,
+                        status: 'denied',
+                      })}
+                      disabled={respondToProviderRequestMutation.isPending}
+                    >
+                      Deny
+                    </Button>
+                    <Button
+                      size="sm"
+                      className="bg-green-600 hover:bg-green-700"
+                      onClick={() => respondToProviderRequestMutation.mutate({
+                        relationId: request.relationship.id,
+                        status: 'approved',
+                      })}
+                      disabled={respondToProviderRequestMutation.isPending}
+                    >
+                      Approve
+                    </Button>
+                  </div>
+                </div>
+              </div>
+            ))}
+            {pendingProviderRequests.length === 0 && (
+              <p className="text-center text-gray-500 py-4">
+                No pending requests
+              </p>
+            )}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowProviderRequests(false)}>
+              Close
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

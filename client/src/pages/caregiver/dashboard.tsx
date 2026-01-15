@@ -4,6 +4,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import {
   Heart,
   Activity,
@@ -19,11 +20,13 @@ import {
   ClipboardList,
   Flame,
   Target,
-  Calendar
+  Calendar,
+  UserPlus
 } from "lucide-react";
 import { useAuth } from "@/hooks/use-auth";
 import { useToast } from "@/hooks/use-toast";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { apiRequest } from "@/lib/queryClient";
 
 // Relationship type display names
 const relationshipLabels: Record<string, string> = {
@@ -41,7 +44,49 @@ export default function CaregiverDashboard() {
   const [, setLocation] = useLocation();
   const { user, caregiverPatients, logout } = useAuth();
   const { toast } = useToast();
+  const queryClient = useQueryClient();
   const [selectedPatientId, setSelectedPatientId] = useState<number | null>(null);
+  const [showInvitationsModal, setShowInvitationsModal] = useState(false);
+
+  // Get pending patient invitations (patients who invited this caregiver)
+  const { data: pendingInvitations = [] } = useQuery({
+    queryKey: [`/api/caregivers/${user?.id}/patient-invitations`],
+    enabled: !!user?.id && user?.userType === 'caregiver',
+  });
+
+  // Show invitations modal when there are pending invitations on first load
+  useEffect(() => {
+    if (pendingInvitations.length > 0 && !showInvitationsModal) {
+      setShowInvitationsModal(true);
+    }
+  }, [pendingInvitations]);
+
+  // Respond to patient invitation mutation
+  const respondToInvitationMutation = useMutation({
+    mutationFn: async ({ relationId, status }: { relationId: number; status: 'approved' | 'denied' }) => {
+      return await apiRequest(`/api/caregivers/${user?.id}/patient-invitations/${relationId}`, {
+        method: 'PATCH',
+        body: JSON.stringify({ status }),
+      });
+    },
+    onSuccess: (_, variables) => {
+      queryClient.invalidateQueries({ queryKey: [`/api/caregivers/${user?.id}/patient-invitations`] });
+      queryClient.invalidateQueries({ queryKey: [`/api/caregivers/${user?.id}/patients`] });
+      toast({
+        title: variables.status === 'approved' ? "Invitation Accepted" : "Invitation Declined",
+        description: variables.status === 'approved'
+          ? "You can now view this patient's progress."
+          : "You have declined the invitation.",
+      });
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Action Failed",
+        description: error.message || "Failed to respond to invitation",
+        variant: "destructive",
+      });
+    },
+  });
 
   // Set default selected patient
   useEffect(() => {
@@ -120,6 +165,23 @@ export default function CaregiverDashboard() {
             </div>
 
             <div className="flex items-center gap-3">
+              {/* Pending Invitations */}
+              {pendingInvitations.length > 0 && (
+                <div className="relative">
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="text-white hover:bg-white/20"
+                    onClick={() => setShowInvitationsModal(true)}
+                  >
+                    <UserPlus size={20} />
+                    <span className="absolute -top-1 -right-1 bg-green-400 text-gray-900 text-xs font-bold w-5 h-5 rounded-full flex items-center justify-center">
+                      {pendingInvitations.length}
+                    </span>
+                  </Button>
+                </div>
+              )}
+
               {/* Notifications */}
               <div className="relative">
                 <Button variant="ghost" size="sm" className="text-white hover:bg-white/20">
@@ -466,6 +528,78 @@ export default function CaregiverDashboard() {
           </>
         )}
       </main>
+
+      {/* Pending Patient Invitations Dialog */}
+      <Dialog open={showInvitationsModal} onOpenChange={setShowInvitationsModal}>
+        <DialogContent className="sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle className="flex items-center">
+              <UserPlus className="w-5 h-5 mr-2 text-purple-600" />
+              Patient Invitations
+            </DialogTitle>
+            <DialogDescription>
+              The following patients have invited you to be their caregiver.
+              Accept to view their mobility progress and support their recovery.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3 py-4 max-h-96 overflow-y-auto">
+            {pendingInvitations.map((invitation: any) => (
+              <div
+                key={invitation.relationship.id}
+                className="p-4 border rounded-lg bg-purple-50"
+              >
+                <div className="flex justify-between items-start">
+                  <div>
+                    <p className="font-medium text-gray-900">
+                      {invitation.firstName} {invitation.lastName}
+                    </p>
+                    <p className="text-sm text-gray-600">
+                      Relationship: {relationshipLabels[invitation.relationship.relationshipType] || invitation.relationship.relationshipType}
+                    </p>
+                    <p className="text-xs text-gray-400 mt-1">
+                      Invited: {new Date(invitation.relationship.requestedAt).toLocaleDateString()}
+                    </p>
+                  </div>
+                  <div className="flex gap-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => respondToInvitationMutation.mutate({
+                        relationId: invitation.relationship.id,
+                        status: 'denied',
+                      })}
+                      disabled={respondToInvitationMutation.isPending}
+                    >
+                      Decline
+                    </Button>
+                    <Button
+                      size="sm"
+                      className="bg-purple-600 hover:bg-purple-700"
+                      onClick={() => respondToInvitationMutation.mutate({
+                        relationId: invitation.relationship.id,
+                        status: 'approved',
+                      })}
+                      disabled={respondToInvitationMutation.isPending}
+                    >
+                      Accept
+                    </Button>
+                  </div>
+                </div>
+              </div>
+            ))}
+            {pendingInvitations.length === 0 && (
+              <p className="text-center text-gray-500 py-4">
+                No pending invitations
+              </p>
+            )}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowInvitationsModal(false)}>
+              Close
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
