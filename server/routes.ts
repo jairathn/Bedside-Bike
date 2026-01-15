@@ -3320,6 +3320,26 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Check if relationship already exists
       const existingRelation = await storage.getProviderPatientRelation(providerId, patient.id);
       if (existingRelation) {
+        // First check if relationship was deactivated/revoked - allow re-requesting
+        if (!existingRelation.isActive || existingRelation.accessStatus === 'revoked') {
+          // Reactivate and set to pending for provider request
+          await db.update(providerPatients)
+            .set({
+              isActive: true,
+              accessStatus: 'pending',
+              requestedBy: 'provider',
+              requestedAt: new Date(),
+              permissionGranted: false,
+              grantedAt: null,
+              deniedAt: null
+            })
+            .where(eq(providerPatients.id, existingRelation.id));
+          return res.status(201).json({
+            message: "Access request sent successfully. The patient will be notified on their next login.",
+            relationId: existingRelation.id,
+            patientId: patient.id
+          });
+        }
         // If there's already a pending request from either party
         if (existingRelation.accessStatus === 'pending') {
           if (existingRelation.requestedBy === 'patient') {
@@ -3327,22 +3347,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
           }
           return res.status(400).json({ error: "You already have a pending access request for this patient." });
         }
-        // If already approved
+        // If already approved and active
         if (existingRelation.accessStatus === 'approved' && existingRelation.permissionGranted) {
           return res.status(400).json({ error: "You already have access to this patient." });
         }
         // If denied
         if (existingRelation.accessStatus === 'denied') {
           return res.status(400).json({ error: "Your previous access request was denied. Please contact the patient directly." });
-        }
-        // If revoked, allow re-requesting by updating the existing relationship
-        if (existingRelation.accessStatus === 'revoked' || !existingRelation.isActive) {
-          await storage.updateProviderAccessStatus(existingRelation.id, 'pending');
-          return res.status(201).json({
-            message: "Access request sent successfully. The patient will be notified on their next login.",
-            relationId: existingRelation.id,
-            patientId: patient.id
-          });
         }
       }
 
