@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/lib/auth.tsx";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -8,7 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
 import { Heart, MessageCircle, Settings, Zap, Target, Award, ThumbsUp, Trophy, TrendingUp, Gift, Clock, Flame } from "lucide-react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -20,7 +20,14 @@ export default function KudosWall() {
   const queryClient = useQueryClient();
   const [selectedReaction, setSelectedReaction] = useState<string>("");
   const [showSettings, setShowSettings] = useState(false);
-  const [displayName, setDisplayName] = useState<string>("");
+
+  // Local state for settings dialog (only saved on Accept)
+  const [pendingSettings, setPendingSettings] = useState({
+    displayName: "",
+    avatarEmoji: "👤",
+    optInKudos: false,
+    optInNudges: false,
+  });
 
   const patientId = user?.id;
 
@@ -54,7 +61,7 @@ export default function KudosWall() {
     enabled: !!patientId,
   });
 
-  // Update preferences mutation (silent for real-time updates)
+  // Update preferences mutation
   const updatePreferencesMutation = useMutation({
     mutationFn: async (updates: any) => {
       return await apiRequest(`/api/kudos/preferences?patientId=${patientId}`, {
@@ -66,6 +73,7 @@ export default function KudosWall() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: [`/api/kudos/preferences?patientId=${patientId}`] });
       refetchPreferences();
+      setShowSettings(false);
       toast({
         title: "Settings saved",
         description: "Your preferences have been updated",
@@ -73,13 +81,21 @@ export default function KudosWall() {
     },
   });
 
-  // Debounced display name update
-  const debouncedUpdateDisplayName = useCallback((value: string) => {
-    const timer = setTimeout(() => {
-      updatePreferencesMutation.mutate({ displayName: value });
-    }, 500);
-    return () => clearTimeout(timer);
-  }, [updatePreferencesMutation]);
+  // Initialize pending settings when dialog opens or preferences load
+  const openSettingsDialog = () => {
+    setPendingSettings({
+      displayName: preferences?.displayName || "",
+      avatarEmoji: preferences?.avatarEmoji || "👤",
+      optInKudos: preferences?.optInKudos || false,
+      optInNudges: preferences?.optInNudges || false,
+    });
+    setShowSettings(true);
+  };
+
+  // Save all pending settings
+  const handleSaveSettings = () => {
+    updatePreferencesMutation.mutate(pendingSettings);
+  };
 
   // Send reaction mutation
   const reactionMutation = useMutation({
@@ -140,13 +156,11 @@ export default function KudosWall() {
             <h1 className="text-2xl font-bold text-gray-900">Kudos & Nudge Wall</h1>
             <p className="text-gray-600">Celebrate achievements and encourage your fellow patients</p>
           </div>
-          <Dialog open={showSettings} onOpenChange={setShowSettings}>
-            <DialogTrigger asChild>
-              <Button variant="outline" size="sm">
-                <Settings className="w-4 h-4 mr-2" />
-                Settings
-              </Button>
-            </DialogTrigger>
+          <Dialog open={showSettings} onOpenChange={(open) => !open && setShowSettings(false)}>
+            <Button variant="outline" size="sm" onClick={openSettingsDialog}>
+              <Settings className="w-4 h-4 mr-2" />
+              Settings
+            </Button>
             <DialogContent>
               <DialogHeader>
                 <DialogTitle>Kudos Wall Settings</DialogTitle>
@@ -155,21 +169,16 @@ export default function KudosWall() {
                 <div>
                   <Label>Display Name</Label>
                   <Input
-                    value={displayName || preferences?.displayName || ""}
-                    onChange={(e) => {
-                      setDisplayName(e.target.value);
-                      debouncedUpdateDisplayName(e.target.value);
-                    }}
+                    value={pendingSettings.displayName}
+                    onChange={(e) => setPendingSettings(prev => ({ ...prev, displayName: e.target.value }))}
                     placeholder="Choose how others see you"
                   />
                 </div>
                 <div>
                   <Label>Avatar Emoji</Label>
                   <Select
-                    defaultValue={preferences?.avatarEmoji || "👤"}
-                    onValueChange={(value) => {
-                      updatePreferencesMutation.mutate({ avatarEmoji: value });
-                    }}
+                    value={pendingSettings.avatarEmoji}
+                    onValueChange={(value) => setPendingSettings(prev => ({ ...prev, avatarEmoji: value }))}
                   >
                     <SelectTrigger>
                       <SelectValue />
@@ -185,21 +194,25 @@ export default function KudosWall() {
                   <div className="flex items-center justify-between">
                     <Label>Share my achievements</Label>
                     <Switch
-                      checked={preferences?.optInKudos || false}
-                      onCheckedChange={(checked) => {
-                        updatePreferencesMutation.mutate({ optInKudos: checked });
-                      }}
+                      checked={pendingSettings.optInKudos}
+                      onCheckedChange={(checked) => setPendingSettings(prev => ({ ...prev, optInKudos: checked }))}
                     />
                   </div>
                   <div className="flex items-center justify-between">
                     <Label>Receive nudges</Label>
                     <Switch
-                      checked={preferences?.optInNudges || false}
-                      onCheckedChange={(checked) => {
-                        updatePreferencesMutation.mutate({ optInNudges: checked });
-                      }}
+                      checked={pendingSettings.optInNudges}
+                      onCheckedChange={(checked) => setPendingSettings(prev => ({ ...prev, optInNudges: checked }))}
                     />
                   </div>
+                </div>
+                <div className="flex justify-end space-x-2 pt-4 border-t">
+                  <Button variant="outline" onClick={() => setShowSettings(false)}>
+                    Cancel
+                  </Button>
+                  <Button onClick={handleSaveSettings} disabled={updatePreferencesMutation.isPending}>
+                    {updatePreferencesMutation.isPending ? "Saving..." : "Accept"}
+                  </Button>
                 </div>
               </div>
             </DialogContent>
@@ -219,7 +232,7 @@ export default function KudosWall() {
                     All sharing is optional and anonymous.
                   </p>
                   <Button
-                    onClick={() => setShowSettings(true)}
+                    onClick={openSettingsDialog}
                     className="bg-blue-600 hover:bg-blue-700"
                   >
                     Get Started
