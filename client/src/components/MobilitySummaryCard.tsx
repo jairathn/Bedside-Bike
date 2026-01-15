@@ -18,11 +18,19 @@ interface Session {
   transferCount?: number;
 }
 
+interface GoalHistoryEntry {
+  goalType: string;
+  targetValue: number;
+  effectiveDate: string; // YYYY-MM-DD
+}
+
 interface MobilitySummaryProps {
   patientName: string;
   admissionDate: string;
   sessions: Session[];
-  goalMinutes: number;
+  goalMinutes: number; // Current daily goal (fallback)
+  sessionsPerDay?: number; // Number of sessions per day (default 2)
+  goalHistory?: GoalHistoryEntry[]; // Historical goal changes
   currentMobilityStatus?: string;
 }
 
@@ -31,6 +39,8 @@ export default function MobilitySummaryCard({
   admissionDate,
   sessions,
   goalMinutes,
+  sessionsPerDay = 2,
+  goalHistory = [],
   currentMobilityStatus
 }: MobilitySummaryProps) {
   const [copied, setCopied] = useState(false);
@@ -69,6 +79,7 @@ export default function MobilitySummaryCard({
       sitMinutes: number;
       transfers: number;
       avgWatts: number;
+      goalMinutes: number; // Historical goal for this specific date
     }> = {};
 
     // Helper to get today's date in America/New_York timezone (YYYY-MM-DD format)
@@ -85,6 +96,36 @@ export default function MobilitySummaryCard({
       const date = new Date(year, month - 1, day); // Local date, no UTC shift
       date.setDate(date.getDate() + days);
       return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+    };
+
+    // Helper to get the goal that was active on a specific date
+    // Looks at duration and sessions goals to compute daily target
+    const getGoalForDate = (dateStr: string): number => {
+      // Filter goal history for duration and sessions goals
+      const durationHistory = goalHistory
+        .filter(g => g.goalType === 'duration')
+        .sort((a, b) => a.effectiveDate.localeCompare(b.effectiveDate));
+      const sessionsHistory = goalHistory
+        .filter(g => g.goalType === 'sessions')
+        .sort((a, b) => a.effectiveDate.localeCompare(b.effectiveDate));
+
+      // Find the most recent goal that was effective on or before the given date
+      let durationGoal = goalMinutes / sessionsPerDay; // Default per-session duration
+      let sessionsGoal = sessionsPerDay;
+
+      for (const entry of durationHistory) {
+        if (entry.effectiveDate <= dateStr) {
+          durationGoal = entry.targetValue;
+        }
+      }
+      for (const entry of sessionsHistory) {
+        if (entry.effectiveDate <= dateStr) {
+          sessionsGoal = entry.targetValue;
+        }
+      }
+
+      // Daily goal = duration per session × sessions per day
+      return durationGoal * sessionsGoal;
     };
 
     // Get admission date as YYYY-MM-DD string (handle both string and Date inputs)
@@ -111,7 +152,8 @@ export default function MobilitySummaryCard({
           walkMinutes: 0,
           sitMinutes: 0,
           transfers: 0,
-          avgWatts: 0
+          avgWatts: 0,
+          goalMinutes: getGoalForDate(currentDate), // Historical goal for this day
         };
       }
       currentDate = addDays(currentDate, 1);
@@ -157,14 +199,15 @@ export default function MobilitySummaryCard({
     });
 
     return Object.values(byDate).sort((a, b) => a.date.localeCompare(b.date));
-  }, [sessions, admissionDate]);
+  }, [sessions, admissionDate, goalHistory, goalMinutes, sessionsPerDay]);
 
   // Calculate summary statistics
   const stats = useMemo(() => {
     const daysWithActivity = dailyData.filter(d => d.totalMinutes > 0).length;
     const totalMinutes = dailyData.reduce((sum, d) => sum + d.totalMinutes, 0);
     const avgMinutesPerDay = hospitalDay > 0 ? Math.round(totalMinutes / hospitalDay) : 0;
-    const goalAchievementDays = dailyData.filter(d => d.totalMinutes >= goalMinutes).length;
+    // Use each day's historical goal for achievement calculation
+    const goalAchievementDays = dailyData.filter(d => d.totalMinutes >= d.goalMinutes).length;
     const goalAchievementRate = hospitalDay > 0 ? Math.round((goalAchievementDays / hospitalDay) * 100) : 0;
 
     // Trend calculation (last 3 days vs previous 3 days)
@@ -202,7 +245,8 @@ export default function MobilitySummaryCard({
       totalSit,
       totalTransfers,
       todayMinutes: todayData?.totalMinutes || 0,
-      todayGoalPercent: todayData ? Math.round((todayData.totalMinutes / goalMinutes) * 100) : 0
+      todayGoal: todayData?.goalMinutes || goalMinutes,
+      todayGoalPercent: todayData ? Math.round((todayData.totalMinutes / todayData.goalMinutes) * 100) : 0
     };
   }, [dailyData, hospitalDay, goalMinutes]);
 
@@ -256,15 +300,15 @@ export default function MobilitySummaryCard({
   const generatePlainTextSummary = () => {
     const trendText = stats.trend > 2 ? 'Improving' : stats.trend < -2 ? 'Declining' : 'Stable';
 
-    // Header line
+    // Header line - show current goal, note if historical goals vary
     let output = `MOBILITY SUMMARY - Hospital Day ${stats.hospitalDay}\n`;
-    output += `Goal: ${goalMinutes} min/day | Achievement: ${stats.goalAchievementDays}/${stats.hospitalDay} days (${stats.goalAchievementRate}%) | Trend: ${trendText}\n\n`;
+    output += `Current Goal: ${stats.todayGoal} min/day | Achievement: ${stats.goalAchievementDays}/${stats.hospitalDay} days (${stats.goalAchievementRate}%) | Trend: ${trendText}\n\n`;
 
     // Simple table with dashes (renders in any system)
     const recentDays = dailyData.slice(-7);
 
-    output += `DATE        CYCLE   WALK   CHAIR   TOTAL   GOAL (${goalMinutes}m)\n`;
-    output += `----------- -----   ----   -----   -----   ---------\n`;
+    output += `DATE        CYCLE   WALK   CHAIR   TOTAL   GOAL    %\n`;
+    output += `----------- -----   ----   -----   -----   ----   ----\n`;
 
     recentDays.forEach(day => {
       const date = formatDate(day.date).padEnd(11);
@@ -272,18 +316,20 @@ export default function MobilitySummaryCard({
       const walk = `${day.walkMinutes}m`.padStart(4);
       const sit = `${day.sitMinutes}m`.padStart(5);
       const total = `${day.totalMinutes}m`.padStart(5);
-      const goalPercent = Math.round((day.totalMinutes / goalMinutes) * 100);
-      const goalStatus = `${goalPercent}%`.padStart(4);
-      output += `${date} ${ride}   ${walk}   ${sit}   ${total}   ${goalStatus}\n`;
+      // Use historical goal for each day
+      const dayGoal = `${day.goalMinutes}m`.padStart(4);
+      const goalPercent = day.goalMinutes > 0 ? Math.round((day.totalMinutes / day.goalMinutes) * 100) : 0;
+      const pct = `${goalPercent}%`.padStart(4);
+      output += `${date} ${ride}   ${walk}   ${sit}   ${total}   ${dayGoal}   ${pct}\n`;
     });
 
-    output += `----------- -----   ----   -----   -----\n`;
+    output += `----------- -----   ----   -----   -----   ----   ----\n`;
     output += `TOTAL       ${String(stats.totalRide).padStart(4)}m   ${String(stats.totalWalk).padStart(3)}m   ${String(stats.totalSit).padStart(4)}m   ${String(stats.totalMinutes).padStart(4)}m\n\n`;
 
     // Today status
     const todayStatus = stats.todayGoalPercent >= 100 ? 'Goal met' :
                         stats.todayGoalPercent >= 50 ? 'In progress' : 'Needs attention';
-    output += `Today: ${stats.todayMinutes} min (${stats.todayGoalPercent}% of goal) - ${todayStatus}`;
+    output += `Today: ${stats.todayMinutes} min (${stats.todayGoalPercent}% of ${stats.todayGoal}m goal) - ${todayStatus}`;
 
     return output;
   };

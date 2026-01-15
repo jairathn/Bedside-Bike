@@ -3,6 +3,7 @@ import {
   patientProfiles,
   providerPatients,
   patientGoals,
+  goalHistory,
   exerciseSessions,
   achievements,
   patientStats,
@@ -122,6 +123,7 @@ export interface IStorage {
   updateGoalProgress(patientId: number, goalType: string, value: number): Promise<void>;
   getPatientGoals(patientId: number): Promise<any[]>;
   deactivatePatientGoals(patientId: number): Promise<void>;
+  getGoalHistory(patientId: number): Promise<Array<{ goalType: string; targetValue: number; effectiveDate: string }>>;
   
   // Achievement operations
   getAchievementsByPatient(patientId: number): Promise<Achievement[]>;
@@ -547,16 +549,80 @@ export class DatabaseStorage implements IStorage {
 
   async createGoal(goal: InsertPatientGoal): Promise<PatientGoal> {
     const [newGoal] = await db.insert(patientGoals).values(goal).returning();
+
+    // Save to goal history for historical tracking
+    const todayEST = new Intl.DateTimeFormat('en-CA', {
+      timeZone: 'America/New_York',
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit'
+    }).format(new Date());
+
+    await db.insert(goalHistory).values({
+      patientId: newGoal.patientId,
+      goalType: newGoal.goalType,
+      targetValue: newGoal.targetValue,
+      unit: newGoal.unit,
+      effectiveDate: todayEST,
+      providerId: newGoal.providerId,
+    });
+
     return newGoal;
   }
 
   async updateGoal(id: number, updates: Partial<InsertPatientGoal>): Promise<PatientGoal | undefined> {
+    // Get the current goal to check if targetValue is changing
+    const [currentGoal] = await db.select().from(patientGoals).where(eq(patientGoals.id, id));
+
     const [updatedGoal] = await db
       .update(patientGoals)
       .set({ ...updates, updatedAt: new Date() })
       .where(eq(patientGoals.id, id))
       .returning();
+
+    // If targetValue changed, save to goal history
+    if (updatedGoal && updates.targetValue !== undefined &&
+        currentGoal && Number(currentGoal.targetValue) !== Number(updates.targetValue)) {
+      const todayEST = new Intl.DateTimeFormat('en-CA', {
+        timeZone: 'America/New_York',
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit'
+      }).format(new Date());
+
+      await db.insert(goalHistory).values({
+        patientId: updatedGoal.patientId,
+        goalType: updatedGoal.goalType,
+        targetValue: updatedGoal.targetValue,
+        unit: updatedGoal.unit,
+        effectiveDate: todayEST,
+        providerId: updatedGoal.providerId,
+      });
+    }
+
     return updatedGoal;
+  }
+
+  // Get goal history for a patient (for historical daily goal lookups)
+  async getGoalHistory(patientId: number): Promise<Array<{
+    goalType: string;
+    targetValue: number;
+    effectiveDate: string;
+  }>> {
+    const history = await db
+      .select({
+        goalType: goalHistory.goalType,
+        targetValue: goalHistory.targetValue,
+        effectiveDate: goalHistory.effectiveDate,
+      })
+      .from(goalHistory)
+      .where(eq(goalHistory.patientId, patientId))
+      .orderBy(goalHistory.effectiveDate);
+
+    return history.map(h => ({
+      ...h,
+      targetValue: Number(h.targetValue)
+    }));
   }
 
   async deactivatePatientGoals(patientId: number): Promise<void> {

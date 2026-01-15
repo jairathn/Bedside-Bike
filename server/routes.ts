@@ -687,6 +687,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Get goal history for accurate historical reporting (goals at each date)
+  app.get("/api/patients/:id/goals/history", requireAuth, authorizePatientAccess, async (req, res) => {
+    try {
+      const patientId = parseInt(req.params.id);
+      const history = await storage.getGoalHistory(patientId);
+      res.json(history);
+    } catch (error) {
+      logger.error("Error fetching goal history", { error: (error as Error).message });
+      res.status(500).json({ error: "Failed to fetch goal history" });
+    }
+  });
+
   // Provider saves goals to patient profile
   app.post("/api/patients/:id/goals", requireAuth, requireProvider, authorizePatientAccess, createLimiter, async (req, res) => {
     try {

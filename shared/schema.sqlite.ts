@@ -106,6 +106,18 @@ export const patientGoals = sqliteTable("patient_goals", {
   updatedAt: integer("updated_at", { mode: 'timestamp' }).default(sql`(unixepoch())`),
 });
 
+// Goal history - tracks changes to goals over time for accurate historical reporting
+export const goalHistory = sqliteTable("goal_history", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  patientId: integer("patient_id").notNull().references(() => users.id),
+  goalType: text("goal_type").notNull(),
+  targetValue: real("target_value").notNull(),
+  unit: text("unit").notNull(),
+  effectiveDate: text("effective_date").notNull(), // YYYY-MM-DD
+  providerId: integer("provider_id").references(() => users.id),
+  createdAt: integer("created_at", { mode: 'timestamp' }).default(sql`(unixepoch())`),
+});
+
 // Devices
 export const devices = sqliteTable("devices", {
   id: text("id").primaryKey(),
