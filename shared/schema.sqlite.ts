@@ -819,6 +819,20 @@ export const providerNotifications = sqliteTable("provider_notifications", {
   createdAt: integer("created_at", { mode: 'timestamp' }).default(sql`(unixepoch())`),
 });
 
+// Patient notifications - in-app notifications for patients (e.g., when providers/caregivers respond to invitations)
+export const patientNotifications = sqliteTable("patient_notifications", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  patientId: integer("patient_id").notNull().references(() => users.id),
+  senderId: integer("sender_id").references(() => users.id),
+  senderType: text("sender_type"), // 'provider', 'caregiver'
+  notificationType: text("notification_type").notNull(), // 'provider_accepted', 'provider_declined', 'caregiver_accepted', 'caregiver_declined', 'access_revoked', 'general'
+  title: text("title").notNull(),
+  message: text("message").notNull(),
+  metadata: text("metadata").default('{}'),
+  isRead: integer("is_read", { mode: 'boolean' }).default(false),
+  createdAt: integer("created_at", { mode: 'timestamp' }).default(sql`(unixepoch())`),
+});
+
 // Validation schemas (reuse from main schema)
 export const loginSchema = z.object({
   email: z.string().email("Please enter a valid email address"),
@@ -1132,6 +1146,15 @@ export const insertProviderNotificationSchema = createInsertSchema(providerNotif
 
 export type ProviderNotification = typeof providerNotifications.$inferSelect;
 export type InsertProviderNotification = typeof providerNotifications.$inferInsert;
+
+// ============================================================================
+// PATIENT NOTIFICATION SYSTEM - Insert Schemas and Types
+// ============================================================================
+
+export const insertPatientNotificationSchema = createInsertSchema(patientNotifications);
+
+export type PatientNotification = typeof patientNotifications.$inferSelect;
+export type InsertPatientNotification = typeof patientNotifications.$inferInsert;
 
 export type ProviderAccessRequest = z.infer<typeof providerAccessRequestSchema>;
 export type ProviderInvite = z.infer<typeof providerInviteSchema>;

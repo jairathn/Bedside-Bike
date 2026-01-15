@@ -3023,22 +3023,25 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(404).json({ error: "Invitation not found" });
       }
 
-      // Create notification for patient
+      // Create notification for patient (patient gets notified about caregiver's response)
       if (status === 'approved' || status === 'denied') {
         const caregiver = await storage.getUser(caregiverId);
-        const notificationType = status === 'approved' ? 'access_approved' : 'access_denied';
+        const caregiverName = caregiver ? `${caregiver.firstName} ${caregiver.lastName}` : 'Your caregiver';
+
+        const notificationType = status === 'approved' ? 'caregiver_accepted' : 'caregiver_declined';
         const title = status === 'approved' ? 'Caregiver Accepted' : 'Caregiver Declined';
         const message = status === 'approved'
-          ? `${caregiver?.firstName} ${caregiver?.lastName} has accepted your invitation and can now view your progress.`
-          : `${caregiver?.firstName} ${caregiver?.lastName} has declined your invitation.`;
+          ? `${caregiverName} has accepted your invitation and can now view your progress.`
+          : `${caregiverName} has declined your invitation.`;
 
-        await storage.createCaregiverNotification({
-          caregiverId: caregiverId,
+        await storage.createPatientNotification({
           patientId: updated.patientId,
+          senderId: caregiverId,
+          senderType: 'caregiver',
           notificationType,
           title,
           message,
-          metadata: JSON.stringify({ caregiverName: `${caregiver?.firstName} ${caregiver?.lastName}` })
+          metadata: JSON.stringify({ caregiverName })
         });
       }
 
@@ -3575,6 +3578,26 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(404).json({ error: "Resource not found" });
       }
 
+      // Notify the patient about the provider's response
+      const provider = await storage.getUser(providerId);
+      const providerName = provider ? `${provider.credentials || ''} ${provider.firstName} ${provider.lastName}`.trim() : 'Your provider';
+
+      const notificationType = status === 'approved' ? 'provider_accepted' : 'provider_declined';
+      const title = status === 'approved' ? 'Provider Accepted' : 'Provider Declined';
+      const message = status === 'approved'
+        ? `${providerName} has accepted your invitation and can now view your mobility data.`
+        : `${providerName} has declined your invitation.`;
+
+      await storage.createPatientNotification({
+        patientId: updated.patientId,
+        senderId: providerId,
+        senderType: 'provider',
+        notificationType,
+        title,
+        message,
+        metadata: JSON.stringify({ providerName })
+      });
+
       logger.info("Provider responded to patient invitation", {
         providerId,
         relationId,
@@ -3631,6 +3654,47 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.json({ success: true });
     } catch (error) {
       logger.error("Error marking all provider notifications read", { error: (error as Error).message });
+      res.status(500).json({ error: "Failed to mark notifications read" });
+    }
+  });
+
+  // =========================================================================
+  // Patient Notifications
+  // =========================================================================
+
+  // Get patient notifications
+  app.get("/api/patients/:patientId/notifications", requireAuth, authorizePatientAccess, async (req, res) => {
+    try {
+      const patientId = parseInt(req.params.patientId);
+      const unreadOnly = req.query.unreadOnly === 'true';
+      const notifications = await storage.getPatientNotifications(patientId, unreadOnly);
+      res.json(notifications);
+    } catch (error) {
+      logger.error("Error fetching patient notifications", { error: (error as Error).message });
+      res.status(500).json({ error: "Failed to fetch notifications" });
+    }
+  });
+
+  // Mark patient notification as read
+  app.patch("/api/patient-notifications/:notificationId/read", requireAuth, async (req, res) => {
+    try {
+      const notificationId = parseInt(req.params.notificationId);
+      const updated = await storage.markPatientNotificationRead(notificationId);
+      res.json(updated);
+    } catch (error) {
+      logger.error("Error marking patient notification read", { error: (error as Error).message });
+      res.status(500).json({ error: "Failed to mark notification read" });
+    }
+  });
+
+  // Mark all patient notifications as read
+  app.post("/api/patients/:patientId/notifications/read-all", requireAuth, authorizePatientAccess, async (req, res) => {
+    try {
+      const patientId = parseInt(req.params.patientId);
+      await storage.markAllPatientNotificationsRead(patientId);
+      res.json({ success: true });
+    } catch (error) {
+      logger.error("Error marking all patient notifications read", { error: (error as Error).message });
       res.status(500).json({ error: "Failed to mark notifications read" });
     }
   });
