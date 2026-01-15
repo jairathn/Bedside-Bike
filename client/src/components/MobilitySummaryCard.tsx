@@ -56,26 +56,47 @@ export default function MobilitySummaryCard({
       avgWatts: number;
     }> = {};
 
-    // Initialize all dates from admission to today
+    // Helper to format date in America/New_York timezone (YYYY-MM-DD format)
+    const toESTDateStr = (date: Date) => new Intl.DateTimeFormat('en-CA', {
+      timeZone: 'America/New_York',
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit'
+    }).format(date);
+
+    // Initialize all dates from admission to today (using EST timezone)
     const admission = new Date(admissionDate);
     const today = new Date();
-    for (let d = new Date(admission); d <= today; d.setDate(d.getDate() + 1)) {
-      const dateStr = d.toISOString().split('T')[0];
-      byDate[dateStr] = {
-        date: dateStr,
-        totalMinutes: 0,
-        sessions: [],
-        rideMinutes: 0,
-        walkMinutes: 0,
-        sitMinutes: 0,
-        transfers: 0,
-        avgWatts: 0
-      };
+    const todayStr = toESTDateStr(today);
+
+    // Start from admission date and go until today
+    for (let d = new Date(admission); toESTDateStr(d) <= todayStr; d.setDate(d.getDate() + 1)) {
+      const dateStr = toESTDateStr(d);
+      if (!byDate[dateStr]) {
+        byDate[dateStr] = {
+          date: dateStr,
+          totalMinutes: 0,
+          sessions: [],
+          rideMinutes: 0,
+          walkMinutes: 0,
+          sitMinutes: 0,
+          transfers: 0,
+          avgWatts: 0
+        };
+      }
     }
 
-    // Aggregate sessions
+    // Aggregate sessions - convert session dates to EST for consistent grouping
     sessions.forEach(session => {
-      const dateStr = session.sessionDate?.split('T')[0] || session.sessionDate;
+      let dateStr: string;
+      if (session.sessionDate) {
+        // If sessionDate is a full ISO string, parse and convert to EST
+        const sessionDateObj = new Date(session.sessionDate);
+        dateStr = toESTDateStr(sessionDateObj);
+      } else {
+        dateStr = toESTDateStr(new Date());
+      }
+
       if (byDate[dateStr]) {
         byDate[dateStr].sessions.push(session);
         const duration = session.duration || 0;

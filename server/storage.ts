@@ -683,17 +683,9 @@ export class DatabaseStorage implements IStorage {
     const totalSessions = sessions.length;
 
     // Calculate unique days with sessions for accurate daily average
+    // sessionDate is already stored as YYYY-MM-DD string, use it directly
     const uniqueDays = new Set(
-      sessions.map(s => {
-        const date = s.startTime || s.createdAt;
-        if (!date) return null;
-        return new Intl.DateTimeFormat('en-CA', {
-          timeZone: 'America/New_York',
-          year: 'numeric',
-          month: '2-digit',
-          day: '2-digit'
-        }).format(new Date(date));
-      }).filter(d => d !== null)
+      sessions.map(s => s.sessionDate).filter(d => d !== null && d !== undefined)
     );
 
     const numUniqueDays = uniqueDays.size || 1;
@@ -873,20 +865,10 @@ export class DatabaseStorage implements IStorage {
       const newTotalDuration = (currentStats.totalDuration || 0) + duration;
 
       // Calculate average daily duration correctly by counting unique days
-      // Get all sessions to count unique days with sessions
+      // Get all sessions and use sessionDate directly (already stored as YYYY-MM-DD)
       const sessions = await this.getSessionsByPatient(patientId);
       const uniqueDays = new Set(
-        sessions.map(s => {
-          const date = s.startTime || s.createdAt;
-          if (!date) return null;
-          // Convert to YYYY-MM-DD string in America/New_York timezone for consistency
-          return new Intl.DateTimeFormat('en-CA', {
-            timeZone: 'America/New_York',
-            year: 'numeric',
-            month: '2-digit',
-            day: '2-digit'
-          }).format(new Date(date));
-        }).filter(d => d !== null)
+        sessions.map(s => s.sessionDate).filter(d => d !== null && d !== undefined)
       );
 
       const numUniqueDays = uniqueDays.size || 1; // Avoid division by zero
