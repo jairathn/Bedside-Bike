@@ -495,10 +495,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const startDate = patient.admissionDate || patient.createdAt;
       const daysSinceStart = startDate ? Math.floor((Date.now() - new Date(startDate).getTime()) / (1000 * 60 * 60 * 24)) : 0;
 
-      // Auto-recalculate stats if they seem stale (avgDailyDuration is 0 but there are sessions)
+      // Auto-recalculate stats if they seem stale
+      // Trigger if: has sessions AND (no stats OR avgDailyDuration would display as 0 minutes)
+      // avgDailyDuration is in SECONDS, so < 60 means it displays as 0 minutes
       let finalStats = stats;
-      if (sessions.length > 0 && (!stats?.avgDailyDuration || stats.avgDailyDuration === 0)) {
-        logger.info('Auto-recalculating stale patient stats', { patientId, sessionsCount: sessions.length });
+      if (sessions.length > 0 && (!stats?.avgDailyDuration || stats.avgDailyDuration < 60)) {
+        logger.info('Auto-recalculating stale patient stats', { patientId, sessionsCount: sessions.length, currentAvg: stats?.avgDailyDuration });
         const recalculatedStats = await storage.recalculatePatientStats(patientId);
         if (recalculatedStats) {
           finalStats = recalculatedStats;
