@@ -347,6 +347,9 @@ export class DatabaseStorage implements IStorage {
         permissionGranted: providerPatients.permissionGranted,
         grantedAt: providerPatients.grantedAt,
         isActive: providerPatients.isActive,
+        accessStatus: providerPatients.accessStatus,
+        requestedBy: providerPatients.requestedBy,
+        requestedAt: providerPatients.requestedAt,
         createdAt: providerPatients.createdAt,
         providerFirstName: users.firstName,
         providerLastName: users.lastName,
@@ -358,10 +361,11 @@ export class DatabaseStorage implements IStorage {
       .where(
         and(
           eq(providerPatients.patientId, Number(patientId)),
-          eq(providerPatients.isActive, true)
+          // Include both approved and pending, exclude denied/revoked
+          inArray(providerPatients.accessStatus, ['approved', 'pending'])
         )
       );
-    
+
     return results;
   }
 

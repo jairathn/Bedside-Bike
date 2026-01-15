@@ -106,8 +106,8 @@ export default function ProviderAccessPage() {
       await queryClient.invalidateQueries({ queryKey: ['/api/provider-relationships', { patientId: user?.id }] });
 
       toast({
-        title: "Access Granted",
-        description: "Your provider can now view your progress and adjust your goals",
+        title: "Invitation Sent",
+        description: "Your provider will be notified and can accept the invitation to view your progress.",
       });
       setShowGrantDialog(false);
       setSelectedProvider("");
@@ -272,7 +272,16 @@ export default function ProviderAccessPage() {
     },
   });
 
-  const hasProviders = Array.isArray(providerRelationships) && providerRelationships.length > 0;
+  // Filter providers by status
+  const approvedProviders = Array.isArray(providerRelationships)
+    ? providerRelationships.filter((rel: any) => rel.accessStatus === 'approved')
+    : [];
+  const pendingProviderInvitationsSent = Array.isArray(providerRelationships)
+    ? providerRelationships.filter((rel: any) => rel.accessStatus === 'pending' && rel.requestedBy === 'patient')
+    : [];
+
+  const hasProviders = approvedProviders.length > 0;
+  const hasPendingProviderInvitationsSent = pendingProviderInvitationsSent.length > 0;
 
   // Filter caregivers by status
   const approvedCaregivers = Array.isArray(caregivers)
@@ -383,7 +392,7 @@ export default function ProviderAccessPage() {
                         disabled={!selectedProvider || selectedProvider === "no-providers" || grantAccessMutation.isPending}
                         className="flex-1"
                       >
-                        {grantAccessMutation.isPending ? "Adding Access..." : "Add Access"}
+                        {grantAccessMutation.isPending ? "Sending Invitation..." : "Send Invitation"}
                       </Button>
                       <Button 
                         variant="outline" 
@@ -454,9 +463,49 @@ export default function ProviderAccessPage() {
               </div>
             )}
 
+            {/* Provider Invitations Sent by Patient */}
+            {hasPendingProviderInvitationsSent && (
+              <div className="mb-4">
+                <div className="flex items-center gap-2 mb-3">
+                  <UserPlus className="w-4 h-4 text-blue-600" />
+                  <h4 className="font-semibold text-blue-900">Provider Invitations Sent</h4>
+                  <Badge variant="secondary" className="bg-blue-100 text-blue-800">
+                    {pendingProviderInvitationsSent.length}
+                  </Badge>
+                </div>
+                <div className="space-y-2">
+                  {pendingProviderInvitationsSent.map((relationship: any) => (
+                    <div key={relationship.id} className="flex items-center justify-between p-3 bg-blue-50 rounded-lg border border-blue-200">
+                      <div className="flex items-center space-x-3">
+                        <div className="w-10 h-10 bg-blue-400 rounded-full flex items-center justify-center">
+                          <Shield className="w-5 h-5 text-white" />
+                        </div>
+                        <div>
+                          <p className="font-medium text-blue-900">
+                            {relationship.providerFirstName} {relationship.providerLastName}, {relationship.providerCredentials}
+                          </p>
+                          <p className="text-sm text-blue-700">
+                            {relationship.providerSpecialty} - awaiting acceptance
+                          </p>
+                          {relationship.requestedAt && (
+                            <p className="text-xs text-blue-600">
+                              Invited: {new Date(relationship.requestedAt).toLocaleDateString()}
+                            </p>
+                          )}
+                        </div>
+                      </div>
+                      <Badge variant="secondary" className="bg-blue-100 text-blue-700">
+                        Pending
+                      </Badge>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
             {hasProviders ? (
               <div className="space-y-4">
-                {Array.isArray(providerRelationships) && providerRelationships.map((relationship: any) => (
+                {approvedProviders.map((relationship: any) => (
                   <div key={relationship.id} className="flex items-center justify-between p-4 bg-green-50 rounded-lg border border-green-200">
                     <div className="flex items-center space-x-4">
                       <div className="w-12 h-12 bg-green-600 rounded-full flex items-center justify-center">
@@ -543,7 +592,7 @@ export default function ProviderAccessPage() {
                               disabled={!selectedProvider || grantAccessMutation.isPending}
                               className="flex-1"
                             >
-                              {grantAccessMutation.isPending ? "Granting Access..." : "Grant Full Access"}
+                              {grantAccessMutation.isPending ? "Sending Invitation..." : "Send Invitation"}
                             </Button>
                             <Button 
                               variant="outline" 
@@ -559,7 +608,7 @@ export default function ProviderAccessPage() {
                   </div>
                 )}
               </div>
-            ) : (
+            ) : !hasPendingProviderInvitationsSent && !hasPendingProviderRequests ? (
               <div className="flex items-center justify-between p-4 bg-yellow-50 rounded-lg border border-yellow-200">
                 <div className="flex items-center space-x-4">
                   <div className="w-12 h-12 bg-yellow-600 rounded-full flex items-center justify-center">
@@ -620,7 +669,7 @@ export default function ProviderAccessPage() {
                           disabled={!selectedProvider || grantAccessMutation.isPending}
                           className="flex-1"
                         >
-                          {grantAccessMutation.isPending ? "Granting Access..." : "Grant Full Access"}
+                          {grantAccessMutation.isPending ? "Sending Invitation..." : "Send Invitation"}
                         </Button>
                         <Button 
                           variant="outline" 
@@ -634,7 +683,7 @@ export default function ProviderAccessPage() {
                   </DialogContent>
                 </Dialog>
               </div>
-            )}
+            ) : null}
           </CardContent>
         </Card>
 
