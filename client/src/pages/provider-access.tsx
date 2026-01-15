@@ -75,6 +75,16 @@ export default function ProviderAccessPage() {
     enabled: !!user,
   });
 
+  // Get pending provider requests (providers requesting access to this patient)
+  const { data: pendingProviderRequests = [], refetch: refetchProviderRequests } = useQuery({
+    queryKey: [`/api/patients/${user?.id}/provider-requests`],
+    queryFn: async () => {
+      if (!user?.id) return [];
+      return await apiRequest(`/api/patients/${user.id}/provider-requests`);
+    },
+    enabled: !!user,
+  });
+
   // Grant access mutation
   const grantAccessMutation = useMutation({
     mutationFn: async (providerId: string) => {
@@ -204,6 +214,33 @@ export default function ProviderAccessPage() {
     },
   });
 
+  // Respond to provider access request mutation
+  const respondToProviderRequestMutation = useMutation({
+    mutationFn: async ({ relationId, status }: { relationId: number; status: 'approved' | 'denied' }) => {
+      return await apiRequest(`/api/provider-relations/${relationId}/status`, {
+        method: 'PATCH',
+        body: JSON.stringify({ status }),
+      });
+    },
+    onSuccess: async (_, variables) => {
+      await refetchRelationships();
+      await refetchProviderRequests();
+      toast({
+        title: variables.status === 'approved' ? "Access Granted" : "Request Denied",
+        description: variables.status === 'approved'
+          ? "The provider now has access to your mobility data."
+          : "The provider's access request has been denied.",
+      });
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Action Failed",
+        description: error.message || "Failed to respond to request",
+        variant: "destructive",
+      });
+    },
+  });
+
   // Update caregiver access status mutation
   const updateCaregiverStatusMutation = useMutation({
     mutationFn: async ({ relationId, status }: { relationId: number; status: 'approved' | 'denied' | 'revoked' }) => {
@@ -238,6 +275,7 @@ export default function ProviderAccessPage() {
   const hasProviders = Array.isArray(providerRelationships) && providerRelationships.length > 0;
   const hasCaregivers = Array.isArray(caregivers) && caregivers.length > 0;
   const hasPendingCaregiverRequests = Array.isArray(pendingCaregiverRequests) && pendingCaregiverRequests.length > 0;
+  const hasPendingProviderRequests = Array.isArray(pendingProviderRequests) && pendingProviderRequests.length > 0;
   
   // Filter out providers who already have access
   const availableProviders = Array.isArray(providers) && Array.isArray(providerRelationships) 
@@ -351,6 +389,61 @@ export default function ProviderAccessPage() {
             </div>
           </CardHeader>
           <CardContent>
+            {/* Pending Provider Requests */}
+            {hasPendingProviderRequests && (
+              <div className="mb-4">
+                <div className="flex items-center gap-2 mb-3">
+                  <Bell className="w-4 h-4 text-orange-600" />
+                  <h4 className="font-semibold text-orange-900">Pending Access Requests</h4>
+                  <Badge variant="secondary" className="bg-orange-100 text-orange-800">
+                    {pendingProviderRequests.length}
+                  </Badge>
+                </div>
+                <div className="space-y-2">
+                  {pendingProviderRequests.map((request: any) => (
+                    <div key={request.relationship.id} className="flex items-center justify-between p-3 bg-orange-50 rounded-lg border border-orange-200">
+                      <div>
+                        <p className="font-medium text-orange-900">
+                          {request.credentials && `${request.credentials} `}
+                          {request.firstName} {request.lastName}
+                        </p>
+                        {request.specialty && (
+                          <p className="text-sm text-orange-700">{request.specialty}</p>
+                        )}
+                        <p className="text-xs text-orange-600">
+                          Requested: {new Date(request.relationship.requestedAt).toLocaleDateString()}
+                        </p>
+                      </div>
+                      <div className="flex gap-2">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => respondToProviderRequestMutation.mutate({
+                            relationId: request.relationship.id,
+                            status: 'denied'
+                          })}
+                          disabled={respondToProviderRequestMutation.isPending}
+                        >
+                          Deny
+                        </Button>
+                        <Button
+                          size="sm"
+                          className="bg-green-600 hover:bg-green-700"
+                          onClick={() => respondToProviderRequestMutation.mutate({
+                            relationId: request.relationship.id,
+                            status: 'approved'
+                          })}
+                          disabled={respondToProviderRequestMutation.isPending}
+                        >
+                          Approve
+                        </Button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
             {hasProviders ? (
               <div className="space-y-4">
                 {Array.isArray(providerRelationships) && providerRelationships.map((relationship: any) => (
