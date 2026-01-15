@@ -1,8 +1,7 @@
 import express, { type Request, Response, NextFunction } from "express";
-import session from "express-session";
 import { registerRoutes } from "./routes";
 import { logger, errorLogger } from "./logger";
-import sessionConfig from "./session";
+import { getSessionMiddleware } from "./session";
 import { updateRollingDataWindow } from "./rolling-data";
 
 // Check if running on Vercel
@@ -17,8 +16,7 @@ app.set('trust proxy', true);
 app.use(express.json());
 app.use(express.urlencoded({ extended: false }));
 
-// Session middleware - must be before routes
-app.use(session(sessionConfig));
+// Session middleware will be added in initializeApp() after async store initialization
 
 app.use((req, res, next) => {
   const start = Date.now();
@@ -52,6 +50,12 @@ app.use((req, res, next) => {
 
 // Initialize app (for both Vercel and standalone)
 async function initializeApp() {
+  // Initialize session middleware with proper store (PostgreSQL on Vercel, SQLite locally)
+  // This must be done before registering routes
+  const sessionMiddleware = await getSessionMiddleware();
+  app.use(sessionMiddleware);
+  logger.info('Session middleware initialized');
+
   // Auto-update demo patient data to keep dates current
   await updateRollingDataWindow();
 

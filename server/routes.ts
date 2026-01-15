@@ -495,9 +495,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const startDate = patient.admissionDate || patient.createdAt;
       const daysSinceStart = startDate ? Math.floor((Date.now() - new Date(startDate).getTime()) / (1000 * 60 * 60 * 24)) : 0;
 
+      // Auto-recalculate stats if they seem stale (avgDailyDuration is 0 but there are sessions)
+      let finalStats = stats;
+      if (sessions.length > 0 && (!stats?.avgDailyDuration || stats.avgDailyDuration === 0)) {
+        logger.info('Auto-recalculating stale patient stats', { patientId, sessionsCount: sessions.length });
+        const recalculatedStats = await storage.recalculatePatientStats(patientId);
+        if (recalculatedStats) {
+          finalStats = recalculatedStats;
+        }
+      }
+
       // Recalculate consistency streak based on current sessions
       const currentStreak = calculateCurrentStreak(sessions);
-      const updatedStats = stats ? { ...stats, consistencyStreak: currentStreak } : null;
+      const updatedStats = finalStats ? { ...finalStats, consistencyStreak: currentStreak } : null;
 
       res.json({
         patient,
