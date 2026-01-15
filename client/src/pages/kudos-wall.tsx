@@ -116,6 +116,10 @@ export default function KudosWall() {
   const reactionEmojis = ["👏", "💪", "🎉", "❤️", "🔥", "⭐"];
   const avatarEmojis = ["👤", "🦸", "🧑‍⚕️", "🏃", "💪", "🎯", "⚡", "🌟"];
 
+  // Check if user is already on the leaderboard (already participating)
+  const isOnLeaderboard = leaderboard?.todayLeaders?.some((e: any) => e.isCurrentUser) ||
+                          leaderboard?.goalCrushers?.some((e: any) => e.isCurrentUser);
+
   if (isLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
@@ -202,8 +206,8 @@ export default function KudosWall() {
           </Dialog>
         </div>
 
-        {/* Opt-in prompt */}
-        {!preferences?.optInKudos && !preferences?.optInNudges && (
+        {/* Opt-in prompt - hide if user is already on leaderboard */}
+        {!preferences?.optInKudos && !preferences?.optInNudges && !isOnLeaderboard && (
           <Card className="mb-6 border-blue-200 bg-blue-50">
             <CardContent className="p-6">
               <div className="flex items-start space-x-4">
