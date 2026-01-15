@@ -171,7 +171,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ error: "Invalid user type" });
       }
     } catch (error) {
-      console.error("Registration error:", error);
+      logger.error("Registration error", { error: (error as Error).message });
       res.status(400).json({ error: "Invalid registration data" });
     }
   });
@@ -314,7 +314,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const user = await storage.getUser(userId);
 
       if (!user) {
-        return res.status(404).json({ error: "User not found" });
+        return res.status(404).json({ error: "Resource not found" });
       }
 
       // Audit the session restoration
@@ -387,7 +387,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const providers = await storage.getProviders();
       res.json(providers);
     } catch (error) {
-      console.error("Providers fetch error:", error);
+      logger.error("Providers fetch error", { error: (error as Error).message });
       res.status(500).json({ error: "Failed to fetch providers" });
     }
   });
@@ -404,17 +404,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
       });
       res.json(newProvider);
     } catch (error) {
-      console.error("Provider creation error:", error);
+      logger.error("Provider creation error", { error: (error as Error).message });
       res.status(500).json({ error: "Failed to create provider" });
     }
   });
 
-  // Grant provider access to patient
-  app.post("/api/patients/:patientId/grant-access/:providerId", async (req, res) => {
+  // Grant provider access to patient (patient must authorize)
+  app.post("/api/patients/:patientId/grant-access/:providerId", requireAuth, authorizePatientAccess, async (req, res) => {
     try {
       const patientId = parseInt(req.params.patientId);
       const providerId = parseInt(req.params.providerId);
-      
+
       // Create the relationship if it doesn't exist
       try {
         await storage.createProviderPatientRelation({
@@ -426,24 +426,24 @@ export async function registerRoutes(app: Express): Promise<Server> {
       } catch (error) {
         // Relation might already exist, that's ok
       }
-      
+
       // Grant permission
       const relation = await storage.grantProviderAccess(patientId, providerId);
       res.json(relation);
     } catch (error) {
-      console.error("Grant access error:", error);
+      logger.error("Grant access error", { error: (error as Error).message });
       res.status(500).json({ error: "Failed to grant provider access" });
     }
   });
 
   // Get patients for a provider
-  app.get("/api/providers/:providerId/patients", async (req, res) => {
+  app.get("/api/providers/:providerId/patients", requireAuth, requireProvider, async (req, res) => {
     try {
       const providerId = parseInt(req.params.providerId);
       const patients = await storage.getPatientsByProvider(providerId);
       res.json(patients);
     } catch (error) {
-      console.error("Provider patients fetch error:", error);
+      logger.error("Provider patients fetch error", { error: (error as Error).message });
       res.status(500).json({ error: "Failed to fetch provider patients" });
     }
   });
@@ -512,7 +512,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const usageData = await storage.getDailyUsageData(patientId, days);
       res.json(usageData);
     } catch (error) {
-      console.error("Usage data error:", error);
+      logger.error("Usage data error", { error: (error as Error).message });
       res.status(500).json({ error: "Failed to load usage data" });
     }
   });
@@ -532,7 +532,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       res.json({ message: "Goals successfully updated from risk assessment" });
     } catch (error) {
-      console.error("Error pushing goals from assessment:", error);
+      logger.error("Error pushing goals from assessment", { error: (error as Error).message });
       res.status(500).json({ message: "Failed to update patient goals" });
     }
   });
@@ -544,7 +544,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const leaderboard = await storage.getLeaderboard(limit);
       res.json(leaderboard);
     } catch (error) {
-      console.error("Leaderboard error:", error);
+      logger.error("Leaderboard error", { error: (error as Error).message });
       res.status(500).json({ error: "Failed to load leaderboard" });
     }
   });
@@ -591,12 +591,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
       logger.debug('Session created', { sessionId: session.id });
       res.json(session);
     } catch (error) {
-      console.error("Session creation error:", error);
+      logger.error("Session creation error", { error: (error as Error).message });
       // For Zod errors, get the detailed message
       if (error && typeof error === 'object' && 'issues' in error) {
         const zodError = error as { issues: Array<{ path: string[]; message: string }> };
         const details = zodError.issues.map(i => `${i.path.join('.')}: ${i.message}`).join(', ');
-        console.error("Zod validation errors:", details);
+        logger.error("Zod validation errors", { error: details });
         return res.status(400).json({ error: `Validation failed: ${details}` });
       }
       const errorMessage = error instanceof Error ? error.message : "Invalid session data";
@@ -612,12 +612,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const session = await storage.updateSession(sessionId, updates);
       
       if (!session) {
-        return res.status(404).json({ error: "Session not found" });
+        return res.status(404).json({ error: "Resource not found" });
       }
       
       res.json(session);
     } catch (error) {
-      console.error("Session update error:", error);
+      logger.error("Session update error", { error: (error as Error).message });
       res.status(500).json({ error: "Failed to update session" });
     }
   });
@@ -631,7 +631,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const goal = await storage.createGoal(goalData);
       res.json(goal);
     } catch (error) {
-      console.error("Goal creation error:", error);
+      logger.error("Goal creation error", { error: (error as Error).message });
       res.status(400).json({ error: "Invalid goal data" });
     }
   });
@@ -648,7 +648,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }));
       res.json(patientsWithDates);
     } catch (error) {
-      console.error("Error fetching provider patients:", error);
+      logger.error("Error fetching provider patients", { error: (error as Error).message });
       res.status(500).json({ error: "Failed to fetch patients" });
     }
   });
@@ -699,7 +699,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         goals: createdGoals
       });
     } catch (error) {
-      console.error("Error saving patient goals:", error);
+      logger.error("Error saving patient goals", { error: (error as Error).message });
       res.status(500).json({ error: "Failed to save goals" });
     }
   });
@@ -716,7 +716,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       );
       res.json(recentSessions);
     } catch (error) {
-      console.error("Error fetching patient sessions:", error);
+      logger.error("Error fetching patient sessions", { error: (error as Error).message });
       res.status(500).json({ error: "Failed to fetch sessions" });
     }
   });
@@ -727,55 +727,55 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const goalId = parseInt(req.params.id);
       const updates = req.body;
       const goal = await storage.updateGoal(goalId, updates);
-      
+
       if (!goal) {
-        return res.status(404).json({ error: "Goal not found" });
+        return res.status(404).json({ error: "Resource not found" });
       }
-      
+
       res.json(goal);
     } catch (error) {
-      console.error("Goal update error:", error);
+      logger.error("Goal update error", { error: (error as Error).message });
       res.status(500).json({ error: "Failed to update goal" });
     }
   });
 
   // Get adaptive goal suggestion
-  app.get("/api/patients/:id/adaptive-goal", async (req, res) => {
+  app.get("/api/patients/:id/adaptive-goal", requireAuth, authorizePatientAccess, async (req, res) => {
     try {
       const patientId = parseInt(req.params.id);
       const adaptiveGoal = await storage.calculateAdaptiveGoal(patientId);
       res.json(adaptiveGoal);
     } catch (error) {
-      console.error("Adaptive goal error:", error);
+      logger.error("Adaptive goal error", { error: (error as Error).message });
       res.status(500).json({ error: "Failed to calculate adaptive goal" });
     }
   });
 
   // Risk Assessment Routes
 
-  // Process text input using AI
-  app.post("/api/risk-assessment/process-text", riskAssessmentLimiter, async (req, res) => {
+  // Process text input using AI (requires auth for PHI processing)
+  app.post("/api/risk-assessment/process-text", requireAuth, riskAssessmentLimiter, async (req, res) => {
     try {
       const { field, text } = req.body;
-      
+
       if (!text || !field) {
         return res.json({}); // Return empty object if no text to process
       }
 
       // Import the AI processor
       const { processMedicalText } = await import('./ai-processor.js');
-      
+
       // Create input object based on field
       const input: any = {};
       input[field] = text;
-      
+
       // Process the medical text
       const processed = await processMedicalText(input);
-      
+
       // Return the structured data
       res.json(processed);
     } catch (error) {
-      console.error("Text processing error:", error);
+      logger.error("Text processing error", { error: (error as Error).message });
       res.json({}); // Return empty object on error to not break the flow
     }
   });
@@ -824,7 +824,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         assessmentId: assessment.id
       });
     } catch (error) {
-      console.error("Risk assessment error:", error);
+      logger.error("Risk assessment error", { error: (error as Error).message });
       if (error.name === 'ZodError') {
         res.status(400).json({ 
           error: "Invalid risk assessment data", 
@@ -868,7 +868,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         anonymous: true // Flag to indicate this was an anonymous calculation
       });
     } catch (error) {
-      console.error("Anonymous risk assessment error:", error);
+      logger.error("Anonymous risk assessment error", { error: (error as Error).message });
       if (error.name === 'ZodError') {
         res.status(400).json({ 
           error: "Invalid risk assessment data", 
@@ -940,7 +940,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       res.json(assessment);
     } catch (error) {
-      console.error("Latest risk assessment fetch error:", error);
+      logger.error("Latest risk assessment fetch error", { error: (error as Error).message });
       res.status(500).json({ error: "Failed to fetch latest risk assessment" });
     }
   });
@@ -1001,7 +1001,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         unit: "general"
       });
     } catch (error) {
-      console.error("Get preferences error:", error);
+      logger.error("Get preferences error", { error: (error as Error).message });
       res.status(500).json({ error: "Failed to get preferences" });
     }
   });
@@ -1013,7 +1013,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       await kudosService.updatePatientPreferences(patientId, req.body);
       res.json({ success: true });
     } catch (error) {
-      console.error("Update preferences error:", error);
+      logger.error("Update preferences error", { error: (error as Error).message });
       res.status(500).json({ error: "Failed to update preferences" });
     }
   });
@@ -1025,7 +1025,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const feedItems = await kudosService.getFeedForUnit(unit);
       res.json(feedItems);
     } catch (error) {
-      console.error("Get feed error:", error);
+      logger.error("Get feed error", { error: (error as Error).message });
       res.status(500).json({ error: "Failed to get feed" });
     }
   });
@@ -1038,7 +1038,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       await kudosService.addReaction(patientId, feedItemId, reactionType);
       res.json({ success: true });
     } catch (error) {
-      console.error("Add reaction error:", error);
+      logger.error("Add reaction error", { error: (error as Error).message });
       res.status(500).json({ error: "Failed to add reaction" });
     }
   });
@@ -1051,7 +1051,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       await kudosService.sendNudge(senderId, recipientId, templateType, metadata);
       res.json({ success: true });
     } catch (error) {
-      console.error("Send nudge error:", error);
+      logger.error("Send nudge error", { error: (error as Error).message });
       res.status(500).json({ error: "Failed to send nudge" });
     }
   });
@@ -1167,7 +1167,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       nudgeTargets.sort((a, b) => b.minutesLeft - a.minutesLeft);
       res.json(nudgeTargets.slice(0, 10));
     } catch (error) {
-      console.error("Get nudge targets error:", error);
+      logger.error("Get nudge targets error", { error: (error as Error).message });
       res.status(500).json({ error: "Failed to get nudge targets" });
     }
   });
@@ -1307,7 +1307,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       res.json({ todayLeaders, goalCrushers });
     } catch (error) {
-      console.error("Get leaderboard error:", error);
+      logger.error("Get leaderboard error", { error: (error as Error).message });
       res.status(500).json({ error: "Failed to get leaderboard" });
     }
   });
@@ -1394,7 +1394,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
       });
     } catch (error) {
-      console.error("Get received kudos error:", error);
+      logger.error("Get received kudos error", { error: (error as Error).message });
       res.status(500).json({ error: "Failed to get received kudos" });
     }
   });
@@ -1408,7 +1408,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const protocols = await protocolEngine.getAllProtocols();
       res.json(protocols);
     } catch (error) {
-      console.error("Get protocols error:", error);
+      logger.error("Get protocols error", { error: (error as Error).message });
       res.status(500).json({ error: "Failed to get protocols" });
     }
   });
@@ -1421,12 +1421,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const protocol = await protocolEngine.getProtocolById(protocolId);
 
       if (!protocol) {
-        return res.status(404).json({ error: "Protocol not found" });
+        return res.status(404).json({ error: "Resource not found" });
       }
 
       res.json(protocol);
     } catch (error) {
-      console.error("Get protocol error:", error);
+      logger.error("Get protocol error", { error: (error as Error).message });
       res.status(500).json({ error: "Failed to get protocol" });
     }
   });
@@ -1456,13 +1456,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       res.json(protocol);
     } catch (error) {
-      console.error("Protocol matching error:", error);
+      logger.error("Protocol matching error", { error: (error as Error).message });
       res.status(500).json({ error: "Failed to match protocol" });
     }
   });
 
   // Assign protocol to patient
-  app.post("/api/patients/:patientId/protocol", createLimiter, async (req, res) => {
+  app.post("/api/patients/:patientId/protocol", requireAuth, authorizePatientAccess, createLimiter, async (req, res) => {
     try {
       const patientId = parseInt(req.params.patientId);
       const { protocolId, assignedBy, startPhase } = req.body;
@@ -1485,13 +1485,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       res.json(assignment);
     } catch (error) {
-      console.error("Protocol assignment error:", error);
+      logger.error("Protocol assignment error", { error: (error as Error).message });
       res.status(500).json({ error: "Failed to assign protocol" });
     }
   });
 
   // Get patient's current protocol assignment
-  app.get("/api/patients/:patientId/protocol", async (req, res) => {
+  app.get("/api/patients/:patientId/protocol", requireAuth, authorizePatientAccess, async (req, res) => {
     try {
       const patientId = parseInt(req.params.patientId);
       const { protocolEngine } = await import('./protocols/protocol-engine');
@@ -1503,13 +1503,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       res.json(assignment);
     } catch (error) {
-      console.error("Get patient protocol error:", error);
+      logger.error("Get patient protocol error", { error: (error as Error).message });
       res.status(500).json({ error: "Failed to get patient protocol" });
     }
   });
 
   // Get current exercise prescription for patient
-  app.get("/api/patients/:patientId/prescription", async (req, res) => {
+  app.get("/api/patients/:patientId/prescription", requireAuth, authorizePatientAccess, async (req, res) => {
     try {
       const patientId = parseInt(req.params.patientId);
       const { protocolEngine } = await import('./protocols/protocol-engine');
@@ -1524,14 +1524,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       res.json(prescription);
     } catch (error) {
-      console.error("Get prescription error:", error);
+      logger.error("Get prescription error", { error: (error as Error).message });
       res.status(500).json({ error: "Failed to get prescription" });
     }
   });
 
   // Get personalized prescription using patient goal calculator + diagnosis adjustments
   // This is the NEW approach that calculates baseline from risk calculator and adjusts for diagnosis
-  app.get("/api/patients/:patientId/personalized-prescription", async (req, res) => {
+  app.get("/api/patients/:patientId/personalized-prescription", requireAuth, authorizePatientAccess, async (req, res) => {
     try {
       const patientId = parseInt(req.params.patientId);
       const { personalizedProtocolMatcher } = await import('./personalization/personalized-protocol-matcher');
@@ -1547,13 +1547,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       res.json(prescription);
     } catch (error) {
-      console.error("Personalized prescription error:", error);
+      logger.error("Personalized prescription error", { error: (error as Error).message });
       res.status(500).json({ error: "Failed to generate personalized prescription" });
     }
   });
 
   // Generate personalized prescription with diagnosis and medication overrides
-  app.post("/api/patients/:patientId/personalized-prescription", createLimiter, async (req, res) => {
+  app.post("/api/patients/:patientId/personalized-prescription", requireAuth, authorizePatientAccess, createLimiter, async (req, res) => {
     try {
       const patientId = parseInt(req.params.patientId);
       const { diagnosis, medications, riskAssessmentInput } = req.body;
@@ -1583,13 +1583,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
         message
       });
     } catch (error) {
-      console.error("Personalized prescription error:", error);
+      logger.error("Personalized prescription error", { error: (error as Error).message });
       res.status(500).json({ error: "Failed to generate personalized prescription" });
     }
   });
 
   // Check if patient should progress to next phase
-  app.get("/api/patients/:patientId/protocol/progression", async (req, res) => {
+  app.get("/api/patients/:patientId/protocol/progression", requireAuth, authorizePatientAccess, async (req, res) => {
     try {
       const patientId = parseInt(req.params.patientId);
       const { protocolEngine } = await import('./protocols/protocol-engine');
@@ -1597,13 +1597,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       res.json(progressionCheck);
     } catch (error) {
-      console.error("Progression check error:", error);
+      logger.error("Progression check error", { error: (error as Error).message });
       res.status(500).json({ error: "Failed to check progression criteria" });
     }
   });
 
   // Advance patient to next protocol phase
-  app.post("/api/patients/:patientId/protocol/progress", createLimiter, async (req, res) => {
+  app.post("/api/patients/:patientId/protocol/progress", requireAuth, authorizePatientAccess, createLimiter, async (req, res) => {
     try {
       const patientId = parseInt(req.params.patientId);
       const { protocolEngine } = await import('./protocols/protocol-engine');
@@ -1620,7 +1620,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const updatedAssignment = await protocolEngine.getPatientAssignment(patientId);
       res.json(updatedAssignment);
     } catch (error) {
-      console.error("Protocol progression error:", error);
+      logger.error("Protocol progression error", { error: (error as Error).message });
       res.status(500).json({ error: "Failed to progress patient" });
     }
   });
@@ -1654,7 +1654,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       res.send(pdfBuffer);
     } catch (error: any) {
-      console.error("Shift report generation error:", error);
+      logger.error("Shift report generation error", { error: (error as Error).message });
       res.status(500).json({
         error: "Failed to generate shift report",
         details: error.message
@@ -1687,7 +1687,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         generatedAt: new Date().toISOString()
       });
     } catch (error: any) {
-      console.error("PT progress note generation error:", error);
+      logger.error("PT progress note generation error", { error: (error as Error).message });
       res.status(500).json({
         error: "Failed to generate PT progress note",
         details: error.message
@@ -1696,7 +1696,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Get available reports for patient
-  app.get("/api/patients/:patientId/reports", async (req, res) => {
+  app.get("/api/patients/:patientId/reports", requireAuth, authorizePatientAccess, async (req, res) => {
     try {
       const patientId = parseInt(req.params.patientId);
 
@@ -1728,7 +1728,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         availableReports
       });
     } catch (error) {
-      console.error("Get available reports error:", error);
+      logger.error("Get available reports error", { error: (error as Error).message });
       res.status(500).json({ error: "Failed to get available reports" });
     }
   });
@@ -1742,13 +1742,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const alerts = await alertEngine.getAllUnacknowledgedAlerts();
       res.json(alerts);
     } catch (error) {
-      console.error("Get alerts error:", error);
+      logger.error("Get alerts error", { error: (error as Error).message });
       res.status(500).json({ error: "Failed to get alerts" });
     }
   });
 
   // Get alerts for specific patient
-  app.get("/api/patients/:patientId/alerts", async (req, res) => {
+  app.get("/api/patients/:patientId/alerts", requireAuth, authorizePatientAccess, async (req, res) => {
     try {
       const patientId = parseInt(req.params.patientId);
       const includeAcknowledged = req.query.includeAcknowledged === 'true';
@@ -1758,7 +1758,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       res.json(alerts);
     } catch (error) {
-      console.error("Get patient alerts error:", error);
+      logger.error("Get patient alerts error", { error: (error as Error).message });
       res.status(500).json({ error: "Failed to get patient alerts" });
     }
   });
@@ -1773,7 +1773,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       res.json(summary);
     } catch (error) {
-      console.error("Get alert summary error:", error);
+      logger.error("Get alert summary error", { error: (error as Error).message });
       res.status(500).json({ error: "Failed to get alert summary" });
     }
   });
@@ -1797,7 +1797,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       res.json({ success: true, alertId, acknowledgedBy });
     } catch (error) {
-      console.error("Acknowledge alert error:", error);
+      logger.error("Acknowledge alert error", { error: (error as Error).message });
       res.status(500).json({ error: "Failed to acknowledge alert" });
     }
   });
@@ -1813,13 +1813,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
         alerts
       });
     } catch (error) {
-      console.error("Check inactivity error:", error);
+      logger.error("Check inactivity error", { error: (error as Error).message });
       res.status(500).json({ error: "Failed to check inactivity" });
     }
   });
 
   // Check protocol compliance for patient
-  app.post("/api/patients/:patientId/alerts/check-compliance", createLimiter, async (req, res) => {
+  app.post("/api/patients/:patientId/alerts/check-compliance", requireAuth, authorizePatientAccess, createLimiter, async (req, res) => {
     try {
       const patientId = parseInt(req.params.patientId);
 
@@ -1831,13 +1831,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
         complianceChecked: true
       });
     } catch (error) {
-      console.error("Check compliance error:", error);
+      logger.error("Check compliance error", { error: (error as Error).message });
       res.status(500).json({ error: "Failed to check protocol compliance" });
     }
   });
 
   // Run all alert checks for a patient
-  app.post("/api/patients/:patientId/alerts/check-all", createLimiter, async (req, res) => {
+  app.post("/api/patients/:patientId/alerts/check-all", requireAuth, authorizePatientAccess, createLimiter, async (req, res) => {
     try {
       const patientId = parseInt(req.params.patientId);
 
@@ -1849,7 +1849,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         alerts
       });
     } catch (error) {
-      console.error("Run all checks error:", error);
+      logger.error("Run all checks error", { error: (error as Error).message });
       res.status(500).json({ error: "Failed to run all alert checks" });
     }
   });
@@ -1862,7 +1862,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const providers = await storage.getProviders();
       res.json(providers);
     } catch (error) {
-      console.error("Get providers error:", error);
+      logger.error("Get providers error", { error: (error as Error).message });
       res.status(500).json({ error: "Failed to get providers" });
     }
   });
@@ -1880,7 +1880,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const relationships = await storage.getProviderPatientRelationships(patientId);
       res.json(relationships);
     } catch (error) {
-      console.error("Get relationships error:", error);
+      logger.error("Get relationships error", { error: (error as Error).message });
       res.status(500).json({ error: "Failed to get provider relationships" });
     }
   });
@@ -1892,7 +1892,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const relationships = await storage.getProviderPatientRelationships(patientId);
       res.json(relationships);
     } catch (error) {
-      console.error("Get relationships error:", error);
+      logger.error("Get relationships error", { error: (error as Error).message });
       res.status(500).json({ error: "Failed to get provider relationships" });
     }
   });
@@ -1933,7 +1933,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       });
       res.json(relationship);
     } catch (error) {
-      console.error("Grant access error:", error);
+      logger.error("Grant access error", { error: (error as Error).message });
       res.status(500).json({ error: "Failed to grant provider access" });
     }
   });
@@ -1954,13 +1954,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
         .limit(1);
 
       if (!relationship[0]) {
-        return res.status(404).json({ error: "Provider relationship not found" });
+        return res.status(404).json({ error: "Resource not found" });
       }
 
       await storage.deleteProviderPatientRelationship(relationshipId);
       res.json({ success: true });
     } catch (error) {
-      console.error("Revoke access error:", error);
+      logger.error("Revoke access error", { error: (error as Error).message });
       res.status(500).json({ error: "Failed to revoke provider access" });
     }
   });
@@ -2001,13 +2001,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
         res.json(updatedGoal);
       }
     } catch (error) {
-      console.error("Update goal error:", error);
+      logger.error("Update goal error", { error: (error as Error).message });
       res.status(500).json({ error: "Failed to update goal" });
     }
   });
 
   // Recalculate goal progress from existing sessions
-  app.post("/api/patients/:patientId/recalculate-goals", async (req, res) => {
+  app.post("/api/patients/:patientId/recalculate-goals", requireAuth, authorizePatientAccess, async (req, res) => {
     try {
       const patientId = parseInt(req.params.patientId);
       
@@ -2061,7 +2061,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         sessionsProcessed: sessions.length
       });
     } catch (error) {
-      console.error("Error recalculating goal progress:", error);
+      logger.error("Error recalculating goal progress", { error: (error as Error).message });
       res.status(500).json({ error: "Failed to recalculate goal progress" });
     }
   });
@@ -2074,7 +2074,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const devices = await storage.getDevices();
       res.json(devices);
     } catch (error) {
-      console.error("Error fetching devices:", error);
+      logger.error("Error fetching devices", { error: (error as Error).message });
       res.status(500).json({ error: "Failed to fetch devices" });
     }
   });
@@ -2104,20 +2104,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       res.json({ lastDevice });
     } catch (error) {
-      console.error("Error fetching last device:", error);
+      logger.error("Error fetching last device", { error: (error as Error).message });
       res.json({ lastDevice: null }); // Return null on error to avoid breaking the form
     }
   });
 
   // Get patient profile for risk calculator auto-population
-  app.get("/api/patients/:patientId/profile-for-calculator", async (req, res) => {
+  app.get("/api/patients/:patientId/profile-for-calculator", requireAuth, authorizePatientAccess, async (req, res) => {
     try {
       const { patientId } = req.params;
       
       // Get patient basic info
       const patient = await storage.getPatient(parseInt(patientId));
       if (!patient) {
-        return res.status(404).json({ error: "Patient not found" });
+        return res.status(404).json({ error: "Resource not found" });
       }
       
       // Get patient profile
@@ -2161,7 +2161,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       res.json(calculatorData);
     } catch (error) {
-      console.error("Error fetching patient profile for calculator:", error);
+      logger.error("Error fetching patient profile for calculator", { error: (error as Error).message });
       res.status(500).json({ error: "Failed to fetch patient profile" });
     }
   });
@@ -2173,12 +2173,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const device = await storage.getDevice(deviceId);
       
       if (!device) {
-        return res.status(404).json({ error: "Device not found" });
+        return res.status(404).json({ error: "Resource not found" });
       }
       
       res.json(device);
     } catch (error) {
-      console.error("Error fetching device:", error);
+      logger.error("Error fetching device", { error: (error as Error).message });
       res.status(500).json({ error: "Failed to fetch device" });
     }
   });
@@ -2196,7 +2196,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Check if device exists
       const device = await storage.getDevice(deviceId);
       if (!device) {
-        return res.status(404).json({ error: "Device not found" });
+        return res.status(404).json({ error: "Resource not found" });
       }
       
       // Link patient to device
@@ -2211,7 +2211,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         device: updatedDevice 
       });
     } catch (error) {
-      console.error("Error linking patient to device:", error);
+      logger.error("Error linking patient to device", { error: (error as Error).message });
       res.status(500).json({ error: "Failed to link patient to device" });
     }
   });
@@ -2224,7 +2224,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Check if device exists
       const device = await storage.getDevice(deviceId);
       if (!device) {
-        return res.status(404).json({ error: "Device not found" });
+        return res.status(404).json({ error: "Resource not found" });
       }
       
       // Unlink patient from device
@@ -2239,13 +2239,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
         device: updatedDevice 
       });
     } catch (error) {
-      console.error("Error resetting device:", error);
+      logger.error("Error resetting device", { error: (error as Error).message });
       res.status(500).json({ error: "Failed to reset device" });
     }
   });
 
   // Get patient's device usage history
-  app.get("/api/patients/:patientId/devices", async (req, res) => {
+  app.get("/api/patients/:patientId/devices", requireAuth, authorizePatientAccess, async (req, res) => {
     try {
       const patientId = parseInt(req.params.patientId);
       
@@ -2256,13 +2256,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const deviceHistory = await storage.getPatientDeviceHistory(patientId);
       res.json(deviceHistory);
     } catch (error) {
-      console.error("Error fetching patient device history:", error);
+      logger.error("Error fetching patient device history", { error: (error as Error).message });
       res.status(500).json({ error: "Failed to fetch device history" });
     }
   });
 
   // Get all sessions across all devices for a patient (data portability)
-  app.get("/api/patients/:patientId/sessions/portable", async (req, res) => {
+  app.get("/api/patients/:patientId/sessions/portable", requireAuth, authorizePatientAccess, async (req, res) => {
     try {
       const patientId = parseInt(req.params.patientId);
       
@@ -2281,7 +2281,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         devicesUsed: [...new Set(sessions.map(s => s.deviceId).filter(Boolean))].length
       });
     } catch (error) {
-      console.error("Error fetching portable session data:", error);
+      logger.error("Error fetching portable session data", { error: (error as Error).message });
       res.status(500).json({ error: "Failed to fetch portable session data" });
     }
   });
@@ -2291,7 +2291,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // ============================================================================
 
   // Get all EMS assessments for a patient
-  app.get("/api/patients/:patientId/ems-assessments", async (req, res) => {
+  app.get("/api/patients/:patientId/ems-assessments", requireAuth, authorizePatientAccess, async (req, res) => {
     try {
       const patientId = parseInt(req.params.patientId);
       const { emsAssessments } = await import("@shared/schema");
@@ -2301,7 +2301,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         .orderBy(emsAssessments.assessedAt);
       res.json(assessments);
     } catch (error) {
-      console.error("Error fetching EMS assessments:", error);
+      logger.error("Error fetching EMS assessments", { error: (error as Error).message });
       res.status(500).json({ error: "Failed to fetch EMS assessments" });
     }
   });
@@ -2317,18 +2317,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
         .limit(1);
 
       if (!assessment) {
-        return res.status(404).json({ error: "EMS assessment not found" });
+        return res.status(404).json({ error: "Resource not found" });
       }
 
       res.json(assessment);
     } catch (error) {
-      console.error("Error fetching EMS assessment:", error);
+      logger.error("Error fetching EMS assessment", { error: (error as Error).message });
       res.status(500).json({ error: "Failed to fetch EMS assessment" });
     }
   });
 
   // Create a new EMS assessment
-  app.post("/api/patients/:patientId/ems-assessments", createLimiter, async (req, res) => {
+  app.post("/api/patients/:patientId/ems-assessments", requireAuth, authorizePatientAccess, createLimiter, async (req, res) => {
     try {
       const patientId = parseInt(req.params.patientId);
       const { emsAssessments } = await import("@shared/schema");
@@ -2383,7 +2383,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       res.json(newAssessment);
     } catch (error) {
-      console.error("Error creating EMS assessment:", error);
+      logger.error("Error creating EMS assessment", { error: (error as Error).message });
       res.status(500).json({ error: "Failed to create EMS assessment" });
     }
   });
@@ -2408,7 +2408,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           .limit(1);
 
         if (!current) {
-          return res.status(404).json({ error: "EMS assessment not found" });
+          return res.status(404).json({ error: "Resource not found" });
         }
 
         const lyingToSitting = updates.lyingToSitting ?? current.lyingToSitting;
@@ -2437,12 +2437,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
         .returning();
 
       if (!updated) {
-        return res.status(404).json({ error: "EMS assessment not found" });
+        return res.status(404).json({ error: "Resource not found" });
       }
 
       res.json(updated);
     } catch (error) {
-      console.error("Error updating EMS assessment:", error);
+      logger.error("Error updating EMS assessment", { error: (error as Error).message });
       res.status(500).json({ error: "Failed to update EMS assessment" });
     }
   });
@@ -2458,18 +2458,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
         .returning();
 
       if (!deleted) {
-        return res.status(404).json({ error: "EMS assessment not found" });
+        return res.status(404).json({ error: "Resource not found" });
       }
 
       res.json({ success: true, deleted });
     } catch (error) {
-      console.error("Error deleting EMS assessment:", error);
+      logger.error("Error deleting EMS assessment", { error: (error as Error).message });
       res.status(500).json({ error: "Failed to delete EMS assessment" });
     }
   });
 
   // Get latest EMS assessment for a patient
-  app.get("/api/patients/:patientId/ems-assessment/latest", async (req, res) => {
+  app.get("/api/patients/:patientId/ems-assessment/latest", requireAuth, authorizePatientAccess, async (req, res) => {
     try {
       const patientId = parseInt(req.params.patientId);
       const { emsAssessments } = await import("@shared/schema");
@@ -2487,7 +2487,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       res.json(latest);
     } catch (error) {
-      console.error("Error fetching latest EMS assessment:", error);
+      logger.error("Error fetching latest EMS assessment", { error: (error as Error).message });
       res.status(500).json({ error: "Failed to fetch latest EMS assessment" });
     }
   });
@@ -2560,7 +2560,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         accessStatus: 'pending'
       });
     } catch (error) {
-      console.error("Caregiver registration error:", error);
+      logger.error("Caregiver registration error", { error: (error as Error).message });
       res.status(500).json({ error: "Failed to register caregiver" });
     }
   });
@@ -2590,13 +2590,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
         unreadNotifications: notifications.length
       });
     } catch (error) {
-      console.error("Caregiver login error:", error);
+      logger.error("Caregiver login error", { error: (error as Error).message });
       res.status(500).json({ error: "Failed to login" });
     }
   });
 
   // Patient invites caregiver (patient-initiated)
-  app.post("/api/patients/:patientId/invite-caregiver", async (req, res) => {
+  app.post("/api/patients/:patientId/invite-caregiver", requireAuth, authorizePatientAccess, async (req, res) => {
     try {
       const patientId = parseInt(req.params.patientId);
       const parsed = caregiverInviteSchema.safeParse(req.body);
@@ -2653,37 +2653,37 @@ export async function registerRoutes(app: Express): Promise<Server> {
         relationshipId: relation.id
       });
     } catch (error) {
-      console.error("Error inviting caregiver:", error);
+      logger.error("Error inviting caregiver", { error: (error as Error).message });
       res.status(500).json({ error: "Failed to invite caregiver" });
     }
   });
 
   // Get pending access requests for a patient
-  app.get("/api/patients/:patientId/caregiver-requests", async (req, res) => {
+  app.get("/api/patients/:patientId/caregiver-requests", requireAuth, authorizePatientAccess, async (req, res) => {
     try {
       const patientId = parseInt(req.params.patientId);
       const requests = await storage.getPendingCaregiverRequests(patientId);
       res.json(requests);
     } catch (error) {
-      console.error("Error fetching caregiver requests:", error);
+      logger.error("Error fetching caregiver requests", { error: (error as Error).message });
       res.status(500).json({ error: "Failed to fetch caregiver requests" });
     }
   });
 
   // Get all caregivers for a patient
-  app.get("/api/patients/:patientId/caregivers", async (req, res) => {
+  app.get("/api/patients/:patientId/caregivers", requireAuth, authorizePatientAccess, async (req, res) => {
     try {
       const patientId = parseInt(req.params.patientId);
       const caregivers = await storage.getCaregiversByPatientId(patientId);
       res.json(caregivers);
     } catch (error) {
-      console.error("Error fetching caregivers:", error);
+      logger.error("Error fetching caregivers", { error: (error as Error).message });
       res.status(500).json({ error: "Failed to fetch caregivers" });
     }
   });
 
-  // Approve/Deny/Revoke caregiver access
-  app.patch("/api/caregiver-relations/:relationId/status", async (req, res) => {
+  // Approve/Deny/Revoke caregiver access (patient must authorize)
+  app.patch("/api/caregiver-relations/:relationId/status", requireAuth, async (req, res) => {
     try {
       const relationId = parseInt(req.params.relationId);
       const { status } = req.body;
@@ -2694,7 +2694,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       const updated = await storage.updateCaregiverAccessStatus(relationId, status);
       if (!updated) {
-        return res.status(404).json({ error: "Relationship not found" });
+        return res.status(404).json({ error: "Resource not found" });
       }
 
       // Create notification for caregiver
@@ -2715,38 +2715,38 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       res.json(updated);
     } catch (error) {
-      console.error("Error updating caregiver status:", error);
+      logger.error("Error updating caregiver status", { error: (error as Error).message });
       res.status(500).json({ error: "Failed to update caregiver status" });
     }
   });
 
   // Get caregiver's patients and their data (caregiver dashboard)
-  app.get("/api/caregivers/:caregiverId/patients", async (req, res) => {
+  app.get("/api/caregivers/:caregiverId/patients", requireAuth, requireCaregiver, async (req, res) => {
     try {
       const caregiverId = parseInt(req.params.caregiverId);
       const patients = await storage.getPatientsByCaregiverId(caregiverId);
       res.json(patients);
     } catch (error) {
-      console.error("Error fetching caregiver's patients:", error);
+      logger.error("Error fetching caregiver's patients", { error: (error as Error).message });
       res.status(500).json({ error: "Failed to fetch patients" });
     }
   });
 
   // Get caregiver dashboard data for specific patient
-  app.get("/api/caregivers/:caregiverId/patients/:patientId/dashboard", async (req, res) => {
+  app.get("/api/caregivers/:caregiverId/patients/:patientId/dashboard", requireAuth, requireCaregiver, async (req, res) => {
     try {
       const caregiverId = parseInt(req.params.caregiverId);
       const patientId = parseInt(req.params.patientId);
 
-      console.log(`[Caregiver Dashboard] Fetching for caregiver ${caregiverId}, patient ${patientId}`);
+      logger.debug('Caregiver Dashboard: Fetching data', { caregiverId, patientId });
 
       // Verify caregiver has access to this patient
       let relation;
       try {
         relation = await storage.getCaregiverPatientRelation(caregiverId, patientId);
-        console.log(`[Caregiver Dashboard] Relation found:`, relation ? 'yes' : 'no', relation?.accessStatus);
+        logger.debug('Caregiver Dashboard: Relation lookup', { found: !!relation, accessStatus: relation?.accessStatus });
       } catch (e) {
-        console.error("[Caregiver Dashboard] Error in getCaregiverPatientRelation:", e);
+        logger.error("Caregiver Dashboard: Error in getCaregiverPatientRelation", { error: (e as Error).message });
         throw e;
       }
 
@@ -2759,33 +2759,33 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       try {
         patient = await storage.getPatient(patientId);
-        console.log(`[Caregiver Dashboard] Patient found:`, patient ? 'yes' : 'no');
+        logger.debug('Caregiver Dashboard: Patient lookup', { found: !!patient });
       } catch (e) {
-        console.error("[Caregiver Dashboard] Error in getPatient:", e);
+        logger.error("Caregiver Dashboard: Error in getPatient", { error: (e as Error).message });
         throw e;
       }
 
       try {
         goals = await storage.getGoalsByPatient(patientId);
-        console.log(`[Caregiver Dashboard] Goals found:`, goals?.length || 0);
+        logger.debug('Caregiver Dashboard: Goals lookup', { goalsCount: goals?.length || 0 });
       } catch (e) {
-        console.error("[Caregiver Dashboard] Error in getGoalsByPatient:", e);
+        logger.error("Caregiver Dashboard: Error in getGoalsByPatient", { error: (e as Error).message });
         throw e;
       }
 
       try {
         stats = await storage.getPatientStats(patientId);
-        console.log(`[Caregiver Dashboard] Stats found:`, stats ? 'yes' : 'no');
+        logger.debug('Caregiver Dashboard: Stats lookup', { found: !!stats });
       } catch (e) {
-        console.error("[Caregiver Dashboard] Error in getPatientStats:", e);
+        logger.error("Caregiver Dashboard: Error in getPatientStats", { error: (e as Error).message });
         throw e;
       }
 
       try {
         sessions = await storage.getSessionsByPatient(patientId);
-        console.log(`[Caregiver Dashboard] Sessions found:`, sessions?.length || 0);
+        logger.debug('Caregiver Dashboard: Sessions lookup', { sessionsCount: sessions?.length || 0 });
       } catch (e) {
-        console.error("[Caregiver Dashboard] Error in getSessionsByPatient:", e);
+        logger.error("Caregiver Dashboard: Error in getSessionsByPatient", { error: (e as Error).message });
         throw e;
       }
 
@@ -2793,9 +2793,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       try {
         usageData = await storage.getDailyUsageData(patientId, 30);
-        console.log(`[Caregiver Dashboard] Usage data entries:`, usageData?.length || 0);
+        logger.debug('Caregiver Dashboard: Usage data lookup', { entriesCount: usageData?.length || 0 });
       } catch (e) {
-        console.error("[Caregiver Dashboard] Error in getDailyUsageData:", e);
+        logger.error("Caregiver Dashboard: Error in getDailyUsageData", { error: (e as Error).message });
         throw e;
       }
 
@@ -2808,13 +2808,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
         caregiverRelation: relation
       });
     } catch (error) {
-      console.error("Error fetching caregiver dashboard:", error);
+      logger.error("Error fetching caregiver dashboard", { error: (error as Error).message });
       res.status(500).json({ error: "Failed to fetch dashboard data" });
     }
   });
 
   // Caregiver Observations
-  app.post("/api/caregivers/:caregiverId/observations", async (req, res) => {
+  app.post("/api/caregivers/:caregiverId/observations", requireAuth, requireCaregiver, async (req, res) => {
     try {
       const caregiverId = parseInt(req.params.caregiverId);
       const parsed = caregiverObservationSchema.safeParse(req.body);
@@ -2870,68 +2870,68 @@ export async function registerRoutes(app: Express): Promise<Server> {
         aiSummary
       });
     } catch (error) {
-      console.error("Error creating observation:", error);
+      logger.error("Error creating observation", { error: (error as Error).message });
       res.status(500).json({ error: "Failed to create observation" });
     }
   });
 
   // Get observations for a patient
-  app.get("/api/patients/:patientId/observations", async (req, res) => {
+  app.get("/api/patients/:patientId/observations", requireAuth, authorizePatientAccess, async (req, res) => {
     try {
       const patientId = parseInt(req.params.patientId);
       const limit = parseInt(req.query.limit as string) || 10;
       const observations = await storage.getCaregiverObservationsByPatient(patientId, limit);
       res.json(observations);
     } catch (error) {
-      console.error("Error fetching observations:", error);
+      logger.error("Error fetching observations", { error: (error as Error).message });
       res.status(500).json({ error: "Failed to fetch observations" });
     }
   });
 
   // Caregiver Notifications
-  app.get("/api/caregivers/:caregiverId/notifications", async (req, res) => {
+  app.get("/api/caregivers/:caregiverId/notifications", requireAuth, requireCaregiver, async (req, res) => {
     try {
       const caregiverId = parseInt(req.params.caregiverId);
       const unreadOnly = req.query.unreadOnly === 'true';
       const notifications = await storage.getCaregiverNotifications(caregiverId, unreadOnly);
       res.json(notifications);
     } catch (error) {
-      console.error("Error fetching notifications:", error);
+      logger.error("Error fetching notifications", { error: (error as Error).message });
       res.status(500).json({ error: "Failed to fetch notifications" });
     }
   });
 
-  app.patch("/api/caregiver-notifications/:notificationId/read", async (req, res) => {
+  app.patch("/api/caregiver-notifications/:notificationId/read", requireAuth, async (req, res) => {
     try {
       const notificationId = parseInt(req.params.notificationId);
       const updated = await storage.markCaregiverNotificationRead(notificationId);
       res.json(updated);
     } catch (error) {
-      console.error("Error marking notification read:", error);
+      logger.error("Error marking notification read", { error: (error as Error).message });
       res.status(500).json({ error: "Failed to mark notification read" });
     }
   });
 
-  app.post("/api/caregivers/:caregiverId/notifications/read-all", async (req, res) => {
+  app.post("/api/caregivers/:caregiverId/notifications/read-all", requireAuth, requireCaregiver, async (req, res) => {
     try {
       const caregiverId = parseInt(req.params.caregiverId);
       await storage.markAllCaregiverNotificationsRead(caregiverId);
       res.json({ success: true });
     } catch (error) {
-      console.error("Error marking all notifications read:", error);
+      logger.error("Error marking all notifications read", { error: (error as Error).message });
       res.status(500).json({ error: "Failed to mark notifications read" });
     }
   });
 
   // Discharge Checklist
-  app.get("/api/patients/:patientId/discharge-checklist", async (req, res) => {
+  app.get("/api/patients/:patientId/discharge-checklist", requireAuth, authorizePatientAccess, async (req, res) => {
     try {
       const patientId = parseInt(req.params.patientId);
       const caregiverId = req.query.caregiverId ? parseInt(req.query.caregiverId as string) : undefined;
       const checklist = await storage.getOrCreateDischargeChecklist(patientId, caregiverId);
       res.json(checklist);
     } catch (error) {
-      console.error("Error fetching discharge checklist:", error);
+      logger.error("Error fetching discharge checklist", { error: (error as Error).message });
       res.status(500).json({ error: "Failed to fetch discharge checklist" });
     }
   });
@@ -2960,38 +2960,38 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const updated = await storage.updateDischargeChecklist(checklistId, updates);
       res.json(updated);
     } catch (error) {
-      console.error("Error updating discharge checklist:", error);
+      logger.error("Error updating discharge checklist", { error: (error as Error).message });
       res.status(500).json({ error: "Failed to update discharge checklist" });
     }
   });
 
   // Check for active session (conflict detection)
-  app.get("/api/patients/:patientId/active-session", async (req, res) => {
+  app.get("/api/patients/:patientId/active-session", requireAuth, authorizePatientAccess, async (req, res) => {
     try {
       const patientId = parseInt(req.params.patientId);
       const activeSession = await storage.getActiveSessionForPatient(patientId);
       res.json({ hasActiveSession: !!activeSession, session: activeSession || null });
     } catch (error) {
-      console.error("Error checking active session:", error);
+      logger.error("Error checking active session", { error: (error as Error).message });
       res.status(500).json({ error: "Failed to check active session" });
     }
   });
 
   // Caregiver Achievements
-  app.get("/api/caregivers/:caregiverId/achievements", async (req, res) => {
+  app.get("/api/caregivers/:caregiverId/achievements", requireAuth, requireCaregiver, async (req, res) => {
     try {
       const caregiverId = parseInt(req.params.caregiverId);
       const patientId = req.query.patientId ? parseInt(req.query.patientId as string) : undefined;
       const achievements = await storage.getCaregiverAchievements(caregiverId, patientId);
       res.json(achievements);
     } catch (error) {
-      console.error("Error fetching caregiver achievements:", error);
+      logger.error("Error fetching caregiver achievements", { error: (error as Error).message });
       res.status(500).json({ error: "Failed to fetch achievements" });
     }
   });
 
   // Caregiver nudge to patient
-  app.post("/api/caregivers/:caregiverId/nudge/:patientId", kudosLimiter, async (req, res) => {
+  app.post("/api/caregivers/:caregiverId/nudge/:patientId", requireAuth, requireCaregiver, kudosLimiter, async (req, res) => {
     try {
       const caregiverId = parseInt(req.params.caregiverId);
       const patientId = parseInt(req.params.patientId);
@@ -3019,7 +3019,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       res.status(201).json(nudge);
     } catch (error) {
-      console.error("Error sending caregiver nudge:", error);
+      logger.error("Error sending caregiver nudge", { error: (error as Error).message });
       res.status(500).json({ error: "Failed to send nudge" });
     }
   });
@@ -3047,13 +3047,13 @@ async function seedInitialData() {
         isActive: true
       });
       
-      console.log('✓ Seeded initial provider: Heidi Kissane, DPT');
+      logger.debug('Seeded initial provider', { name: 'Heidi Kissane, DPT' });
     }
     
     // Create comprehensive patient data with realistic mock sessions
     await seedPatientWithMockData();
   } catch (error) {
-    console.error('Failed to seed initial data:', error);
+    logger.error('Failed to seed initial data', { error: (error as Error).message });
   }
 }
 
@@ -3074,13 +3074,13 @@ async function seedPatientWithMockData() {
         admissionDate: new Date(Date.now() - 4 * 24 * 60 * 60 * 1000).toISOString().split('T')[0] // Always 4 days ago
       });
       
-      console.log('✓ Created patient: Neil Jairath');
+      logger.debug('Created patient', { name: 'Neil Jairath' });
     } else {
       // Update existing patient's admission date to always be 4 days ago
       const updatedAdmissionDate = new Date(Date.now() - 4 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
       if (patient.admissionDate !== updatedAdmissionDate) {
         await storage.updateUser(patient.id, { admissionDate: updatedAdmissionDate });
-        console.log(`✓ Updated Neil Jairath's admission date to: ${updatedAdmissionDate}`);
+        logger.debug('Updated patient admission date', { admissionDate: updatedAdmissionDate });
       }
     }
 
@@ -3119,14 +3119,14 @@ async function seedPatientWithMockData() {
     // Check if TODAY already has sessions - if so, skip regeneration to prevent duplicates
     const todaysSessions = existingSessions.filter(s => s.sessionDate === todayStr);
     if (todaysSessions.length > 0) {
-      console.log(`✓ Neil Jairath already has ${todaysSessions.length} session(s) today - skipping regeneration`);
+      logger.debug('Patient already has sessions today, skipping regeneration', { sessionsCount: todaysSessions.length });
 
       // Still clean up sessions outside window
       if (sessionsOutsideWindow.length > 0) {
         for (const session of sessionsOutsideWindow) {
           await db.delete(exerciseSessions).where(eq(exerciseSessions.id, session.id));
         }
-        console.log(`✓ Cleared ${sessionsOutsideWindow.length} sessions outside rolling window`);
+        logger.debug('Cleared sessions outside rolling window', { count: sessionsOutsideWindow.length });
       }
     } else {
       // Delete ALL sessions outside the rolling window (both manual and auto-generated)
@@ -3134,7 +3134,7 @@ async function seedPatientWithMockData() {
         for (const session of sessionsOutsideWindow) {
           await db.delete(exerciseSessions).where(eq(exerciseSessions.id, session.id));
         }
-        console.log(`✓ Cleared ${sessionsOutsideWindow.length} sessions outside rolling window`);
+        logger.debug('Cleared sessions outside rolling window', { count: sessionsOutsideWindow.length });
       }
 
       // Delete auto-generated sessions within window (to regenerate fresh ones)
@@ -3144,13 +3144,13 @@ async function seedPatientWithMockData() {
         for (const session of autoSessionsWithinWindow) {
           await db.delete(exerciseSessions).where(eq(exerciseSessions.id, session.id));
         }
-        console.log(`✓ Cleared ${autoSessionsWithinWindow.length} auto-generated sessions to refresh`);
+        logger.debug('Cleared auto-generated sessions to refresh', { count: autoSessionsWithinWindow.length });
       }
 
       // Generate new auto sessions for days that don't have manual sessions
       // This ensures we always have fresh demo data while preserving user inputs
       await generateRecentSessionData(patient.id, 4, manualSessionDatesWithinWindow);
-      console.log(`✓ Generated rolling window sessions (${fourDaysAgoStr} to ${todayStr}), preserved ${manualSessionDatesWithinWindow.size} manual session date(s)`);
+      logger.debug('Generated rolling window sessions', { from: fourDaysAgoStr, to: todayStr, preservedManualDates: manualSessionDatesWithinWindow.size });
     }
 
     // Ensure patient stats exist
@@ -3175,7 +3175,7 @@ async function seedPatientWithMockData() {
       
       stats = newStats;
       
-      console.log('✓ Created patient stats with realistic totals');
+      logger.debug('Created patient stats with realistic totals');
     }
 
     // Create realistic goals based on patient progress
@@ -3183,7 +3183,7 @@ async function seedPatientWithMockData() {
 
     return patient;
   } catch (error) {
-    console.error('Failed to seed patient with mock data:', error);
+    logger.error('Failed to seed patient with mock data', { error: (error as Error).message });
   }
 }
 
