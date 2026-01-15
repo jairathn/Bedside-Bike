@@ -795,7 +795,7 @@ export class DatabaseStorage implements IStorage {
 
     return await this.updatePatientStats(patientId, {
       totalSessions,
-      totalDuration,
+      totalDuration: totalDurationMinutes,
       avgDailyDuration,
       consistencyStreak: streak,
       lastSessionDate: lastSessionDate ? new Date(lastSessionDate) : undefined,
