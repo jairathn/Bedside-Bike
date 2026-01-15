@@ -340,7 +340,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         userAgent: req.get('user-agent') || 'unknown',
       });
 
-      // If caregiver, also fetch their patients
+      // If caregiver, also fetch their approved patients (not pending)
       if (user.userType === 'caregiver') {
         const caregiverPatientsData = await db
           .select()
@@ -352,13 +352,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
           .where(
             and(
               eq(caregiverPatients.caregiverId, userId),
-              eq(caregiverPatients.isActive, true)
+              eq(caregiverPatients.isActive, true),
+              eq(caregiverPatients.accessStatus, 'approved')
             )
           );
 
         return res.json({
           user,
-          caregiverPatients: caregiverPatientsData.map(r => r.users),
+          caregiverPatients: caregiverPatientsData.map(r => ({
+            ...r.users,
+            relationship: r.caregiver_patients
+          })),
         });
       }
 
