@@ -132,6 +132,7 @@ export interface IStorage {
   // Stats operations
   getPatientStats(patientId: number): Promise<PatientStats | undefined>;
   updatePatientStats(patientId: number, updates: Partial<InsertPatientStats>): Promise<PatientStats>;
+  recalculatePatientStats(patientId: number): Promise<PatientStats | undefined>;
 
   // Analytics methods
   getLeaderboard(limit?: number): Promise<Array<{patientId: number, name: string, weeklyDuration: number, rank: number}>>;
@@ -660,6 +661,88 @@ export class DatabaseStorage implements IStorage {
     return updatedStats;
   }
 
+  /**
+   * Recalculate all stats for a patient from their session history.
+   * This fixes any incorrect stats that may have been calculated before.
+   */
+  async recalculatePatientStats(patientId: number): Promise<PatientStats | undefined> {
+    const sessions = await this.getSessionsByPatient(patientId);
+
+    if (sessions.length === 0) {
+      // No sessions, reset stats to defaults
+      return await this.updatePatientStats(patientId, {
+        totalSessions: 0,
+        totalDuration: 0,
+        avgDailyDuration: 0,
+        consistencyStreak: 0,
+      });
+    }
+
+    // Calculate total duration
+    const totalDuration = sessions.reduce((sum, s) => sum + (s.duration || 0), 0);
+    const totalSessions = sessions.length;
+
+    // Calculate unique days with sessions for accurate daily average
+    const uniqueDays = new Set(
+      sessions.map(s => {
+        const date = s.startTime || s.createdAt;
+        if (!date) return null;
+        return new Intl.DateTimeFormat('en-CA', {
+          timeZone: 'America/New_York',
+          year: 'numeric',
+          month: '2-digit',
+          day: '2-digit'
+        }).format(new Date(date));
+      }).filter(d => d !== null)
+    );
+
+    const numUniqueDays = uniqueDays.size || 1;
+    const avgDailyDuration = totalDuration / numUniqueDays;
+
+    // Calculate consistency streak (consecutive days with sessions)
+    const sortedDays = Array.from(uniqueDays).sort().reverse();
+    let streak = 0;
+    const today = new Intl.DateTimeFormat('en-CA', {
+      timeZone: 'America/New_York',
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit'
+    }).format(new Date());
+
+    for (let i = 0; i < sortedDays.length; i++) {
+      const expectedDate = new Date();
+      expectedDate.setDate(expectedDate.getDate() - i);
+      const expectedStr = new Intl.DateTimeFormat('en-CA', {
+        timeZone: 'America/New_York',
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit'
+      }).format(expectedDate);
+
+      if (sortedDays[i] === expectedStr) {
+        streak++;
+      } else {
+        break;
+      }
+    }
+
+    // Get last session date
+    const lastSession = sessions.sort((a, b) => {
+      const dateA = new Date(a.startTime || a.createdAt || 0).getTime();
+      const dateB = new Date(b.startTime || b.createdAt || 0).getTime();
+      return dateB - dateA;
+    })[0];
+    const lastSessionDate = lastSession?.startTime || lastSession?.createdAt;
+
+    return await this.updatePatientStats(patientId, {
+      totalSessions,
+      totalDuration,
+      avgDailyDuration,
+      consistencyStreak: streak,
+      lastSessionDate: lastSessionDate ? new Date(lastSessionDate) : undefined,
+    });
+  }
+
   // Analytics methods
   async getLeaderboard(limit = 10): Promise<Array<{patientId: number, name: string, weeklyDuration: number, rank: number}>> {
     // Mock implementation for now - can be enhanced with real weekly data
@@ -784,12 +867,31 @@ export class DatabaseStorage implements IStorage {
   // Helper methods
   private async updatePatientStatsAfterSession(patientId: number, duration: number, avgPower: number): Promise<void> {
     const currentStats = await this.getPatientStats(patientId);
-    
+
     if (currentStats) {
       const newTotalSessions = (currentStats.totalSessions || 0) + 1;
       const newTotalDuration = (currentStats.totalDuration || 0) + duration;
-      const newAvgDailyDuration = newTotalDuration / newTotalSessions;
-      
+
+      // Calculate average daily duration correctly by counting unique days
+      // Get all sessions to count unique days with sessions
+      const sessions = await this.getSessionsByPatient(patientId);
+      const uniqueDays = new Set(
+        sessions.map(s => {
+          const date = s.startTime || s.createdAt;
+          if (!date) return null;
+          // Convert to YYYY-MM-DD string in America/New_York timezone for consistency
+          return new Intl.DateTimeFormat('en-CA', {
+            timeZone: 'America/New_York',
+            year: 'numeric',
+            month: '2-digit',
+            day: '2-digit'
+          }).format(new Date(date));
+        }).filter(d => d !== null)
+      );
+
+      const numUniqueDays = uniqueDays.size || 1; // Avoid division by zero
+      const newAvgDailyDuration = newTotalDuration / numUniqueDays;
+
       await this.updatePatientStats(patientId, {
         totalSessions: newTotalSessions,
         totalDuration: newTotalDuration,
