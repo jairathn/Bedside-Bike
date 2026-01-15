@@ -2016,10 +2016,43 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ error: "Provider already has access to this patient" });
       }
 
-      const relationship = await storage.createProviderPatientRelationship({
+      // Check for existing pending relationship
+      const existingPending = await db.select()
+        .from(providerPatients)
+        .where(
+          and(
+            eq(providerPatients.patientId, patientId),
+            eq(providerPatients.providerId, providerId),
+            eq(providerPatients.accessStatus, 'pending')
+          )
+        )
+        .limit(1);
+
+      if (existingPending.length > 0) {
+        return res.status(400).json({ error: "An invitation is already pending for this provider" });
+      }
+
+      // Create pending relationship - provider needs to accept
+      const [relationship] = await db.insert(providerPatients).values({
         patientId,
-        providerId
+        providerId,
+        permissionGranted: false,
+        isActive: false,
+        accessStatus: 'pending',
+        requestedBy: 'patient',
+        requestedAt: new Date()
+      }).returning();
+
+      // Create notification for provider
+      await storage.createCaregiverNotification({
+        caregiverId: providerId, // Using caregiver notification system for providers too
+        patientId,
+        notificationType: 'access_request',
+        title: 'Patient Access Request',
+        message: `A patient has invited you to view their mobility data. Please review and accept the invitation.`,
+        metadata: JSON.stringify({ requestedBy: 'patient' })
       });
+
       res.json(relationship);
     } catch (error) {
       logger.error("Grant access error", { error: (error as Error).message });

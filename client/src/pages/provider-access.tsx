@@ -36,7 +36,7 @@ export default function ProviderAccessPage() {
     caregiverEmail: "",
     caregiverFirstName: "",
     caregiverLastName: "",
-    relationshipType: "family_member" as string
+    relationshipType: "other_family" as string
   });
 
   // Get available providers
@@ -106,8 +106,8 @@ export default function ProviderAccessPage() {
       await queryClient.invalidateQueries({ queryKey: ['/api/provider-relationships', { patientId: user?.id }] });
 
       toast({
-        title: "Access Granted",
-        description: "Your provider can now view your progress and adjust your goals",
+        title: "Invitation Sent",
+        description: "Your provider will be notified and can accept the invitation to view your progress.",
       });
       setShowGrantDialog(false);
       setSelectedProvider("");
@@ -202,7 +202,7 @@ export default function ProviderAccessPage() {
         caregiverEmail: "",
         caregiverFirstName: "",
         caregiverLastName: "",
-        relationshipType: "family_member"
+        relationshipType: "other_family"
       });
     },
     onError: (error: any) => {
@@ -272,8 +272,27 @@ export default function ProviderAccessPage() {
     },
   });
 
-  const hasProviders = Array.isArray(providerRelationships) && providerRelationships.length > 0;
-  const hasCaregivers = Array.isArray(caregivers) && caregivers.length > 0;
+  // Filter providers by status
+  const approvedProviders = Array.isArray(providerRelationships)
+    ? providerRelationships.filter((rel: any) => rel.accessStatus === 'approved')
+    : [];
+  const pendingProviderInvitationsSent = Array.isArray(providerRelationships)
+    ? providerRelationships.filter((rel: any) => rel.accessStatus === 'pending' && rel.requestedBy === 'patient')
+    : [];
+
+  const hasProviders = approvedProviders.length > 0;
+  const hasPendingProviderInvitationsSent = pendingProviderInvitationsSent.length > 0;
+
+  // Filter caregivers by status
+  const approvedCaregivers = Array.isArray(caregivers)
+    ? caregivers.filter((c: any) => c.relationship?.accessStatus === 'approved')
+    : [];
+  const pendingInvitationsSent = Array.isArray(caregivers)
+    ? caregivers.filter((c: any) => c.relationship?.accessStatus === 'pending' && c.relationship?.requestedBy === 'patient')
+    : [];
+
+  const hasCaregivers = approvedCaregivers.length > 0;
+  const hasPendingInvitationsSent = pendingInvitationsSent.length > 0;
   const hasPendingCaregiverRequests = Array.isArray(pendingCaregiverRequests) && pendingCaregiverRequests.length > 0;
   const hasPendingProviderRequests = Array.isArray(pendingProviderRequests) && pendingProviderRequests.length > 0;
   
@@ -373,7 +392,7 @@ export default function ProviderAccessPage() {
                         disabled={!selectedProvider || selectedProvider === "no-providers" || grantAccessMutation.isPending}
                         className="flex-1"
                       >
-                        {grantAccessMutation.isPending ? "Adding Access..." : "Add Access"}
+                        {grantAccessMutation.isPending ? "Sending Invitation..." : "Send Invitation"}
                       </Button>
                       <Button 
                         variant="outline" 
@@ -444,9 +463,49 @@ export default function ProviderAccessPage() {
               </div>
             )}
 
+            {/* Provider Invitations Sent by Patient */}
+            {hasPendingProviderInvitationsSent && (
+              <div className="mb-4">
+                <div className="flex items-center gap-2 mb-3">
+                  <UserPlus className="w-4 h-4 text-blue-600" />
+                  <h4 className="font-semibold text-blue-900">Provider Invitations Sent</h4>
+                  <Badge variant="secondary" className="bg-blue-100 text-blue-800">
+                    {pendingProviderInvitationsSent.length}
+                  </Badge>
+                </div>
+                <div className="space-y-2">
+                  {pendingProviderInvitationsSent.map((relationship: any) => (
+                    <div key={relationship.id} className="flex items-center justify-between p-3 bg-blue-50 rounded-lg border border-blue-200">
+                      <div className="flex items-center space-x-3">
+                        <div className="w-10 h-10 bg-blue-400 rounded-full flex items-center justify-center">
+                          <Shield className="w-5 h-5 text-white" />
+                        </div>
+                        <div>
+                          <p className="font-medium text-blue-900">
+                            {relationship.providerFirstName} {relationship.providerLastName}, {relationship.providerCredentials}
+                          </p>
+                          <p className="text-sm text-blue-700">
+                            {relationship.providerSpecialty} - awaiting acceptance
+                          </p>
+                          {relationship.requestedAt && (
+                            <p className="text-xs text-blue-600">
+                              Invited: {new Date(relationship.requestedAt).toLocaleDateString()}
+                            </p>
+                          )}
+                        </div>
+                      </div>
+                      <Badge variant="secondary" className="bg-blue-100 text-blue-700">
+                        Pending
+                      </Badge>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
             {hasProviders ? (
               <div className="space-y-4">
-                {Array.isArray(providerRelationships) && providerRelationships.map((relationship: any) => (
+                {approvedProviders.map((relationship: any) => (
                   <div key={relationship.id} className="flex items-center justify-between p-4 bg-green-50 rounded-lg border border-green-200">
                     <div className="flex items-center space-x-4">
                       <div className="w-12 h-12 bg-green-600 rounded-full flex items-center justify-center">
@@ -533,7 +592,7 @@ export default function ProviderAccessPage() {
                               disabled={!selectedProvider || grantAccessMutation.isPending}
                               className="flex-1"
                             >
-                              {grantAccessMutation.isPending ? "Granting Access..." : "Grant Full Access"}
+                              {grantAccessMutation.isPending ? "Sending Invitation..." : "Send Invitation"}
                             </Button>
                             <Button 
                               variant="outline" 
@@ -549,7 +608,7 @@ export default function ProviderAccessPage() {
                   </div>
                 )}
               </div>
-            ) : (
+            ) : !hasPendingProviderInvitationsSent && !hasPendingProviderRequests ? (
               <div className="flex items-center justify-between p-4 bg-yellow-50 rounded-lg border border-yellow-200">
                 <div className="flex items-center space-x-4">
                   <div className="w-12 h-12 bg-yellow-600 rounded-full flex items-center justify-center">
@@ -610,7 +669,7 @@ export default function ProviderAccessPage() {
                           disabled={!selectedProvider || grantAccessMutation.isPending}
                           className="flex-1"
                         >
-                          {grantAccessMutation.isPending ? "Granting Access..." : "Grant Full Access"}
+                          {grantAccessMutation.isPending ? "Sending Invitation..." : "Send Invitation"}
                         </Button>
                         <Button 
                           variant="outline" 
@@ -624,7 +683,7 @@ export default function ProviderAccessPage() {
                   </DialogContent>
                 </Dialog>
               </div>
-            )}
+            ) : null}
           </CardContent>
         </Card>
 
@@ -696,10 +755,45 @@ export default function ProviderAccessPage() {
               </div>
             )}
 
-            {/* Current Caregivers */}
+            {/* Pending Invitations Sent by Patient */}
+            {hasPendingInvitationsSent && (
+              <div className="mb-4">
+                <div className="flex items-center gap-2 mb-3">
+                  <UserPlus className="w-4 h-4 text-blue-600" />
+                  <h4 className="font-semibold text-blue-900">Invitations Sent</h4>
+                  <Badge variant="secondary" className="bg-blue-100 text-blue-800">
+                    {pendingInvitationsSent.length}
+                  </Badge>
+                </div>
+                <div className="space-y-2">
+                  {pendingInvitationsSent.map((caregiver: any) => (
+                    <div key={caregiver.id} className="flex items-center justify-between p-3 bg-blue-50 rounded-lg border border-blue-200">
+                      <div className="flex items-center space-x-3">
+                        <div className="w-8 h-8 bg-blue-400 rounded-full flex items-center justify-center">
+                          <Heart className="w-4 h-4 text-white" />
+                        </div>
+                        <div>
+                          <p className="font-medium text-blue-900">
+                            {caregiver.firstName} {caregiver.lastName}
+                          </p>
+                          <p className="text-sm text-blue-700">
+                            {(caregiver.relationship?.relationshipType || 'Family Member')?.replace(/_/g, ' ')} - awaiting response
+                          </p>
+                        </div>
+                      </div>
+                      <Badge variant="secondary" className="bg-blue-100 text-blue-700">
+                        Pending
+                      </Badge>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Current Caregivers (Approved) */}
             {hasCaregivers ? (
               <div className="space-y-3">
-                {caregivers.map((caregiver: any) => (
+                {approvedCaregivers.map((caregiver: any) => (
                   <div key={caregiver.id} className="flex items-center justify-between p-4 bg-purple-50 rounded-lg border border-purple-200">
                     <div className="flex items-center space-x-4">
                       <div className="w-10 h-10 bg-purple-600 rounded-full flex items-center justify-center">
@@ -707,10 +801,10 @@ export default function ProviderAccessPage() {
                       </div>
                       <div>
                         <h3 className="font-semibold text-purple-900">
-                          {caregiver.caregiverFirstName || caregiver.firstName} {caregiver.caregiverLastName || caregiver.lastName}
+                          {caregiver.firstName} {caregiver.lastName}
                         </h3>
                         <p className="text-sm text-purple-700">
-                          {(caregiver.relationshipType || 'Family Member')?.replace(/_/g, ' ')}
+                          {(caregiver.relationship?.relationshipType || 'Family Member')?.replace(/_/g, ' ')}
                         </p>
                       </div>
                     </div>
@@ -723,7 +817,7 @@ export default function ProviderAccessPage() {
                         variant="destructive"
                         size="sm"
                         onClick={() => updateCaregiverStatusMutation.mutate({
-                          relationId: caregiver.relationId || caregiver.id,
+                          relationId: caregiver.relationship?.id || caregiver.id,
                           status: 'revoked'
                         })}
                         disabled={updateCaregiverStatusMutation.isPending}
@@ -735,7 +829,7 @@ export default function ProviderAccessPage() {
                   </div>
                 ))}
               </div>
-            ) : !hasPendingCaregiverRequests ? (
+            ) : !hasPendingCaregiverRequests && !hasPendingInvitationsSent ? (
               <div className="flex items-center justify-between p-4 bg-purple-50 rounded-lg border border-purple-200">
                 <div className="flex items-center space-x-4">
                   <div className="w-12 h-12 bg-purple-200 rounded-full flex items-center justify-center">
@@ -816,10 +910,11 @@ export default function ProviderAccessPage() {
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="spouse">Spouse</SelectItem>
+                    <SelectItem value="partner">Partner</SelectItem>
                     <SelectItem value="child">Son/Daughter</SelectItem>
                     <SelectItem value="parent">Parent</SelectItem>
                     <SelectItem value="sibling">Sibling</SelectItem>
-                    <SelectItem value="family_member">Other Family Member</SelectItem>
+                    <SelectItem value="other_family">Other Family Member</SelectItem>
                     <SelectItem value="friend">Friend</SelectItem>
                     <SelectItem value="professional_caregiver">Professional Caregiver</SelectItem>
                   </SelectContent>
