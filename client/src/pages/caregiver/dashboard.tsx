@@ -21,7 +21,9 @@ import {
   Flame,
   Target,
   Calendar,
-  UserPlus
+  UserPlus,
+  UserMinus,
+  AlertTriangle
 } from "lucide-react";
 import { useAuth } from "@/hooks/use-auth";
 import { useToast } from "@/hooks/use-toast";
@@ -47,6 +49,8 @@ export default function CaregiverDashboard() {
   const queryClient = useQueryClient();
   const [selectedPatientId, setSelectedPatientId] = useState<number | null>(null);
   const [showInvitationsModal, setShowInvitationsModal] = useState(false);
+  const [showRemoveConfirmModal, setShowRemoveConfirmModal] = useState(false);
+  const [patientToRemove, setPatientToRemove] = useState<any>(null);
 
   // Get pending patient invitations (patients who invited this caregiver)
   const { data: pendingInvitations = [] } = useQuery({
@@ -83,6 +87,37 @@ export default function CaregiverDashboard() {
       toast({
         title: "Action Failed",
         description: error.message || "Failed to respond to invitation",
+        variant: "destructive",
+      });
+    },
+  });
+
+  // Remove patient access mutation
+  const removePatientMutation = useMutation({
+    mutationFn: async (patientId: number) => {
+      return await apiRequest(`/api/caregivers/${user?.id}/patients/${patientId}`, {
+        method: 'DELETE',
+      });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: [`/api/caregivers/${user?.id}/patients`] });
+      // If removed patient was selected, clear selection
+      if (selectedPatientId === patientToRemove?.id) {
+        setSelectedPatientId(null);
+      }
+      setShowRemoveConfirmModal(false);
+      setPatientToRemove(null);
+      toast({
+        title: "Access Removed",
+        description: "You have removed yourself from this patient's care team.",
+      });
+      // Refresh the page to update caregiverPatients in auth context
+      window.location.reload();
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Removal Failed",
+        description: error.message || "Failed to remove patient access",
         variant: "destructive",
       });
     },
@@ -253,6 +288,18 @@ export default function CaregiverDashboard() {
                     <Badge variant="outline" className="bg-green-50 text-green-700 border-green-200">
                       Access Approved
                     </Badge>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="text-gray-500 hover:text-red-600 hover:bg-red-50"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setPatientToRemove(selectedPatient);
+                        setShowRemoveConfirmModal(true);
+                      }}
+                    >
+                      <UserMinus size={18} />
+                    </Button>
                   </div>
                 </div>
               </CardContent>
@@ -596,6 +643,40 @@ export default function CaregiverDashboard() {
           <DialogFooter>
             <Button variant="outline" onClick={() => setShowInvitationsModal(false)}>
               Close
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Remove Patient Confirmation Dialog */}
+      <Dialog open={showRemoveConfirmModal} onOpenChange={setShowRemoveConfirmModal}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center text-red-600">
+              <AlertTriangle className="w-5 h-5 mr-2" />
+              Remove Patient Access
+            </DialogTitle>
+            <DialogDescription>
+              Are you sure you want to remove yourself from {patientToRemove?.firstName} {patientToRemove?.lastName}'s care team?
+              You will no longer be able to view their progress or provide support.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter className="gap-2">
+            <Button
+              variant="outline"
+              onClick={() => {
+                setShowRemoveConfirmModal(false);
+                setPatientToRemove(null);
+              }}
+            >
+              Cancel
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={() => patientToRemove && removePatientMutation.mutate(patientToRemove.id)}
+              disabled={removePatientMutation.isPending}
+            >
+              {removePatientMutation.isPending ? "Removing..." : "Remove Access"}
             </Button>
           </DialogFooter>
         </DialogContent>

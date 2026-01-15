@@ -2911,6 +2911,27 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Caregiver removes their access to a patient
+  app.delete("/api/caregivers/:caregiverId/patients/:patientId", requireAuth, requireCaregiver, async (req, res) => {
+    try {
+      const caregiverId = parseInt(req.params.caregiverId);
+      const patientId = parseInt(req.params.patientId);
+
+      // Ensure caregiver can only remove their own relationships
+      if ((req.user as User).id !== caregiverId) {
+        return res.status(403).json({ error: "Access denied" });
+      }
+
+      await storage.deleteCaregiverPatientRelationship(caregiverId, patientId);
+
+      logger.info("Caregiver removed patient access", { caregiverId, patientId });
+      res.json({ success: true });
+    } catch (error) {
+      logger.error("Error removing caregiver patient access", { error: (error as Error).message });
+      res.status(500).json({ error: "Failed to remove patient access" });
+    }
+  });
+
   // Get pending patient invitations for a caregiver (patients who invited this caregiver)
   app.get("/api/caregivers/:caregiverId/patient-invitations", requireAuth, requireCaregiver, async (req, res) => {
     try {
