@@ -403,9 +403,11 @@ export class DatabaseStorage implements IStorage {
   async grantProviderAccess(patientId: number, providerId: number): Promise<ProviderPatient | undefined> {
     const [updatedRelation] = await db
       .update(providerPatients)
-      .set({ 
-        permissionGranted: true, 
-        grantedAt: new Date() 
+      .set({
+        permissionGranted: true,
+        grantedAt: new Date(),
+        accessStatus: 'approved',
+        isActive: true
       })
       .where(
         and(
