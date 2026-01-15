@@ -283,6 +283,12 @@ export default function ProviderDashboard() {
     enabled: !!selectedPatient?.id,
   });
 
+  // Get selected patient's goal history (for historical daily goal tracking)
+  const { data: goalHistory = [] } = useQuery({
+    queryKey: [`/api/patients/${selectedPatient?.id}/goals/history`],
+    enabled: !!selectedPatient?.id,
+  });
+
   // Get selected patient's recent sessions (2 days)
   const { data: allSessions = [] } = useQuery({
     queryKey: [`/api/patients/${selectedPatient?.id}/sessions`],
@@ -725,6 +731,11 @@ export default function ProviderDashboard() {
 
                     return durationMinutes * sessionsPerDay;
                   })()}
+                  sessionsPerDay={(() => {
+                    const sessionsGoal = patientGoals?.find((g: any) => g.goalType === 'sessions');
+                    return sessionsGoal ? Math.round(parseFloat(sessionsGoal.targetValue) || 2) : 2;
+                  })()}
+                  goalHistory={goalHistory}
                 />
 
                 {/* Comprehensive Goal Management */}

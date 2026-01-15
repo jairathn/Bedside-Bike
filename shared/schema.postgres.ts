@@ -119,6 +119,18 @@ export const patientGoals = pgTable("patient_goals", {
   updatedAt: timestamp("updated_at", { withTimezone: true }).default(sql`NOW()`),
 });
 
+// Goal history - tracks changes to goals over time for accurate historical reporting
+export const goalHistory = pgTable("goal_history", {
+  id: serial("id").primaryKey(),
+  patientId: integer("patient_id").notNull().references(() => users.id),
+  goalType: varchar("goal_type", { length: 50 }).notNull(),
+  targetValue: doublePrecision("target_value").notNull(),
+  unit: varchar("unit", { length: 20 }).notNull(),
+  effectiveDate: varchar("effective_date", { length: 10 }).notNull(), // YYYY-MM-DD
+  providerId: integer("provider_id").references(() => users.id),
+  createdAt: timestamp("created_at", { withTimezone: true }).default(sql`NOW()`),
+});
+
 // Devices
 export const devices = pgTable("devices", {
   id: varchar("id", { length: 50 }).primaryKey(),

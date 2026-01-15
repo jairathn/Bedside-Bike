@@ -125,6 +125,18 @@ export const patientGoals = mssqlTable("patient_goals", {
   updatedAt: datetime2("updated_at").default(sql`GETDATE()`),
 });
 
+// Goal history - tracks changes to goals over time for accurate historical reporting
+export const goalHistory = mssqlTable("goal_history", {
+  id: int("id").primaryKey({ autoIncrement: true }),
+  patientId: int("patient_id").references(() => users.id).notNull(),
+  goalType: varchar("goal_type", { length: 50 }).notNull(),
+  targetValue: decimal("target_value", { precision: 8, scale: 2 }).notNull(),
+  unit: varchar("unit", { length: 20 }).notNull(),
+  effectiveDate: varchar("effective_date", { length: 10 }).notNull(), // YYYY-MM-DD
+  providerId: int("provider_id").references(() => users.id),
+  createdAt: datetime2("created_at").default(sql`GETDATE()`),
+});
+
 // Bedside Bike devices
 export const devices = mssqlTable("devices", {
   id: varchar("id", { length: 10 }).primaryKey(), // "121", "122", etc.
