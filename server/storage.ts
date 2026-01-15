@@ -678,8 +678,8 @@ export class DatabaseStorage implements IStorage {
       });
     }
 
-    // Calculate total duration
-    const totalDuration = sessions.reduce((sum, s) => sum + (s.duration || 0), 0);
+    // Calculate total duration (duration is stored in MINUTES)
+    const totalDurationMinutes = sessions.reduce((sum, s) => sum + (s.duration || 0), 0);
     const totalSessions = sessions.length;
 
     // Calculate unique days with sessions for accurate daily average
@@ -689,7 +689,8 @@ export class DatabaseStorage implements IStorage {
     );
 
     const numUniqueDays = uniqueDays.size || 1;
-    const avgDailyDuration = totalDuration / numUniqueDays;
+    // avgDailyDuration is stored in SECONDS (dashboard divides by 60 to display minutes)
+    const avgDailyDuration = (totalDurationMinutes / numUniqueDays) * 60;
 
     // Calculate consistency streak (consecutive days with sessions)
     const sortedDays = Array.from(uniqueDays).sort().reverse();
@@ -872,7 +873,10 @@ export class DatabaseStorage implements IStorage {
       );
 
       const numUniqueDays = uniqueDays.size || 1; // Avoid division by zero
-      const newAvgDailyDuration = newTotalDuration / numUniqueDays;
+      // Calculate total duration in minutes from all sessions
+      const totalMinutes = sessions.reduce((sum, s) => sum + (s.duration || 0), 0);
+      // avgDailyDuration is stored in SECONDS (dashboard divides by 60 to display minutes)
+      const newAvgDailyDuration = (totalMinutes / numUniqueDays) * 60;
 
       await this.updatePatientStats(patientId, {
         totalSessions: newTotalSessions,
