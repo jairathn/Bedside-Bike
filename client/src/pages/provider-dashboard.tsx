@@ -707,11 +707,23 @@ export default function ProviderDashboard() {
                     transferCount: s.transferCount,
                   }))}
                   goalMinutes={(() => {
+                    // Daily goal = duration per session × sessions per day
                     const durationGoal = patientGoals?.find((g: any) => g.goalType === 'duration');
-                    if (!durationGoal) return 30;
-                    return durationGoal.targetValue > 60
-                      ? Math.round(durationGoal.targetValue / 60)
-                      : Math.round(durationGoal.targetValue);
+                    const sessionsGoal = patientGoals?.find((g: any) => g.goalType === 'sessions');
+
+                    // Duration: could be in seconds (>60) or minutes
+                    const durationMinutes = durationGoal
+                      ? (durationGoal.targetValue > 60
+                          ? Math.round(durationGoal.targetValue / 60)
+                          : Math.round(durationGoal.targetValue))
+                      : 15; // Default 15 min per session
+
+                    // Sessions per day (default 2)
+                    const sessionsPerDay = sessionsGoal
+                      ? Math.round(parseFloat(sessionsGoal.targetValue) || 2)
+                      : 2;
+
+                    return durationMinutes * sessionsPerDay;
                   })()}
                 />
 
