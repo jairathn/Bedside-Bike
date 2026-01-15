@@ -8,6 +8,7 @@ import {
   requireAuth,
   requireProvider,
   requirePatient,
+  requireCaregiver,
   authorizePatientAccess,
   authorizePatientOrProvider,
   setAuthSession,
@@ -21,7 +22,7 @@ import {
   ResourceType,
 } from "./middleware/audit";
 import { updateRollingDataWindow } from "./rolling-data";
-import { patientStats, users, providerPatients, patientGoals, exerciseSessions, patientPreferences, feedItems, nudgeMessages, kudosReactions } from "@shared/schema";
+import { patientStats, users, providerPatients, patientGoals, exerciseSessions, patientPreferences, feedItems, nudgeMessages, kudosReactions, caregiverPatients } from "@shared/schema";
 import { eq, and, desc, gte, inArray, sql } from "drizzle-orm";
 import { calculateRisks } from "./risk-calculator";
 // Removed duplicate calculator - using only central risk calculator
