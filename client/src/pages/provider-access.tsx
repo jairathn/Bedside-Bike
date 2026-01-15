@@ -36,7 +36,7 @@ export default function ProviderAccessPage() {
     caregiverEmail: "",
     caregiverFirstName: "",
     caregiverLastName: "",
-    relationshipType: "family_member" as string
+    relationshipType: "other_family" as string
   });
 
   // Get available providers
@@ -202,7 +202,7 @@ export default function ProviderAccessPage() {
         caregiverEmail: "",
         caregiverFirstName: "",
         caregiverLastName: "",
-        relationshipType: "family_member"
+        relationshipType: "other_family"
       });
     },
     onError: (error: any) => {
@@ -816,10 +816,11 @@ export default function ProviderAccessPage() {
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="spouse">Spouse</SelectItem>
+                    <SelectItem value="partner">Partner</SelectItem>
                     <SelectItem value="child">Son/Daughter</SelectItem>
                     <SelectItem value="parent">Parent</SelectItem>
                     <SelectItem value="sibling">Sibling</SelectItem>
-                    <SelectItem value="family_member">Other Family Member</SelectItem>
+                    <SelectItem value="other_family">Other Family Member</SelectItem>
                     <SelectItem value="friend">Friend</SelectItem>
                     <SelectItem value="professional_caregiver">Professional Caregiver</SelectItem>
                   </SelectContent>
