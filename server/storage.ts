@@ -567,10 +567,12 @@ export class DatabaseStorage implements IStorage {
         eq(providerPatients.accessStatus, 'pending')
       ));
 
-    return relations.map(r => ({
-      ...r.users,
-      relationship: r.provider_patients
-    }));
+    return relations
+      .filter(r => r.users && r.provider_patients)
+      .map(r => ({
+        ...r.users,
+        relationship: r.provider_patients
+      }));
   }
 
   /**
@@ -1532,10 +1534,12 @@ export class DatabaseStorage implements IStorage {
         eq(caregiverPatients.accessStatus, 'pending')
       ));
 
-    return relations.map(r => ({
-      ...r.users,
-      relationship: r.caregiver_patients
-    }));
+    return relations
+      .filter(r => r.users && r.caregiver_patients)
+      .map(r => ({
+        ...r.users,
+        relationship: r.caregiver_patients
+      }));
   }
 
   async updateCaregiverAccessStatus(
