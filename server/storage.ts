@@ -559,7 +559,24 @@ export class DatabaseStorage implements IStorage {
    */
   async getPendingPatientRequests(providerId: number): Promise<Array<User & { relationship: ProviderPatient }>> {
     const relations = await db
-      .select()
+      .select({
+        // User fields
+        id: users.id,
+        email: users.email,
+        firstName: users.firstName,
+        lastName: users.lastName,
+        userType: users.userType,
+        dateOfBirth: users.dateOfBirth,
+        admissionDate: users.admissionDate,
+        isActive: users.isActive,
+        createdAt: users.createdAt,
+        // Relationship fields
+        relationshipId: providerPatients.id,
+        accessStatus: providerPatients.accessStatus,
+        requestedBy: providerPatients.requestedBy,
+        requestedAt: providerPatients.requestedAt,
+        permissionGranted: providerPatients.permissionGranted,
+      })
       .from(providerPatients)
       .innerJoin(users, eq(providerPatients.patientId, users.id))
       .where(and(
@@ -567,12 +584,24 @@ export class DatabaseStorage implements IStorage {
         eq(providerPatients.accessStatus, 'pending')
       ));
 
-    return relations
-      .filter(r => r.users && r.provider_patients)
-      .map(r => ({
-        ...r.users,
-        relationship: r.provider_patients
-      }));
+    return relations.map(r => ({
+      id: r.id,
+      email: r.email,
+      firstName: r.firstName,
+      lastName: r.lastName,
+      userType: r.userType,
+      dateOfBirth: r.dateOfBirth,
+      admissionDate: r.admissionDate,
+      isActive: r.isActive,
+      createdAt: r.createdAt,
+      relationship: {
+        id: r.relationshipId,
+        accessStatus: r.accessStatus,
+        requestedBy: r.requestedBy,
+        requestedAt: r.requestedAt,
+        permissionGranted: r.permissionGranted,
+      }
+    })) as Array<User & { relationship: ProviderPatient }>;
   }
 
   /**
@@ -1526,7 +1555,24 @@ export class DatabaseStorage implements IStorage {
    */
   async getPendingPatientInvitations(caregiverId: number): Promise<Array<User & { relationship: CaregiverPatient }>> {
     const relations = await db
-      .select()
+      .select({
+        // User fields
+        id: users.id,
+        email: users.email,
+        firstName: users.firstName,
+        lastName: users.lastName,
+        userType: users.userType,
+        dateOfBirth: users.dateOfBirth,
+        admissionDate: users.admissionDate,
+        isActive: users.isActive,
+        createdAt: users.createdAt,
+        // Relationship fields
+        relationshipId: caregiverPatients.id,
+        relationshipType: caregiverPatients.relationshipType,
+        accessStatus: caregiverPatients.accessStatus,
+        requestedBy: caregiverPatients.requestedBy,
+        requestedAt: caregiverPatients.requestedAt,
+      })
       .from(caregiverPatients)
       .innerJoin(users, eq(caregiverPatients.patientId, users.id))
       .where(and(
@@ -1534,12 +1580,24 @@ export class DatabaseStorage implements IStorage {
         eq(caregiverPatients.accessStatus, 'pending')
       ));
 
-    return relations
-      .filter(r => r.users && r.caregiver_patients)
-      .map(r => ({
-        ...r.users,
-        relationship: r.caregiver_patients
-      }));
+    return relations.map(r => ({
+      id: r.id,
+      email: r.email,
+      firstName: r.firstName,
+      lastName: r.lastName,
+      userType: r.userType,
+      dateOfBirth: r.dateOfBirth,
+      admissionDate: r.admissionDate,
+      isActive: r.isActive,
+      createdAt: r.createdAt,
+      relationship: {
+        id: r.relationshipId,
+        relationshipType: r.relationshipType,
+        accessStatus: r.accessStatus,
+        requestedBy: r.requestedBy,
+        requestedAt: r.requestedAt,
+      }
+    })) as Array<User & { relationship: CaregiverPatient }>;
   }
 
   async updateCaregiverAccessStatus(
