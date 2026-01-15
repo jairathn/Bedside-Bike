@@ -143,6 +143,31 @@ export default function ProviderAccessPage() {
     },
   });
 
+  // Cancel caregiver invitation mutation
+  const cancelCaregiverInvitationMutation = useMutation({
+    mutationFn: async (relationId: number) => {
+      return await apiRequest(`/api/caregiver-relations/${relationId}/status`, {
+        method: 'PATCH',
+        body: JSON.stringify({ status: 'revoked' }),
+      });
+    },
+    onSuccess: async () => {
+      await refetchCaregivers();
+      await refetchCaregiverRequests();
+      toast({
+        title: "Invitation Cancelled",
+        description: "Caregiver invitation has been cancelled",
+      });
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Failed to Cancel",
+        description: error.message || "An error occurred",
+        variant: "destructive"
+      });
+    },
+  });
+
   // Add new provider mutation
   const addProviderMutation = useMutation({
     mutationFn: async (providerData: typeof newProviderData) => {
@@ -495,9 +520,20 @@ export default function ProviderAccessPage() {
                           )}
                         </div>
                       </div>
-                      <Badge variant="secondary" className="bg-blue-100 text-blue-700">
-                        Pending
-                      </Badge>
+                      <div className="flex items-center gap-2">
+                        <Badge variant="secondary" className="bg-blue-100 text-blue-700">
+                          Pending
+                        </Badge>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="text-red-600 border-red-300 hover:bg-red-50"
+                          onClick={() => revokeAccessMutation.mutate(relationship.id)}
+                          disabled={revokeAccessMutation.isPending}
+                        >
+                          Cancel
+                        </Button>
+                      </div>
                     </div>
                   ))}
                 </div>
@@ -782,9 +818,20 @@ export default function ProviderAccessPage() {
                           </p>
                         </div>
                       </div>
-                      <Badge variant="secondary" className="bg-blue-100 text-blue-700">
-                        Pending
-                      </Badge>
+                      <div className="flex items-center gap-2">
+                        <Badge variant="secondary" className="bg-blue-100 text-blue-700">
+                          Pending
+                        </Badge>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="text-red-600 border-red-300 hover:bg-red-50"
+                          onClick={() => cancelCaregiverInvitationMutation.mutate(caregiver.relationship?.id)}
+                          disabled={cancelCaregiverInvitationMutation.isPending}
+                        >
+                          Cancel
+                        </Button>
+                      </div>
                     </div>
                   ))}
                 </div>
