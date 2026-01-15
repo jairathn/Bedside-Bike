@@ -310,16 +310,28 @@ export const authorizePatientOrProvider = async (req: Request, res: Response, ne
 /**
  * Helper function to set session data after successful authentication.
  * Should be called in login routes after validating credentials.
+ * Returns a Promise that resolves when the session is saved.
  */
 export const setAuthSession = (
   req: Request,
   user: { id: number; userType: string; email: string; firstName: string; lastName: string }
-) => {
-  req.session.userId = user.id;
-  req.session.userType = user.userType as 'patient' | 'provider' | 'caregiver';
-  req.session.email = user.email;
-  req.session.firstName = user.firstName;
-  req.session.lastName = user.lastName;
+): Promise<void> => {
+  return new Promise((resolve, reject) => {
+    req.session.userId = user.id;
+    req.session.userType = user.userType as 'patient' | 'provider' | 'caregiver';
+    req.session.email = user.email || '';
+    req.session.firstName = user.firstName;
+    req.session.lastName = user.lastName;
+
+    // Explicitly save the session to ensure it's persisted before response
+    req.session.save((err) => {
+      if (err) {
+        reject(err);
+      } else {
+        resolve();
+      }
+    });
+  });
 };
 
 /**

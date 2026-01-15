@@ -148,6 +148,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
           tosAcceptedAt: new Date(),
           tosVersion: tosVersion || '1.0.0',
         });
+
+        // HIPAA: Set server-side session after registration
+        await setAuthSession(req, patient);
+        auditAuthEvent(req, AuditAction.LOGIN_SUCCESS, patient.id, true, { method: 'registration', userType: 'patient' });
+
         res.json({ user: patient });
 
       } else if (userType === 'provider') {
@@ -166,6 +171,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
           tosAcceptedAt: new Date(),
           tosVersion: tosVersion || '1.0.0',
         });
+
+        // HIPAA: Set server-side session after registration
+        await setAuthSession(req, provider);
+        auditAuthEvent(req, AuditAction.LOGIN_SUCCESS, provider.id, true, { method: 'registration', userType: 'provider' });
+
         res.json({ user: provider });
 
       } else {
@@ -202,8 +212,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
           });
         }
 
-        // HIPAA: Set server-side session
-        setAuthSession(req, patient);
+        // HIPAA: Set server-side session (await to ensure session is saved before response)
+        await setAuthSession(req, patient);
 
         // HIPAA: Audit successful login
         auditAuthEvent(req, AuditAction.LOGIN_SUCCESS, patient.id, true, { method: 'legacy', userType: 'patient' });
@@ -250,8 +260,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
           });
         }
 
-        // HIPAA: Set server-side session
-        setAuthSession(req, patient);
+        // HIPAA: Set server-side session (await to ensure session is saved before response)
+        await setAuthSession(req, patient);
 
         // HIPAA: Audit successful login
         auditAuthEvent(req, AuditAction.LOGIN_SUCCESS, patient.id, true, { userType: 'patient' });
@@ -286,8 +296,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
           return res.status(401).json({ error: "Provider not found. Please register first." });
         }
 
-        // HIPAA: Set server-side session
-        setAuthSession(req, provider);
+        // HIPAA: Set server-side session (await to ensure session is saved before response)
+        await setAuthSession(req, provider);
 
         // HIPAA: Audit successful login
         auditAuthEvent(req, AuditAction.LOGIN_SUCCESS, provider.id, true, { userType: 'provider' });
@@ -2056,14 +2066,75 @@ export async function registerRoutes(app: Express): Promise<Server> {
         await storage.updateGoalProgress(patientId, 'sessions', sessionCount);
       }
       
-      res.json({ 
-        success: true, 
+      res.json({
+        success: true,
         message: "Goal progress recalculated successfully",
         sessionsProcessed: sessions.length
       });
     } catch (error) {
       logger.error("Error recalculating goal progress", { error: (error as Error).message });
       res.status(500).json({ error: "Failed to recalculate goal progress" });
+    }
+  });
+
+  // Recalculate patient stats from existing sessions (fixes avgDailyDuration)
+  app.post("/api/patients/:patientId/recalculate-stats", requireAuth, authorizePatientAccess, async (req, res) => {
+    try {
+      const patientId = parseInt(req.params.patientId);
+
+      if (isNaN(patientId)) {
+        return res.status(400).json({ error: "Invalid patient ID" });
+      }
+
+      const updatedStats = await storage.recalculatePatientStats(patientId);
+
+      if (!updatedStats) {
+        return res.status(404).json({ error: "Patient stats not found" });
+      }
+
+      res.json({
+        success: true,
+        message: "Patient stats recalculated successfully",
+        stats: updatedStats
+      });
+    } catch (error) {
+      logger.error("Error recalculating patient stats", { error: (error as Error).message });
+      res.status(500).json({ error: "Failed to recalculate patient stats" });
+    }
+  });
+
+  // Recalculate stats for all patients (provider-only, fixes avgDailyDuration for all)
+  app.post("/api/admin/recalculate-all-stats", requireAuth, requireProvider, async (req, res) => {
+    try {
+      const allPatients = await storage.getAllPatients();
+      const results: Array<{patientId: number, name: string, success: boolean, avgDailyMinutes?: number}> = [];
+
+      for (const patient of allPatients) {
+        try {
+          const updatedStats = await storage.recalculatePatientStats(patient.id);
+          results.push({
+            patientId: patient.id,
+            name: `${patient.firstName} ${patient.lastName}`,
+            success: !!updatedStats,
+            avgDailyMinutes: updatedStats ? Math.round((updatedStats.avgDailyDuration || 0) / 60) : undefined
+          });
+        } catch (err) {
+          results.push({
+            patientId: patient.id,
+            name: `${patient.firstName} ${patient.lastName}`,
+            success: false
+          });
+        }
+      }
+
+      res.json({
+        success: true,
+        message: `Recalculated stats for ${results.filter(r => r.success).length}/${allPatients.length} patients`,
+        results
+      });
+    } catch (error) {
+      logger.error("Error recalculating all patient stats", { error: (error as Error).message });
+      res.status(500).json({ error: "Failed to recalculate patient stats" });
     }
   });
 
@@ -2576,8 +2647,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       const caregiver = await storage.getUserByEmail(email);
       if (!caregiver || caregiver.userType !== 'caregiver') {
+        auditAuthEvent(req, AuditAction.LOGIN_FAILED, null, false, { userType: 'caregiver' });
         return res.status(401).json({ error: "Invalid caregiver credentials" });
       }
+
+      // HIPAA: Set server-side session (await to ensure session is saved before response)
+      await setAuthSession(req, caregiver);
+
+      // HIPAA: Audit successful login
+      auditAuthEvent(req, AuditAction.LOGIN_SUCCESS, caregiver.id, true, { userType: 'caregiver' });
 
       // Get patients this caregiver has access to
       const patients = await storage.getPatientsByCaregiverId(caregiver.id);
