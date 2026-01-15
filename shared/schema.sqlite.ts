@@ -835,12 +835,12 @@ export const patientRegistrationSchema = loginSchema.extend({
   tosVersion: z.string().optional(),
   // Patient physical measurements (required for new registrations)
   sex: z.enum(["male", "female", "other"]),
-  // Support both imperial and metric input
-  heightFeet: z.number().min(3).max(8).optional(),
-  heightInches: z.number().min(0).max(11).optional(),
-  heightCm: z.number().min(100).max(250).optional(),
-  weightLbs: z.number().min(50).max(500).optional(),
-  weightKg: z.number().min(20).max(250).optional(),
+  // Support both imperial and metric input (use coerce to convert form strings to numbers)
+  heightFeet: z.coerce.number().min(3).max(8).optional(),
+  heightInches: z.coerce.number().min(0).max(11).optional(),
+  heightCm: z.coerce.number().min(100).max(250).optional(),
+  weightLbs: z.coerce.number().min(50).max(500).optional(),
+  weightKg: z.coerce.number().min(20).max(250).optional(),
   heightUnit: z.enum(["imperial", "metric"]).optional(),
   weightUnit: z.enum(["imperial", "metric"]).optional(),
 });
