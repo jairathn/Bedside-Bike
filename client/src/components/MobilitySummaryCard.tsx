@@ -263,8 +263,8 @@ export default function MobilitySummaryCard({
     // Simple table with dashes (renders in any system)
     const recentDays = dailyData.slice(-7);
 
-    output += `DATE        CYCLE   WALK   CHAIR   TOTAL   GOAL (${goalMinutes}m)\n`;
-    output += `----------- -----   ----   -----   -----   ---------\n`;
+    output += `DATE        CYCLE   WALK   CHAIR   TOTAL   GOAL    %\n`;
+    output += `----------- -----   ----   -----   -----   ----   ----\n`;
 
     recentDays.forEach(day => {
       const date = formatDate(day.date).padEnd(11);
@@ -272,12 +272,14 @@ export default function MobilitySummaryCard({
       const walk = `${day.walkMinutes}m`.padStart(4);
       const sit = `${day.sitMinutes}m`.padStart(5);
       const total = `${day.totalMinutes}m`.padStart(5);
+      // TODO: When historical goals are added, use day.goalMinutes instead
+      const dayGoal = `${goalMinutes}m`.padStart(4);
       const goalPercent = Math.round((day.totalMinutes / goalMinutes) * 100);
-      const goalStatus = `${goalPercent}%`.padStart(4);
-      output += `${date} ${ride}   ${walk}   ${sit}   ${total}   ${goalStatus}\n`;
+      const pct = `${goalPercent}%`.padStart(4);
+      output += `${date} ${ride}   ${walk}   ${sit}   ${total}   ${dayGoal}   ${pct}\n`;
     });
 
-    output += `----------- -----   ----   -----   -----\n`;
+    output += `----------- -----   ----   -----   -----   ----   ----\n`;
     output += `TOTAL       ${String(stats.totalRide).padStart(4)}m   ${String(stats.totalWalk).padStart(3)}m   ${String(stats.totalSit).padStart(4)}m   ${String(stats.totalMinutes).padStart(4)}m\n\n`;
 
     // Today status
