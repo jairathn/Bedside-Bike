@@ -652,7 +652,7 @@ export default function Auth({ onAuthSuccess }: AuthProps) {
                           e.preventDefault();
                           handleRegister(new FormData(e.currentTarget));
                         }} className="space-y-4">
-                          
+
                           <div className="space-y-2">
                             <Label htmlFor="reg-email">Email Address *</Label>
                             <Input
@@ -685,14 +685,74 @@ export default function Auth({ onAuthSuccess }: AuthProps) {
                             </div>
                           </div>
 
+                          <div className="grid grid-cols-2 gap-4">
+                            <div className="space-y-2">
+                              <Label htmlFor="reg-dateOfBirth">Date of Birth *</Label>
+                              <Input
+                                id="reg-dateOfBirth"
+                                name="dateOfBirth"
+                                type="date"
+                                required
+                              />
+                            </div>
+                            <div className="space-y-2">
+                              <Label htmlFor="reg-sex">Sex *</Label>
+                              <Select name="sex" required>
+                                <SelectTrigger id="reg-sex">
+                                  <SelectValue placeholder="Select sex" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  <SelectItem value="male">Male</SelectItem>
+                                  <SelectItem value="female">Female</SelectItem>
+                                  <SelectItem value="other">Other</SelectItem>
+                                </SelectContent>
+                              </Select>
+                            </div>
+                          </div>
+
+                          {/* Height Section */}
                           <div className="space-y-2">
-                            <Label htmlFor="reg-dateOfBirth">Date of Birth *</Label>
+                            <Label>Height *</Label>
+                            <div className="grid grid-cols-2 gap-2">
+                              <div className="space-y-1">
+                                <Input
+                                  id="reg-heightFeet"
+                                  name="heightFeet"
+                                  type="number"
+                                  min="3"
+                                  max="8"
+                                  required
+                                  placeholder="Feet (e.g., 5)"
+                                />
+                              </div>
+                              <div className="space-y-1">
+                                <Input
+                                  id="reg-heightInches"
+                                  name="heightInches"
+                                  type="number"
+                                  min="0"
+                                  max="11"
+                                  required
+                                  placeholder="Inches (e.g., 8)"
+                                />
+                              </div>
+                            </div>
+                            <p className="text-xs text-gray-500">Enter your height in feet and inches</p>
+                          </div>
+
+                          {/* Weight Section */}
+                          <div className="space-y-2">
+                            <Label htmlFor="reg-weightLbs">Weight (lbs) *</Label>
                             <Input
-                              id="reg-dateOfBirth"
-                              name="dateOfBirth"
-                              type="date"
+                              id="reg-weightLbs"
+                              name="weightLbs"
+                              type="number"
+                              min="50"
+                              max="500"
                               required
+                              placeholder="e.g., 160"
                             />
+                            <p className="text-xs text-gray-500">Enter your weight in pounds</p>
                           </div>
 
                           <div className="space-y-2">
@@ -705,8 +765,8 @@ export default function Auth({ onAuthSuccess }: AuthProps) {
                             <p className="text-xs text-gray-500">Enter your bedside bike number to link your session</p>
                           </div>
 
-                          <Button 
-                            type="submit" 
+                          <Button
+                            type="submit"
                             className="w-full bg-green-600 hover:bg-green-700"
                             disabled={registerMutation.isPending}
                           >

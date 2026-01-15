@@ -844,7 +844,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       logger.debug('Risk assessment calculated', { assessmentComplete: true });
 
       // Store the assessment - serialize all JSON objects to text for database storage
-      // Include providerId and all input data for persistence and patient view auto-population
+      // Only save inputData when a provider generates the assessment (not for patient exploration)
       const assessment = await storage.createRiskAssessment({
         patientId,
         providerId, // Track which provider created this assessment
@@ -856,8 +856,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         losData: losData ? JSON.stringify(losData) : null,
         dischargeData: dischargeData ? JSON.stringify(dischargeData) : null,
         readmissionData: readmissionData ? JSON.stringify(readmissionData) : null,
-        // Store all calculator input values for persistence and patient view
-        inputData: req.body
+        // Only save input values when provider generates assessment - patient changes are for exploration only
+        inputData: providerId ? req.body : undefined
       });
 
       res.json({
