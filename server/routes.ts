@@ -1986,7 +1986,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Grant provider access
+  // Send provider access invitation (creates pending request for provider to accept)
   app.post("/api/provider-relationships", async (req, res) => {
     try {
       // Get patient ID from request body (sent from frontend based on logged-in user)
@@ -2013,17 +2013,39 @@ export async function registerRoutes(app: Express): Promise<Server> {
         .limit(1);
 
       if (existingRelationship.length > 0) {
-        return res.status(400).json({ error: "Provider already has access to this patient" });
+        const existing = existingRelationship[0];
+        if (existing.accessStatus === 'pending') {
+          return res.status(400).json({ error: "A pending invitation already exists for this provider" });
+        }
+        if (existing.accessStatus === 'approved' && existing.permissionGranted) {
+          return res.status(400).json({ error: "Provider already has access to this patient" });
+        }
       }
 
-      const relationship = await storage.createProviderPatientRelationship({
+      // Create a pending invitation instead of immediately granting access
+      const relationship = await storage.createPatientAccessRequest(providerId, patientId);
+
+      // Create notification for provider
+      const patient = await storage.getUser(patientId);
+      await storage.createProviderNotification({
+        providerId,
         patientId,
-        providerId
+        notificationType: 'access_request',
+        title: 'Patient Access Invitation',
+        message: `${patient?.firstName} ${patient?.lastName} has invited you to view their mobility data.`,
+        metadata: JSON.stringify({ patientName: `${patient?.firstName} ${patient?.lastName}` })
       });
+
+      logger.info("Patient sent provider invitation", {
+        patientId,
+        providerId,
+        relationId: relationship.id
+      });
+
       res.json(relationship);
     } catch (error) {
-      logger.error("Grant access error", { error: (error as Error).message });
-      res.status(500).json({ error: "Failed to grant provider access" });
+      logger.error("Send invitation error", { error: (error as Error).message });
+      res.status(500).json({ error: "Failed to send provider invitation" });
     }
   });
 
