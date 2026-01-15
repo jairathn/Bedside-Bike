@@ -14,14 +14,32 @@ if (USE_POSTGRES) {
   const { drizzle } = await import('drizzle-orm/node-postgres');
   const schema = await import('@shared/schema.postgres');
 
+  /**
+   * HIPAA-Compliant Database Connection
+   *
+   * SSL Configuration:
+   * - rejectUnauthorized: true enforces certificate validation
+   * - This prevents man-in-the-middle attacks on database connections
+   * - Requires valid SSL certificate from database provider (Supabase)
+   *
+   * Note: Set DB_SSL_REJECT_UNAUTHORIZED=false only for development
+   * with self-signed certificates. NEVER in production.
+   */
+  const rejectUnauthorized = process.env.DB_SSL_REJECT_UNAUTHORIZED !== 'false';
+
   const connectionPool = new pg.Pool({
     connectionString: process.env.DATABASE_URL,
     ssl: {
-      rejectUnauthorized: false
+      // HIPAA: Enforce certificate validation in production
+      rejectUnauthorized: rejectUnauthorized,
     },
     max: 10,
     idleTimeoutMillis: 30000,
   });
+
+  if (!rejectUnauthorized) {
+    console.warn('SECURITY WARNING: SSL certificate validation is disabled. Enable for HIPAA compliance in production.');
+  }
 
   // Test connection
   try {

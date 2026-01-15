@@ -87,7 +87,11 @@ export interface IStorage {
   deleteProviderPatientRelationship(relationshipId: number): Promise<void>;
   grantProviderAccess(patientId: number, providerId: number): Promise<ProviderPatient | undefined>;
   getPatientsByProvider(providerId: number): Promise<User[]>;
-  
+
+  // HIPAA Access Control
+  hasProviderAccessToPatient(providerId: number, patientId: number): Promise<boolean>;
+  hasCaregiverAccessToPatient(caregiverId: number, patientId: number): Promise<boolean>;
+
   // Session operations
   createSession(session: InsertExerciseSession): Promise<ExerciseSession>;
   getSessionsByPatient(patientId: number): Promise<ExerciseSession[]>;
@@ -408,6 +412,46 @@ export class DatabaseStorage implements IStorage {
           eq(providerPatients.isActive, true)
         )
       );
+  }
+
+  // HIPAA Access Control Methods
+  /**
+   * Check if a provider has access to a specific patient's data.
+   * Used for HIPAA-compliant authorization checks.
+   */
+  async hasProviderAccessToPatient(providerId: number, patientId: number): Promise<boolean> {
+    const [relation] = await db
+      .select({ id: providerPatients.id })
+      .from(providerPatients)
+      .where(
+        and(
+          eq(providerPatients.providerId, providerId),
+          eq(providerPatients.patientId, patientId),
+          eq(providerPatients.permissionGranted, true),
+          eq(providerPatients.isActive, true)
+        )
+      )
+      .limit(1);
+    return !!relation;
+  }
+
+  /**
+   * Check if a caregiver has access to a specific patient's data.
+   * Used for HIPAA-compliant authorization checks.
+   */
+  async hasCaregiverAccessToPatient(caregiverId: number, patientId: number): Promise<boolean> {
+    const [relation] = await db
+      .select({ id: caregiverPatients.id })
+      .from(caregiverPatients)
+      .where(
+        and(
+          eq(caregiverPatients.caregiverId, caregiverId),
+          eq(caregiverPatients.patientId, patientId),
+          eq(caregiverPatients.isActive, true)
+        )
+      )
+      .limit(1);
+    return !!relation;
   }
 
   // Session operations
