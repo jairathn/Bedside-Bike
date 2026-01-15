@@ -27,6 +27,10 @@ export const users = sqliteTable("users", {
   userType: text("user_type").notNull(), // 'patient' or 'provider'
   dateOfBirth: text("date_of_birth"), // ISO date string
   admissionDate: text("admission_date"), // ISO date string
+  // Patient physical measurements (required for mobility calculations)
+  sex: text("sex"), // 'male', 'female', or 'other'
+  heightCm: real("height_cm"),
+  weightKg: real("weight_kg"),
   // Provider specific fields
   providerRole: text("provider_role"), // 'physician', 'nurse', etc.
   credentials: text("credentials"),
@@ -83,6 +87,7 @@ export const providerPatients = sqliteTable("provider_patients", {
 export const riskAssessments = sqliteTable("risk_assessments", {
   id: integer("id").primaryKey({ autoIncrement: true }),
   patientId: integer("patient_id").notNull().references(() => users.id),
+  providerId: integer("provider_id").references(() => users.id), // Provider who created this assessment
   deconditioning: text("deconditioning").notNull(), // JSON as text
   vte: text("vte").notNull(),
   falls: text("falls").notNull(),
@@ -91,6 +96,8 @@ export const riskAssessments = sqliteTable("risk_assessments", {
   losData: text("los_data"),
   dischargeData: text("discharge_data"),
   readmissionData: text("readmission_data"),
+  // Store all input values provider entered in the calculator for persistence
+  inputData: text("input_data"), // JSON with all calculator input values
   createdAt: integer("created_at", { mode: 'timestamp' }).default(sql`(unixepoch())`),
 });
 
@@ -824,6 +831,18 @@ export const loginSchema = z.object({
 export const patientRegistrationSchema = loginSchema.extend({
   dateOfBirth: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Date must be in YYYY-MM-DD format"),
   userType: z.literal("patient"),
+  tosAccepted: z.boolean().refine(val => val === true, "You must accept the Terms of Service"),
+  tosVersion: z.string().optional(),
+  // Patient physical measurements (required for new registrations)
+  sex: z.enum(["male", "female", "other"]),
+  // Support both imperial and metric input
+  heightFeet: z.number().min(3).max(8).optional(),
+  heightInches: z.number().min(0).max(11).optional(),
+  heightCm: z.number().min(100).max(250).optional(),
+  weightLbs: z.number().min(50).max(500).optional(),
+  weightKg: z.number().min(20).max(250).optional(),
+  heightUnit: z.enum(["imperial", "metric"]).optional(),
+  weightUnit: z.enum(["imperial", "metric"]).optional(),
 });
 
 export const providerRegistrationSchema = loginSchema.extend({

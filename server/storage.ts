@@ -1059,10 +1059,10 @@ export class DatabaseStorage implements IStorage {
   }
 
   // Risk Assessment operations
-  async createRiskAssessment(assessment: InsertRiskAssessment): Promise<RiskAssessment> {
+  async createRiskAssessment(assessment: InsertRiskAssessment & { providerId?: number; inputData?: any }): Promise<RiskAssessment> {
     // Extract only the fields we need - ensure all values are proper strings
     // IMPORTANT: Do not include id or createdAt - let DB handle defaults
-    const insertData = {
+    const insertData: any = {
       patientId: Number(assessment.patientId),
       deconditioning: String(assessment.deconditioning || '{}'),
       vte: String(assessment.vte || '{}'),
@@ -1074,7 +1074,19 @@ export class DatabaseStorage implements IStorage {
       readmissionData: assessment.readmissionData ? String(assessment.readmissionData) : null,
     };
 
-    console.log('Inserting risk assessment - patientId:', insertData.patientId);
+    // Add provider ID if this assessment was created by a provider
+    if (assessment.providerId) {
+      insertData.providerId = Number(assessment.providerId);
+    }
+
+    // Store all calculator input values for persistence and patient view auto-population
+    if (assessment.inputData) {
+      insertData.inputData = typeof assessment.inputData === 'string'
+        ? assessment.inputData
+        : JSON.stringify(assessment.inputData);
+    }
+
+    console.log('Inserting risk assessment - patientId:', insertData.patientId, 'providerId:', insertData.providerId);
 
     const [newAssessment] = await db.insert(riskAssessments).values(insertData).returning();
 

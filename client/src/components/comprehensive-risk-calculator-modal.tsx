@@ -9,9 +9,11 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { Calculator, User, Pill, Stethoscope, Activity, AlertTriangle, ArrowLeft, Heart, Bone, Brain, Info } from "lucide-react";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import { Calculator, User, Pill, Stethoscope, Activity, AlertTriangle, ArrowLeft, Heart, Bone, Brain, Info, Lock, UserCheck } from "lucide-react";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
+import { useQuery } from "@tanstack/react-query";
 
 // Specific diagnosis options matching prescription-adjustments.ts
 const DIAGNOSIS_OPTIONS = [
@@ -64,6 +66,9 @@ interface ComprehensiveRiskCalculatorModalProps {
   onClose: () => void;
   patientId: string;
   onGoalsGenerated: (goals: any[], riskResults: any) => void;
+  // Mode: 'provider' for provider view, 'patient' for patient view
+  // In patient mode, fields filled by provider will be read-only
+  mode?: 'provider' | 'patient';
   // Optional initial patient data for auto-population
   initialPatientData?: {
     age?: number;
@@ -79,13 +84,35 @@ interface ComprehensiveRiskCalculatorModalProps {
   };
 }
 
+// Fields that should be read-only when filled by provider
+const PROVIDER_READONLY_FIELDS = [
+  'age', 'sex', 'weight_kg', 'height_cm', 'level_of_care',
+  'admission_diagnosis', 'mobility_status', 'cognitive_status', 'baseline_function'
+];
+
 export function ComprehensiveRiskCalculatorModal({
   isOpen,
   onClose,
   patientId,
   onGoalsGenerated,
+  mode = 'provider',
   initialPatientData
 }: ComprehensiveRiskCalculatorModalProps) {
+  const isPatientMode = mode === 'patient';
+
+  // Fetch provider assessment data for patient mode
+  const { data: providerData } = useQuery({
+    queryKey: ['provider-assessment-data', patientId],
+    queryFn: async () => {
+      if (!patientId || mode !== 'patient') return null;
+      const response = await apiRequest(`/api/patients/${patientId}/provider-assessment-data`);
+      return response;
+    },
+    enabled: isOpen && mode === 'patient' && !!patientId,
+  });
+
+  // Track if data was filled by provider
+  const hasProviderData = providerData?.hasProviderData || false;
   // Assessment State - MATCHING EXISTING PATIENT SCHEMA
   const [assessmentData, setAssessmentData] = useState({
     // Personal Details - matching schema exactly
@@ -183,6 +210,58 @@ export function ComprehensiveRiskCalculatorModal({
     }
   }, [isOpen, initialPatientData]);
 
+  // Auto-populate from provider assessment data in patient mode
+  // Provider data takes priority over initial patient data for read-only fields
+  useEffect(() => {
+    if (isOpen && isPatientMode && providerData?.inputData) {
+      const providerInput = providerData.inputData;
+      setAssessmentData(prev => ({
+        ...prev,
+        // Use provider values for read-only fields
+        age: providerInput.age ?? prev.age,
+        sex: providerInput.sex ?? prev.sex,
+        weight_kg: providerInput.weight_kg ?? prev.weight_kg,
+        height_cm: providerInput.height_cm ?? prev.height_cm,
+        level_of_care: providerInput.level_of_care ?? prev.level_of_care,
+        mobility_status: providerInput.mobility_status ?? prev.mobility_status,
+        cognitive_status: providerInput.cognitive_status ?? prev.cognitive_status,
+        baseline_function: providerInput.baseline_function ?? prev.baseline_function,
+        admission_diagnosis: providerInput.admission_diagnosis ?? prev.admission_diagnosis,
+        // Also populate other fields from provider data
+        days_immobile: providerInput.days_immobile ?? prev.days_immobile,
+        on_vte_prophylaxis: providerInput.on_vte_prophylaxis ?? prev.on_vte_prophylaxis,
+        incontinent: providerInput.incontinent ?? prev.incontinent,
+        albumin_low: providerInput.albumin_low ?? prev.albumin_low,
+        // Checkbox fields
+        is_postoperative: providerInput.is_postoperative ?? prev.is_postoperative,
+        is_trauma_admission: providerInput.is_trauma_admission ?? prev.is_trauma_admission,
+        is_sepsis: providerInput.is_sepsis ?? prev.is_sepsis,
+        is_cardiac_admission: providerInput.is_cardiac_admission ?? prev.is_cardiac_admission,
+        is_neuro_admission: providerInput.is_neuro_admission ?? prev.is_neuro_admission,
+        is_orthopedic: providerInput.is_orthopedic ?? prev.is_orthopedic,
+        is_oncology: providerInput.is_oncology ?? prev.is_oncology,
+        on_sedating_medications: providerInput.on_sedating_medications ?? prev.on_sedating_medications,
+        on_anticoagulants: providerInput.on_anticoagulants ?? prev.on_anticoagulants,
+        on_steroids: providerInput.on_steroids ?? prev.on_steroids,
+        has_diabetes: providerInput.has_diabetes ?? prev.has_diabetes,
+        has_obesity: providerInput.has_obesity ?? prev.has_obesity,
+        has_parkinson: providerInput.has_parkinson ?? prev.has_parkinson,
+        has_active_cancer: providerInput.has_active_cancer ?? prev.has_active_cancer,
+        has_malnutrition: providerInput.has_malnutrition ?? prev.has_malnutrition,
+        has_neuropathy: providerInput.has_neuropathy ?? prev.has_neuropathy,
+        has_stroke_history: providerInput.has_stroke_history ?? prev.has_stroke_history,
+        has_vte_history: providerInput.has_vte_history ?? prev.has_vte_history,
+        has_foley_catheter: providerInput.has_foley_catheter ?? prev.has_foley_catheter,
+        has_central_line: providerInput.has_central_line ?? prev.has_central_line,
+        has_feeding_tube: providerInput.has_feeding_tube ?? prev.has_feeding_tube,
+        has_ventilator: providerInput.has_ventilator ?? prev.has_ventilator,
+        // Selected diagnoses and medications
+        selected_diagnoses: providerInput.selected_diagnoses ?? prev.selected_diagnoses,
+        selected_medications: providerInput.selected_medications ?? prev.selected_medications,
+      }));
+    }
+  }, [isOpen, isPatientMode, providerData]);
+
   // Auto-map specific medications to their category checkboxes
   useEffect(() => {
     const selectedMeds = assessmentData.selected_medications;
@@ -241,6 +320,36 @@ export function ComprehensiveRiskCalculatorModal({
         ? [...prev.selected_medications, medicationValue]
         : prev.selected_medications.filter(m => m !== medicationValue)
     }));
+  };
+
+  // Helper to check if a field should be read-only (in patient mode with provider data)
+  const isFieldReadOnly = (fieldName: string): boolean => {
+    return isPatientMode && hasProviderData && PROVIDER_READONLY_FIELDS.includes(fieldName);
+  };
+
+  // Provider-filled indicator component for patient mode
+  const ProviderFilledIndicator = ({ fieldName }: { fieldName: string }) => {
+    if (!isPatientMode || !hasProviderData || !PROVIDER_READONLY_FIELDS.includes(fieldName)) {
+      return null;
+    }
+
+    return (
+      <TooltipProvider>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <span className="inline-flex items-center gap-1 text-xs text-blue-600 ml-1">
+              <UserCheck size={12} />
+              <Lock size={10} />
+            </span>
+          </TooltipTrigger>
+          <TooltipContent side="top" className="max-w-xs">
+            <p className="text-sm">
+              This field was filled in by your healthcare provider and cannot be modified.
+            </p>
+          </TooltipContent>
+        </Tooltip>
+      </TooltipProvider>
+    );
   };
 
   // Get grouped medications for display
@@ -449,23 +558,43 @@ export function ComprehensiveRiskCalculatorModal({
               </CardTitle>
             </CardHeader>
             <CardContent className="grid grid-cols-2 md:grid-cols-4 gap-4">
+              {/* Provider-filled banner for patient mode */}
+              {isPatientMode && hasProviderData && (
+                <div className="col-span-full bg-blue-50 border border-blue-200 rounded-lg p-3 mb-2">
+                  <div className="flex items-center gap-2 text-blue-700">
+                    <UserCheck size={18} />
+                    <span className="text-sm font-medium">
+                      Some fields below have been filled in by your healthcare provider and cannot be modified.
+                    </span>
+                  </div>
+                </div>
+              )}
               <div>
-                <Label htmlFor="age">Age</Label>
+                <Label htmlFor="age" className="flex items-center">
+                  Age
+                  <ProviderFilledIndicator fieldName="age" />
+                </Label>
                 <Input
                   id="age"
                   type="number"
                   value={assessmentData.age}
                   onChange={(e) => setAssessmentData({...assessmentData, age: parseInt(e.target.value) || 65})}
                   placeholder="65"
+                  disabled={isFieldReadOnly('age')}
+                  className={isFieldReadOnly('age') ? 'bg-gray-100 cursor-not-allowed' : ''}
                 />
               </div>
               <div>
-                <Label htmlFor="sex">Sex</Label>
+                <Label htmlFor="sex" className="flex items-center">
+                  Sex
+                  <ProviderFilledIndicator fieldName="sex" />
+                </Label>
                 <Select
                   value={assessmentData.sex}
                   onValueChange={(value) => setAssessmentData({...assessmentData, sex: value})}
+                  disabled={isFieldReadOnly('sex')}
                 >
-                  <SelectTrigger>
+                  <SelectTrigger className={isFieldReadOnly('sex') ? 'bg-gray-100 cursor-not-allowed' : ''}>
                     <SelectValue placeholder="Female" />
                   </SelectTrigger>
                   <SelectContent>
@@ -475,7 +604,10 @@ export function ComprehensiveRiskCalculatorModal({
                 </Select>
               </div>
               <div>
-                <Label htmlFor="weight">Weight (kg)</Label>
+                <Label htmlFor="weight" className="flex items-center">
+                  Weight (kg)
+                  <ProviderFilledIndicator fieldName="weight_kg" />
+                </Label>
                 <Input
                   id="weight"
                   type="number"
@@ -483,11 +615,16 @@ export function ComprehensiveRiskCalculatorModal({
                   value={assessmentData.weight_kg || ''}
                   onChange={(e) => setAssessmentData({...assessmentData, weight_kg: e.target.value ? parseFloat(e.target.value) : null})}
                   placeholder="e.g. 70.5"
+                  disabled={isFieldReadOnly('weight_kg')}
+                  className={isFieldReadOnly('weight_kg') ? 'bg-gray-100 cursor-not-allowed' : ''}
                 />
                 <p className="text-xs text-gray-500 mt-1">Optional - enables personalized W/kg calculation</p>
               </div>
               <div>
-                <Label htmlFor="height">Height (cm)</Label>
+                <Label htmlFor="height" className="flex items-center">
+                  Height (cm)
+                  <ProviderFilledIndicator fieldName="height_cm" />
+                </Label>
                 <Input
                   id="height"
                   type="number"
@@ -495,16 +632,22 @@ export function ComprehensiveRiskCalculatorModal({
                   value={assessmentData.height_cm || ''}
                   onChange={(e) => setAssessmentData({...assessmentData, height_cm: e.target.value ? parseFloat(e.target.value) : null})}
                   placeholder="e.g. 175.5"
+                  disabled={isFieldReadOnly('height_cm')}
+                  className={isFieldReadOnly('height_cm') ? 'bg-gray-100 cursor-not-allowed' : ''}
                 />
                 <p className="text-xs text-gray-500 mt-1">Optional - enables BMI-based safety adjustments</p>
               </div>
               <div>
-                <Label htmlFor="level_of_care">Level of Care</Label>
+                <Label htmlFor="level_of_care" className="flex items-center">
+                  Level of Care
+                  <ProviderFilledIndicator fieldName="level_of_care" />
+                </Label>
                 <Select
                   value={assessmentData.level_of_care}
                   onValueChange={(value) => setAssessmentData({...assessmentData, level_of_care: value})}
+                  disabled={isFieldReadOnly('level_of_care')}
                 >
-                  <SelectTrigger>
+                  <SelectTrigger className={isFieldReadOnly('level_of_care') ? 'bg-gray-100 cursor-not-allowed' : ''}>
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
@@ -515,12 +658,16 @@ export function ComprehensiveRiskCalculatorModal({
                 </Select>
               </div>
               <div>
-                <Label htmlFor="mobility_status">Mobility Status</Label>
+                <Label htmlFor="mobility_status" className="flex items-center">
+                  Mobility Status
+                  <ProviderFilledIndicator fieldName="mobility_status" />
+                </Label>
                 <Select
                   value={assessmentData.mobility_status}
                   onValueChange={(value) => setAssessmentData({...assessmentData, mobility_status: value})}
+                  disabled={isFieldReadOnly('mobility_status')}
                 >
-                  <SelectTrigger>
+                  <SelectTrigger className={isFieldReadOnly('mobility_status') ? 'bg-gray-100 cursor-not-allowed' : ''}>
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
@@ -533,12 +680,16 @@ export function ComprehensiveRiskCalculatorModal({
                 </Select>
               </div>
               <div>
-                <Label htmlFor="cognitive_status">Cognitive Status</Label>
+                <Label htmlFor="cognitive_status" className="flex items-center">
+                  Cognitive Status
+                  <ProviderFilledIndicator fieldName="cognitive_status" />
+                </Label>
                 <Select
                   value={assessmentData.cognitive_status}
                   onValueChange={(value) => setAssessmentData({...assessmentData, cognitive_status: value})}
+                  disabled={isFieldReadOnly('cognitive_status')}
                 >
-                  <SelectTrigger>
+                  <SelectTrigger className={isFieldReadOnly('cognitive_status') ? 'bg-gray-100 cursor-not-allowed' : ''}>
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
@@ -559,13 +710,17 @@ export function ComprehensiveRiskCalculatorModal({
               </CardHeader>
               <CardContent>
                 <div>
-                  <Label htmlFor="admission_diagnosis">Primary admission diagnosis</Label>
+                  <Label htmlFor="admission_diagnosis" className="flex items-center">
+                    Primary admission diagnosis
+                    <ProviderFilledIndicator fieldName="admission_diagnosis" />
+                  </Label>
                   <Input
                     id="admission_diagnosis"
                     value={assessmentData.admission_diagnosis}
                     onChange={(e) => setAssessmentData({...assessmentData, admission_diagnosis: e.target.value})}
                     placeholder="e.g. Acute myocardial infarction, Hip fracture, Pneumonia"
-                    className="mt-1"
+                    className={`mt-1 ${isFieldReadOnly('admission_diagnosis') ? 'bg-gray-100 cursor-not-allowed' : ''}`}
+                    disabled={isFieldReadOnly('admission_diagnosis')}
                   />
                 </div>
               </CardContent>

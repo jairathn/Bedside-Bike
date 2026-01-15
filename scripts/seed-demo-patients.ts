@@ -70,12 +70,12 @@ const providerId = heidi.id;
 
 console.log('Creating Hospital Patient (COPD + Parkinson\'s)...');
 
-// Create user
+// Create user with physical measurements for risk calculator auto-population
 const hospitalPatient = db.prepare(`
   INSERT INTO users (
     email, first_name, last_name, date_of_birth, user_type,
-    admission_date, is_active
-  ) VALUES (?, ?, ?, ?, ?, ?, ?)
+    admission_date, is_active, sex, height_cm, weight_kg
+  ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   RETURNING *
 `).get(
   'hospital.patient@bedside-bike.local',
@@ -84,7 +84,10 @@ const hospitalPatient = db.prepare(`
   hospitalPatientDOB,
   'patient',
   hospitalAdmissionDate.toISOString().split('T')[0],
-  1
+  1,
+  'male',
+  172,
+  78.5
 ) as any;
 
 // Create comprehensive patient profile
@@ -255,8 +258,8 @@ console.log('\nCreating Inpatient Rehab Patient (Hip Fracture + Diabetes)...');
 const rehabPatient = db.prepare(`
   INSERT INTO users (
     email, first_name, last_name, date_of_birth, user_type,
-    admission_date, is_active
-  ) VALUES (?, ?, ?, ?, ?, ?, ?)
+    admission_date, is_active, sex, height_cm, weight_kg
+  ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   RETURNING *
 `).get(
   'rehab.patient@bedside-bike.local',
@@ -265,7 +268,10 @@ const rehabPatient = db.prepare(`
   rehabPatientDOB,
   'patient',
   rehabAdmissionDate.toISOString().split('T')[0],
-  1
+  1,
+  'female',
+  160,
+  68.2
 ) as any;
 
 // Create comprehensive patient profile
@@ -436,8 +442,8 @@ console.log('\nCreating SNF Patient (Sepsis + CHF with setback)...');
 const snfPatient = db.prepare(`
   INSERT INTO users (
     email, first_name, last_name, date_of_birth, user_type,
-    admission_date, is_active
-  ) VALUES (?, ?, ?, ?, ?, ?, ?)
+    admission_date, is_active, sex, height_cm, weight_kg
+  ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   RETURNING *
 `).get(
   'snf.patient@bedside-bike.local',
@@ -446,7 +452,10 @@ const snfPatient = db.prepare(`
   snfPatientDOB,
   'patient',
   snfAdmissionDate.toISOString().split('T')[0],
-  1
+  1,
+  'male',
+  175,
+  92.5
 ) as any;
 
 // Create comprehensive patient profile

@@ -33,6 +33,7 @@ export const users = pgTable("users", {
   dateOfBirth: varchar("date_of_birth", { length: 10 }), // ISO date string
   admissionDate: varchar("admission_date", { length: 10 }), // ISO date string
   // Patient physical measurements (required for mobility calculations)
+  sex: varchar("sex", { length: 10 }), // 'male', 'female', or 'other'
   heightCm: doublePrecision("height_cm"),
   weightKg: doublePrecision("weight_kg"),
   heightUnit: varchar("height_unit", { length: 10 }).default('imperial'), // 'imperial' or 'metric'
@@ -96,6 +97,7 @@ export const providerPatients = pgTable("provider_patients", {
 export const riskAssessments = pgTable("risk_assessments", {
   id: serial("id").primaryKey(),
   patientId: integer("patient_id").notNull().references(() => users.id),
+  providerId: integer("provider_id").references(() => users.id), // Provider who created this assessment
   deconditioning: jsonb("deconditioning").notNull(),
   vte: jsonb("vte").notNull(),
   falls: jsonb("falls").notNull(),
@@ -104,6 +106,8 @@ export const riskAssessments = pgTable("risk_assessments", {
   losData: jsonb("los_data"),
   dischargeData: jsonb("discharge_data"),
   readmissionData: jsonb("readmission_data"),
+  // Store all input values provider entered in the calculator for persistence
+  inputData: jsonb("input_data"), // JSON with all calculator input values
   createdAt: timestamp("created_at", { withTimezone: true }).default(sql`NOW()`),
 });
 
@@ -705,7 +709,9 @@ export const patientRegistrationSchema = loginSchema.extend({
   userType: z.literal("patient"),
   tosAccepted: z.boolean().refine(val => val === true, "You must accept the Terms of Service"),
   tosVersion: z.string().optional(),
-  // Physical measurements required for mobility calculations
+  // Patient physical measurements (required for new registrations)
+  sex: z.enum(["male", "female", "other"]),
+  // Support both imperial and metric input
   heightFeet: z.number().min(3).max(8).optional(),
   heightInches: z.number().min(0).max(11).optional(),
   heightCm: z.number().min(100).max(250).optional(),

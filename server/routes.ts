@@ -824,10 +824,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // HIPAA: Log only non-PHI metadata
       logger.debug('Risk assessment data parsed', { mobilityStatus: riskData.mobility_status });
       const patientId = parseInt(req.body.patientId) || 1; // Should come from authenticated session
-      
+
+      // Get provider ID from session if authenticated as a provider
+      const providerId = (req as any).session?.user?.userType === 'provider'
+        ? (req as any).session?.user?.id
+        : undefined;
+
       // Calculate risks using the risk calculator
       const riskResults = calculateRisks(riskData);
-      
+
       // Extract robust stay predictions from the comprehensive risk calculator (no literature-based fallbacks)
       const stayPredictions = (riskResults as any).stay_predictions;
       const losData = stayPredictions?.length_of_stay;
@@ -837,10 +842,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const mobilityBenefits = (riskResults as any).mobility_benefits;
 
       logger.debug('Risk assessment calculated', { assessmentComplete: true });
-      
+
       // Store the assessment - serialize all JSON objects to text for database storage
+      // Include providerId and all input data for persistence and patient view auto-population
       const assessment = await storage.createRiskAssessment({
         patientId,
+        providerId, // Track which provider created this assessment
         deconditioning: JSON.stringify(riskResults.deconditioning),
         vte: JSON.stringify(riskResults.vte),
         falls: JSON.stringify(riskResults.falls),
@@ -848,23 +855,26 @@ export async function registerRoutes(app: Express): Promise<Server> {
         mobilityRecommendation: JSON.stringify(riskResults.mobility_recommendation),
         losData: losData ? JSON.stringify(losData) : null,
         dischargeData: dischargeData ? JSON.stringify(dischargeData) : null,
-        readmissionData: readmissionData ? JSON.stringify(readmissionData) : null
+        readmissionData: readmissionData ? JSON.stringify(readmissionData) : null,
+        // Store all calculator input values for persistence and patient view
+        inputData: req.body
       });
-      
+
       res.json({
         ...riskResults,
         losData,
         dischargeData,
         readmissionData,
         mobility_benefits: mobilityBenefits, // Add mobility_benefits to API response
-        assessmentId: assessment.id
+        assessmentId: assessment.id,
+        providerId // Include providerId in response so client knows this was a provider-generated assessment
       });
     } catch (error) {
       logger.error("Risk assessment error", { error: (error as Error).message });
       if (error.name === 'ZodError') {
-        res.status(400).json({ 
-          error: "Invalid risk assessment data", 
-          details: (error as any).errors?.map((e: any) => `${e.path.join('.')}: ${e.message}`).join(', ') || (error as any).message 
+        res.status(400).json({
+          error: "Invalid risk assessment data",
+          details: (error as any).errors?.map((e: any) => `${e.path.join('.')}: ${e.message}`).join(', ') || (error as any).message
         });
       } else {
         res.status(400).json({ error: (error as any).message || "Invalid risk assessment data" });
@@ -913,6 +923,49 @@ export async function registerRoutes(app: Express): Promise<Server> {
       } else {
         res.status(400).json({ error: (error as any).message || "Invalid risk assessment data" });
       }
+    }
+  });
+
+  // Get latest provider-generated risk assessment input data for auto-population
+  // Returns the saved input data from the most recent provider-generated assessment
+  app.get("/api/patients/:patientId/provider-assessment-data", async (req, res) => {
+    try {
+      const patientId = parseInt(req.params.patientId);
+      if (isNaN(patientId)) {
+        return res.status(400).json({ error: "Invalid patient ID" });
+      }
+
+      // Get the latest risk assessment that has inputData (provider-generated)
+      const assessment = await storage.getLatestRiskAssessment(patientId);
+
+      if (!assessment || !(assessment as any).inputData) {
+        return res.json({
+          hasProviderData: false,
+          inputData: null,
+          providerId: null,
+          createdAt: null
+        });
+      }
+
+      // Parse the inputData if it's stored as a string
+      let inputData = (assessment as any).inputData;
+      if (typeof inputData === 'string') {
+        try {
+          inputData = JSON.parse(inputData);
+        } catch (e) {
+          inputData = null;
+        }
+      }
+
+      res.json({
+        hasProviderData: !!(assessment as any).providerId,
+        inputData,
+        providerId: (assessment as any).providerId,
+        createdAt: assessment.createdAt
+      });
+    } catch (error) {
+      logger.error("Error fetching provider assessment data", { error: (error as Error).message });
+      res.status(500).json({ error: "Failed to fetch provider assessment data" });
     }
   });
 
