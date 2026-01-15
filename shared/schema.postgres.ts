@@ -692,6 +692,20 @@ export const providerNotifications = pgTable("provider_notifications", {
   createdAt: timestamp("created_at", { withTimezone: true }).default(sql`NOW()`),
 });
 
+// Patient notifications - in-app notifications for patients (e.g., when providers/caregivers respond to invitations)
+export const patientNotifications = pgTable("patient_notifications", {
+  id: serial("id").primaryKey(),
+  patientId: integer("patient_id").notNull().references(() => users.id),
+  senderId: integer("sender_id").references(() => users.id),
+  senderType: varchar("sender_type", { length: 20 }), // 'provider', 'caregiver'
+  notificationType: varchar("notification_type", { length: 50 }).notNull(), // 'provider_accepted', 'provider_declined', 'caregiver_accepted', 'caregiver_declined', 'access_revoked', 'general'
+  title: varchar("title", { length: 255 }).notNull(),
+  message: text("message").notNull(),
+  metadata: jsonb("metadata").default({}),
+  isRead: boolean("is_read").default(false),
+  createdAt: timestamp("created_at", { withTimezone: true }).default(sql`NOW()`),
+});
+
 // ============================================================================
 // Validation schemas
 // ============================================================================
@@ -1006,6 +1020,15 @@ export const insertProviderNotificationSchema = createInsertSchema(providerNotif
 
 export type ProviderNotification = typeof providerNotifications.$inferSelect;
 export type InsertProviderNotification = typeof providerNotifications.$inferInsert;
+
+// ============================================================================
+// PATIENT NOTIFICATION SYSTEM - Insert Schemas and Types
+// ============================================================================
+
+export const insertPatientNotificationSchema = createInsertSchema(patientNotifications);
+
+export type PatientNotification = typeof patientNotifications.$inferSelect;
+export type InsertPatientNotification = typeof patientNotifications.$inferInsert;
 
 export type ProviderAccessRequest = z.infer<typeof providerAccessRequestSchema>;
 export type ProviderInvite = z.infer<typeof providerInviteSchema>;
