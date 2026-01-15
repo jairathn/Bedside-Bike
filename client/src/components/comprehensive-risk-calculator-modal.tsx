@@ -10,7 +10,7 @@ import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
-import { Calculator, User, Pill, Stethoscope, Activity, AlertTriangle, ArrowLeft, Heart, Bone, Brain, Info, Lock, UserCheck } from "lucide-react";
+import { Calculator, User, Pill, Stethoscope, Activity, AlertTriangle, ArrowLeft, Heart, Bone, Brain, Info, UserCheck } from "lucide-react";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { useQuery } from "@tanstack/react-query";
@@ -322,12 +322,8 @@ export function ComprehensiveRiskCalculatorModal({
     }));
   };
 
-  // Helper to check if a field should be read-only (in patient mode with provider data)
-  const isFieldReadOnly = (fieldName: string): boolean => {
-    return isPatientMode && hasProviderData && PROVIDER_READONLY_FIELDS.includes(fieldName);
-  };
-
   // Provider-filled indicator component for patient mode
+  // Shows which fields were originally set by the provider (but patients can still edit to explore)
   const ProviderFilledIndicator = ({ fieldName }: { fieldName: string }) => {
     if (!isPatientMode || !hasProviderData || !PROVIDER_READONLY_FIELDS.includes(fieldName)) {
       return null;
@@ -339,12 +335,11 @@ export function ComprehensiveRiskCalculatorModal({
           <TooltipTrigger asChild>
             <span className="inline-flex items-center gap-1 text-xs text-blue-600 ml-1">
               <UserCheck size={12} />
-              <Lock size={10} />
             </span>
           </TooltipTrigger>
           <TooltipContent side="top" className="max-w-xs">
             <p className="text-sm">
-              This field was filled in by your healthcare provider and cannot be modified.
+              This value was set by your healthcare provider. You can change it to explore different scenarios, but your changes won't be saved.
             </p>
           </TooltipContent>
         </Tooltip>
@@ -564,7 +559,7 @@ export function ComprehensiveRiskCalculatorModal({
                   <div className="flex items-center gap-2 text-blue-700">
                     <UserCheck size={18} />
                     <span className="text-sm font-medium">
-                      Some fields below have been filled in by your healthcare provider and cannot be modified.
+                      Some values below were set by your healthcare provider. Feel free to adjust them to explore different scenarios - your changes won't be saved.
                     </span>
                   </div>
                 </div>
@@ -580,8 +575,6 @@ export function ComprehensiveRiskCalculatorModal({
                   value={assessmentData.age}
                   onChange={(e) => setAssessmentData({...assessmentData, age: parseInt(e.target.value) || 65})}
                   placeholder="65"
-                  disabled={isFieldReadOnly('age')}
-                  className={isFieldReadOnly('age') ? 'bg-gray-100 cursor-not-allowed' : ''}
                 />
               </div>
               <div>
@@ -592,9 +585,8 @@ export function ComprehensiveRiskCalculatorModal({
                 <Select
                   value={assessmentData.sex}
                   onValueChange={(value) => setAssessmentData({...assessmentData, sex: value})}
-                  disabled={isFieldReadOnly('sex')}
                 >
-                  <SelectTrigger className={isFieldReadOnly('sex') ? 'bg-gray-100 cursor-not-allowed' : ''}>
+                  <SelectTrigger>
                     <SelectValue placeholder="Female" />
                   </SelectTrigger>
                   <SelectContent>
@@ -615,8 +607,6 @@ export function ComprehensiveRiskCalculatorModal({
                   value={assessmentData.weight_kg || ''}
                   onChange={(e) => setAssessmentData({...assessmentData, weight_kg: e.target.value ? parseFloat(e.target.value) : null})}
                   placeholder="e.g. 70.5"
-                  disabled={isFieldReadOnly('weight_kg')}
-                  className={isFieldReadOnly('weight_kg') ? 'bg-gray-100 cursor-not-allowed' : ''}
                 />
                 <p className="text-xs text-gray-500 mt-1">Optional - enables personalized W/kg calculation</p>
               </div>
@@ -632,8 +622,6 @@ export function ComprehensiveRiskCalculatorModal({
                   value={assessmentData.height_cm || ''}
                   onChange={(e) => setAssessmentData({...assessmentData, height_cm: e.target.value ? parseFloat(e.target.value) : null})}
                   placeholder="e.g. 175.5"
-                  disabled={isFieldReadOnly('height_cm')}
-                  className={isFieldReadOnly('height_cm') ? 'bg-gray-100 cursor-not-allowed' : ''}
                 />
                 <p className="text-xs text-gray-500 mt-1">Optional - enables BMI-based safety adjustments</p>
               </div>
@@ -645,9 +633,8 @@ export function ComprehensiveRiskCalculatorModal({
                 <Select
                   value={assessmentData.level_of_care}
                   onValueChange={(value) => setAssessmentData({...assessmentData, level_of_care: value})}
-                  disabled={isFieldReadOnly('level_of_care')}
                 >
-                  <SelectTrigger className={isFieldReadOnly('level_of_care') ? 'bg-gray-100 cursor-not-allowed' : ''}>
+                  <SelectTrigger>
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
@@ -665,9 +652,8 @@ export function ComprehensiveRiskCalculatorModal({
                 <Select
                   value={assessmentData.mobility_status}
                   onValueChange={(value) => setAssessmentData({...assessmentData, mobility_status: value})}
-                  disabled={isFieldReadOnly('mobility_status')}
                 >
-                  <SelectTrigger className={isFieldReadOnly('mobility_status') ? 'bg-gray-100 cursor-not-allowed' : ''}>
+                  <SelectTrigger>
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
@@ -687,9 +673,8 @@ export function ComprehensiveRiskCalculatorModal({
                 <Select
                   value={assessmentData.cognitive_status}
                   onValueChange={(value) => setAssessmentData({...assessmentData, cognitive_status: value})}
-                  disabled={isFieldReadOnly('cognitive_status')}
                 >
-                  <SelectTrigger className={isFieldReadOnly('cognitive_status') ? 'bg-gray-100 cursor-not-allowed' : ''}>
+                  <SelectTrigger>
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
@@ -719,8 +704,7 @@ export function ComprehensiveRiskCalculatorModal({
                     value={assessmentData.admission_diagnosis}
                     onChange={(e) => setAssessmentData({...assessmentData, admission_diagnosis: e.target.value})}
                     placeholder="e.g. Acute myocardial infarction, Hip fracture, Pneumonia"
-                    className={`mt-1 ${isFieldReadOnly('admission_diagnosis') ? 'bg-gray-100 cursor-not-allowed' : ''}`}
-                    disabled={isFieldReadOnly('admission_diagnosis')}
+                    className="mt-1"
                   />
                 </div>
               </CardContent>
