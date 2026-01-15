@@ -1529,8 +1529,7 @@ export class DatabaseStorage implements IStorage {
       .innerJoin(users, eq(caregiverPatients.patientId, users.id))
       .where(and(
         eq(caregiverPatients.caregiverId, caregiverId),
-        eq(caregiverPatients.accessStatus, 'pending'),
-        eq(caregiverPatients.isActive, true)
+        eq(caregiverPatients.accessStatus, 'pending')
       ));
 
     return relations.map(r => ({
