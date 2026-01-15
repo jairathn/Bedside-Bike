@@ -377,7 +377,8 @@ export class DatabaseStorage implements IStorage {
     await db
       .update(providerPatients)
       .set({
-        isActive: false
+        isActive: false,
+        accessStatus: 'revoked'
       })
       .where(eq(providerPatients.id, relationshipId));
   }
