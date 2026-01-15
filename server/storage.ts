@@ -542,8 +542,8 @@ export class DatabaseStorage implements IStorage {
       .where(and(
         eq(providerPatients.providerId, providerId),
         eq(providerPatients.accessStatus, 'pending'),
-        eq(providerPatients.requestedBy, 'patient'),
-        eq(providerPatients.isActive, true)
+        eq(providerPatients.requestedBy, 'patient')
+        // Note: isActive is false for pending relationships until approved
       ));
 
     return relations.map(r => ({
@@ -567,6 +567,7 @@ export class DatabaseStorage implements IStorage {
       updateData.approvedAt = new Date();
       updateData.permissionGranted = true;
       updateData.grantedAt = new Date();
+      updateData.isActive = true;
     } else if (status === 'denied') {
       updateData.deniedAt = new Date();
       updateData.permissionGranted = false;
