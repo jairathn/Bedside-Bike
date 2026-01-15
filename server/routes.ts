@@ -2827,7 +2827,35 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Check if relationship already exists
       const existingRelation = await storage.getCaregiverPatientRelation(caregiver.id, patientId);
       if (existingRelation) {
-        return res.status(400).json({ error: "This caregiver already has a relationship with this patient" });
+        // If revoked/denied, reactivate as pending
+        if (existingRelation.accessStatus === 'revoked' || existingRelation.accessStatus === 'denied') {
+          await storage.updateCaregiverAccessStatus(existingRelation.id, 'pending' as any);
+
+          // Create notification for caregiver
+          const patient = await storage.getPatient(patientId);
+          await storage.createCaregiverNotification({
+            caregiverId: caregiver.id,
+            patientId,
+            notificationType: 'access_request',
+            title: 'Caregiver Invitation',
+            message: `${patient?.firstName} ${patient?.lastName} has invited you to be their caregiver. Please accept or decline the invitation.`,
+            metadata: JSON.stringify({ patientName: `${patient?.firstName} ${patient?.lastName}` })
+          });
+
+          return res.status(201).json({
+            message: "Caregiver invitation sent. They will be notified on their next login.",
+            caregiverId: caregiver.id,
+            relationshipId: existingRelation.id
+          });
+        }
+        // If pending, return error
+        if (existingRelation.accessStatus === 'pending') {
+          return res.status(400).json({ error: "A pending invitation already exists for this caregiver" });
+        }
+        // If approved, return error
+        if (existingRelation.accessStatus === 'approved') {
+          return res.status(400).json({ error: "This caregiver already has access to this patient" });
+        }
       }
 
       // Create pending relationship (caregiver needs to accept the invitation)

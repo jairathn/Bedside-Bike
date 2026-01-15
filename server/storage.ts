@@ -58,7 +58,7 @@ import {
   type InsertGoal
 } from "@shared/schema";
 import { db } from "./db";
-import { eq, desc, and, sql } from "drizzle-orm";
+import { eq, desc, and, sql, inArray } from "drizzle-orm";
 
 export interface IStorage {
   // User operations (authentication system)
@@ -1602,7 +1602,7 @@ export class DatabaseStorage implements IStorage {
 
   async updateCaregiverAccessStatus(
     relationId: number,
-    status: 'approved' | 'denied' | 'revoked'
+    status: 'approved' | 'denied' | 'revoked' | 'pending'
   ): Promise<CaregiverPatient | undefined> {
     const updateData: Partial<CaregiverPatient> = {
       accessStatus: status,
@@ -1612,6 +1612,11 @@ export class DatabaseStorage implements IStorage {
       updateData.approvedAt = new Date();
     } else if (status === 'revoked') {
       updateData.revokedAt = new Date();
+    } else if (status === 'pending') {
+      // Reset timestamps when reactivating
+      updateData.approvedAt = null;
+      updateData.revokedAt = null;
+      updateData.requestedAt = new Date();
     }
 
     const [updated] = await db
