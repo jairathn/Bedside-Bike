@@ -449,9 +449,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Patient Dashboard and Data Routes
+  // HIPAA: These routes require authentication and patient access authorization
 
   // Get patient dashboard data
-  app.get("/api/patients/:id/dashboard", async (req, res) => {
+  app.get("/api/patients/:id/dashboard", requireAuth, authorizePatientAccess, async (req, res) => {
     try {
       const patientId = parseInt(req.params.id);
 
@@ -503,7 +504,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Get patient usage data for charts
-  app.get("/api/patients/:id/usage-data", async (req, res) => {
+  app.get("/api/patients/:id/usage-data", requireAuth, authorizePatientAccess, async (req, res) => {
     try {
       const patientId = parseInt(req.params.id);
       const days = parseInt(req.query.days as string) || 7;
@@ -517,7 +518,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Push goals from risk assessment (Provider-only endpoint)
-  app.post("/api/patients/:id/goals/from-assessment", createLimiter, async (req, res) => {
+  app.post("/api/patients/:id/goals/from-assessment", requireAuth, requireProvider, authorizePatientAccess, createLimiter, async (req, res) => {
     try {
       const patientId = parseInt(req.params.id);
       const { mobilityRecommendation } = req.body;
@@ -652,19 +653,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.get("/api/patients/:id/goals", async (req, res) => {
+  app.get("/api/patients/:id/goals", requireAuth, authorizePatientAccess, async (req, res) => {
     try {
       const patientId = parseInt(req.params.id);
       const goals = await storage.getPatientGoals(patientId);
       res.json(goals);
     } catch (error) {
-      console.error("Error fetching patient goals:", error);
+      logger.error("Error fetching patient goals", { error: (error as Error).message });
       res.status(500).json({ error: "Failed to fetch goals" });
     }
   });
 
   // Provider saves goals to patient profile
-  app.post("/api/patients/:id/goals", createLimiter, async (req, res) => {
+  app.post("/api/patients/:id/goals", requireAuth, requireProvider, authorizePatientAccess, createLimiter, async (req, res) => {
     try {
       const patientId = parseInt(req.params.id);
       const { goals, providerId } = req.body;
@@ -703,7 +704,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.get("/api/patients/:id/sessions", async (req, res) => {
+  app.get("/api/patients/:id/sessions", requireAuth, authorizePatientAccess, async (req, res) => {
     try {
       const patientId = parseInt(req.params.id);
       const sessions = await storage.getSessionsByPatient(patientId);
@@ -880,19 +881,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Get patient's risk assessments
-  app.get("/api/patients/:id/risk-assessments", async (req, res) => {
+  app.get("/api/patients/:id/risk-assessments", requireAuth, authorizePatientAccess, async (req, res) => {
     try {
       const patientId = parseInt(req.params.id);
       const assessments = await storage.getRiskAssessmentsByPatient(patientId);
       res.json(assessments);
     } catch (error) {
-      console.error("Risk assessments fetch error:", error);
+      logger.error("Risk assessments fetch error", { error: (error as Error).message });
       res.status(500).json({ error: "Failed to fetch risk assessments" });
     }
   });
 
   // Get the latest risk assessment for a patient (for pre-filling provider forms)
-  app.get("/api/patients/:id/risk-assessment", async (req, res) => {
+  app.get("/api/patients/:id/risk-assessment", requireAuth, authorizePatientAccess, async (req, res) => {
     try {
       const patientId = parseInt(req.params.id);
       const assessment = await storage.getLatestRiskAssessment(patientId);
@@ -945,28 +946,29 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Patient Profile Routes
+  // HIPAA: Protected patient data endpoints
 
   // Get patient profile
-  app.get("/api/patients/:id/profile", async (req, res) => {
+  app.get("/api/patients/:id/profile", requireAuth, authorizePatientAccess, async (req, res) => {
     try {
       const patientId = parseInt(req.params.id);
       const profile = await storage.getPatientProfile(patientId);
       res.json(profile);
     } catch (error) {
-      console.error("Profile fetch error:", error);
+      logger.error("Profile fetch error", { error: (error as Error).message });
       res.status(500).json({ error: "Failed to fetch patient profile" });
     }
   });
 
   // Create/Update patient profile
-  app.post("/api/patients/:id/profile", async (req, res) => {
+  app.post("/api/patients/:id/profile", requireAuth, authorizePatientAccess, async (req, res) => {
     try {
       const patientId = parseInt(req.params.id);
       const profileData = req.body;
-      
+
       // Check if profile exists
       const existingProfile = await storage.getPatientProfile(patientId);
-      
+
       let profile;
       if (existingProfile) {
         profile = await storage.updatePatientProfile(patientId, profileData);
@@ -976,10 +978,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
           ...profileData
         });
       }
-      
+
       res.json(profile);
     } catch (error) {
-      console.error("Profile save error:", error);
+      logger.error("Profile save error", { error: (error as Error).message });
       res.status(500).json({ error: "Failed to save patient profile" });
     }
   });
