@@ -2284,11 +2284,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
         0;
       
       const calculatorData = {
-        // Basic demographics
+        // Basic demographics (fall back to user record if no profile)
         age: age,
-        sex: profile?.sex || null,
-        weight_kg: profile?.weightKg ? parseFloat(profile.weightKg.toString()) : null,
-        height_cm: profile?.heightCm ? parseFloat(profile.heightCm.toString()) : null,
+        sex: profile?.sex || patient.sex || null,
+        weight_kg: profile?.weightKg ? parseFloat(profile.weightKg.toString()) : (patient.weightKg || null),
+        height_cm: profile?.heightCm ? parseFloat(profile.heightCm.toString()) : (patient.heightCm || null),
         
         // Care settings
         level_of_care: profile?.levelOfCare || null,
