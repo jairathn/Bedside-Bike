@@ -36,10 +36,25 @@ export default function MobilitySummaryCard({
   const [copied, setCopied] = useState(false);
   const { toast } = useToast();
 
-  // Calculate hospital day
+  // Calculate hospital day (properly handling YYYY-MM-DD strings without timezone shift)
   const hospitalDay = useMemo(() => {
-    const admission = new Date(admissionDate);
-    const today = new Date();
+    // Parse admission date as local date to avoid UTC timezone shift
+    const admissionStr = typeof admissionDate === 'string' && admissionDate.match(/^\d{4}-\d{2}-\d{2}/)
+      ? admissionDate.slice(0, 10)
+      : admissionDate;
+    const [year, month, day] = admissionStr.split('-').map(Number);
+    const admission = new Date(year, month - 1, day); // Create as local date
+
+    // Get today in EST
+    const todayStr = new Intl.DateTimeFormat('en-CA', {
+      timeZone: 'America/New_York',
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit'
+    }).format(new Date());
+    const [tYear, tMonth, tDay] = todayStr.split('-').map(Number);
+    const today = new Date(tYear, tMonth - 1, tDay);
+
     return Math.floor((today.getTime() - admission.getTime()) / (1000 * 60 * 60 * 24)) + 1;
   }, [admissionDate]);
 
@@ -56,25 +71,40 @@ export default function MobilitySummaryCard({
       avgWatts: number;
     }> = {};
 
-    // Helper to format date in America/New_York timezone (YYYY-MM-DD format)
-    const toESTDateStr = (date: Date) => new Intl.DateTimeFormat('en-CA', {
+    // Helper to get today's date in America/New_York timezone (YYYY-MM-DD format)
+    const getTodayEST = () => new Intl.DateTimeFormat('en-CA', {
       timeZone: 'America/New_York',
       year: 'numeric',
       month: '2-digit',
       day: '2-digit'
-    }).format(date);
+    }).format(new Date());
 
-    // Initialize all dates from admission to today (using EST timezone)
-    const admission = new Date(admissionDate);
-    const today = new Date();
-    const todayStr = toESTDateStr(today);
+    // Helper to add days to a YYYY-MM-DD string
+    const addDays = (dateStr: string, days: number): string => {
+      const [year, month, day] = dateStr.split('-').map(Number);
+      const date = new Date(year, month - 1, day); // Local date, no UTC shift
+      date.setDate(date.getDate() + days);
+      return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+    };
 
-    // Start from admission date and go until today
-    for (let d = new Date(admission); toESTDateStr(d) <= todayStr; d.setDate(d.getDate() + 1)) {
-      const dateStr = toESTDateStr(d);
-      if (!byDate[dateStr]) {
-        byDate[dateStr] = {
-          date: dateStr,
+    // Get admission date as YYYY-MM-DD string (handle both string and Date inputs)
+    const admissionStr = typeof admissionDate === 'string' && admissionDate.match(/^\d{4}-\d{2}-\d{2}/)
+      ? admissionDate.slice(0, 10)  // Already YYYY-MM-DD format, use directly
+      : new Intl.DateTimeFormat('en-CA', {
+          timeZone: 'America/New_York',
+          year: 'numeric',
+          month: '2-digit',
+          day: '2-digit'
+        }).format(new Date(admissionDate));
+
+    const todayStr = getTodayEST();
+
+    // Initialize all dates from admission to today
+    let currentDate = admissionStr;
+    while (currentDate <= todayStr) {
+      if (!byDate[currentDate]) {
+        byDate[currentDate] = {
+          date: currentDate,
           totalMinutes: 0,
           sessions: [],
           rideMinutes: 0,
@@ -84,18 +114,13 @@ export default function MobilitySummaryCard({
           avgWatts: 0
         };
       }
+      currentDate = addDays(currentDate, 1);
     }
 
-    // Aggregate sessions - convert session dates to EST for consistent grouping
+    // Aggregate sessions - sessionDate is already YYYY-MM-DD, use directly
     sessions.forEach(session => {
-      let dateStr: string;
-      if (session.sessionDate) {
-        // If sessionDate is a full ISO string, parse and convert to EST
-        const sessionDateObj = new Date(session.sessionDate);
-        dateStr = toESTDateStr(sessionDateObj);
-      } else {
-        dateStr = toESTDateStr(new Date());
-      }
+      // sessionDate is stored as YYYY-MM-DD string, use it directly without conversion
+      const dateStr = session.sessionDate || todayStr;
 
       if (byDate[dateStr]) {
         byDate[dateStr].sessions.push(session);
@@ -181,9 +206,10 @@ export default function MobilitySummaryCard({
     };
   }, [dailyData, hospitalDay, goalMinutes]);
 
-  // Format date for display
+  // Format date for display (parse YYYY-MM-DD as local date to avoid timezone shift)
   const formatDate = (dateStr: string) => {
-    const date = new Date(dateStr);
+    const [year, month, day] = dateStr.split('-').map(Number);
+    const date = new Date(year, month - 1, day); // Local date, not UTC
     return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
   };
 
@@ -319,7 +345,7 @@ export default function MobilitySummaryCard({
           </div>
           <div className="flex items-center">
             <Calendar className="w-4 h-4 mr-1" />
-            Admitted {new Date(admissionDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+            Admitted {formatDate(typeof admissionDate === 'string' ? admissionDate.slice(0, 10) : admissionDate)}
           </div>
         </div>
       </CardHeader>
