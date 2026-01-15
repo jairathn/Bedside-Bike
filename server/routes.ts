@@ -340,7 +340,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         userAgent: req.get('user-agent') || 'unknown',
       });
 
-      // If caregiver, also fetch their patients
+      // If caregiver, also fetch their approved patients (not pending)
       if (user.userType === 'caregiver') {
         const caregiverPatientsData = await db
           .select()
@@ -352,13 +352,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
           .where(
             and(
               eq(caregiverPatients.caregiverId, userId),
-              eq(caregiverPatients.isActive, true)
+              eq(caregiverPatients.isActive, true),
+              eq(caregiverPatients.accessStatus, 'approved')
             )
           );
 
         return res.json({
           user,
-          caregiverPatients: caregiverPatientsData.map(r => r.users),
+          caregiverPatients: caregiverPatientsData.map(r => ({
+            ...r.users,
+            relationship: r.caregiver_patients
+          })),
         });
       }
 
@@ -2000,25 +2004,45 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ error: "Patient ID is required" });
       }
 
-      // Check for existing relationship
-      const existingRelationship = await db.select()
-        .from(providerPatients)
-        .where(
-          and(
-            eq(providerPatients.patientId, patientId),
-            eq(providerPatients.providerId, providerId),
-            eq(providerPatients.isActive, true)
-          )
-        )
-        .limit(1);
+      // Check for any existing relationship (including inactive ones)
+      const existingRelation = await storage.getProviderPatientRelation(providerId, patientId);
 
-      if (existingRelationship.length > 0) {
-        const existing = existingRelationship[0];
-        if (existing.accessStatus === 'pending') {
+      if (existingRelation) {
+        // If relationship was deactivated/revoked, reactivate it
+        if (!existingRelation.isActive || existingRelation.accessStatus === 'revoked') {
+          const reactivatedRelation = await storage.reactivateProviderPatientRelation(existingRelation.id, 'patient');
+
+          // Create notification for provider
+          const patient = await storage.getUser(patientId);
+          await storage.createProviderNotification({
+            providerId,
+            patientId,
+            notificationType: 'access_request',
+            title: 'Patient Access Invitation',
+            message: `${patient?.firstName} ${patient?.lastName} has invited you to view their mobility data.`,
+            metadata: JSON.stringify({ patientName: `${patient?.firstName} ${patient?.lastName}` })
+          });
+
+          logger.info("Patient re-sent provider invitation", {
+            patientId,
+            providerId,
+            relationId: reactivatedRelation?.id || existingRelation.id
+          });
+
+          return res.json(reactivatedRelation || existingRelation);
+        }
+
+        // If there's already an active pending request
+        if (existingRelation.accessStatus === 'pending') {
           return res.status(400).json({ error: "A pending invitation already exists for this provider" });
         }
-        if (existing.accessStatus === 'approved' && existing.permissionGranted) {
+        // If already approved and active
+        if (existingRelation.accessStatus === 'approved' && existingRelation.permissionGranted) {
           return res.status(400).json({ error: "Provider already has access to this patient" });
+        }
+        // If denied
+        if (existingRelation.accessStatus === 'denied') {
+          return res.status(400).json({ error: "Your previous invitation was declined by the provider." });
         }
       }
 
@@ -3323,20 +3347,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
         // First check if relationship was deactivated/revoked - allow re-requesting
         if (!existingRelation.isActive || existingRelation.accessStatus === 'revoked') {
           // Reactivate and set to pending for provider request
-          await db.update(providerPatients)
-            .set({
-              isActive: true,
-              accessStatus: 'pending',
-              requestedBy: 'provider',
-              requestedAt: new Date(),
-              permissionGranted: false,
-              grantedAt: null,
-              deniedAt: null
-            })
-            .where(eq(providerPatients.id, existingRelation.id));
+          const reactivatedRelation = await storage.reactivateProviderPatientRelation(existingRelation.id, 'provider');
           return res.status(201).json({
             message: "Access request sent successfully. The patient will be notified on their next login.",
-            relationId: existingRelation.id,
+            relationId: reactivatedRelation?.id || existingRelation.id,
             patientId: patient.id
           });
         }

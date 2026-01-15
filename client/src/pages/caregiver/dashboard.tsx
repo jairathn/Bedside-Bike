@@ -82,6 +82,10 @@ export default function CaregiverDashboard() {
           ? "You can now view this patient's progress."
           : "You have declined the invitation.",
       });
+      // Reload page to update caregiverPatients in auth context
+      if (variables.status === 'approved') {
+        window.location.reload();
+      }
     },
     onError: (error: any) => {
       toast({
@@ -264,6 +268,32 @@ export default function CaregiverDashboard() {
       </header>
 
       <main className="max-w-7xl mx-auto px-4 py-6">
+        {/* Empty State - No approved patients */}
+        {!selectedPatient && (
+          <Card className="mb-6">
+            <CardContent className="p-8 text-center">
+              <div className="w-20 h-20 bg-purple-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                <Heart className="text-purple-600" size={40} />
+              </div>
+              <h2 className="text-xl font-semibold text-gray-900 mb-2">No Patients Yet</h2>
+              <p className="text-gray-600 mb-4">
+                {pendingInvitations.length > 0
+                  ? "You have pending patient invitations waiting for your response."
+                  : "When patients invite you to view their progress, you'll see their invitations here."}
+              </p>
+              {pendingInvitations.length > 0 && (
+                <Button
+                  className="bg-purple-600 hover:bg-purple-700"
+                  onClick={() => setShowInvitationsModal(true)}
+                >
+                  <UserPlus size={18} className="mr-2" />
+                  View {pendingInvitations.length} Pending Invitation{pendingInvitations.length > 1 ? 's' : ''}
+                </Button>
+              )}
+            </CardContent>
+          </Card>
+        )}
+
         {selectedPatient && (
           <>
             {/* Patient Info Card */}

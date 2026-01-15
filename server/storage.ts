@@ -89,6 +89,7 @@ export interface IStorage {
   createProviderPatientRelationship(relation: InsertProviderPatient): Promise<ProviderPatient>;
   getProviderPatientRelationships(patientId: number): Promise<ProviderPatient[]>;
   deleteProviderPatientRelationship(relationshipId: number): Promise<void>;
+  reactivateProviderPatientRelation(relationId: number, requestedBy: 'patient' | 'provider'): Promise<ProviderPatient | undefined>;
   grantProviderAccess(patientId: number, providerId: number): Promise<ProviderPatient | undefined>;
   getPatientsByProvider(providerId: number): Promise<User[]>;
 
@@ -372,10 +373,27 @@ export class DatabaseStorage implements IStorage {
   async deleteProviderPatientRelationship(relationshipId: number): Promise<void> {
     await db
       .update(providerPatients)
-      .set({ 
+      .set({
         isActive: false
       })
       .where(eq(providerPatients.id, relationshipId));
+  }
+
+  async reactivateProviderPatientRelation(relationId: number, requestedBy: 'patient' | 'provider'): Promise<ProviderPatient | undefined> {
+    const [updatedRelation] = await db
+      .update(providerPatients)
+      .set({
+        isActive: true,
+        accessStatus: 'pending',
+        requestedBy,
+        requestedAt: new Date(),
+        permissionGranted: false,
+        grantedAt: null,
+        deniedAt: null
+      })
+      .where(eq(providerPatients.id, relationId))
+      .returning();
+    return updatedRelation;
   }
 
   async grantProviderAccess(patientId: number, providerId: number): Promise<ProviderPatient | undefined> {
