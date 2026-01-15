@@ -16,6 +16,7 @@ import {
   caregiverAchievements,
   dischargeChecklists,
   providerNotifications,
+  patientNotifications,
   type User,
   type InsertUser,
   type UpsertUser,
@@ -49,6 +50,8 @@ import {
   type InsertDischargeChecklist,
   type ProviderNotification,
   type InsertProviderNotification,
+  type PatientNotification,
+  type InsertPatientNotification,
   // Legacy compatibility
   type Patient,
   type InsertPatient,
@@ -691,6 +694,62 @@ export class DatabaseStorage implements IStorage {
       .update(providerNotifications)
       .set({ isRead: true })
       .where(eq(providerNotifications.providerId, providerId));
+  }
+
+  // =========================================================================
+  // Patient Notification Operations
+  // =========================================================================
+
+  /**
+   * Create a patient notification
+   */
+  async createPatientNotification(notification: InsertPatientNotification): Promise<PatientNotification> {
+    const [newNotif] = await db.insert(patientNotifications).values(notification).returning();
+    return newNotif;
+  }
+
+  /**
+   * Get patient notifications
+   */
+  async getPatientNotifications(patientId: number, unreadOnly = false): Promise<PatientNotification[]> {
+    if (unreadOnly) {
+      return await db
+        .select()
+        .from(patientNotifications)
+        .where(and(
+          eq(patientNotifications.patientId, patientId),
+          eq(patientNotifications.isRead, false)
+        ))
+        .orderBy(desc(patientNotifications.createdAt));
+    }
+
+    return await db
+      .select()
+      .from(patientNotifications)
+      .where(eq(patientNotifications.patientId, patientId))
+      .orderBy(desc(patientNotifications.createdAt));
+  }
+
+  /**
+   * Mark patient notification as read
+   */
+  async markPatientNotificationRead(notificationId: number): Promise<PatientNotification | undefined> {
+    const [updated] = await db
+      .update(patientNotifications)
+      .set({ isRead: true })
+      .where(eq(patientNotifications.id, notificationId))
+      .returning();
+    return updated;
+  }
+
+  /**
+   * Mark all patient notifications as read
+   */
+  async markAllPatientNotificationsRead(patientId: number): Promise<void> {
+    await db
+      .update(patientNotifications)
+      .set({ isRead: true })
+      .where(eq(patientNotifications.patientId, patientId));
   }
 
   // Session operations

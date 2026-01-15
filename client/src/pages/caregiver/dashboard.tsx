@@ -49,6 +49,7 @@ export default function CaregiverDashboard() {
   const queryClient = useQueryClient();
   const [selectedPatientId, setSelectedPatientId] = useState<number | null>(null);
   const [showInvitationsModal, setShowInvitationsModal] = useState(false);
+  const [showNotificationsModal, setShowNotificationsModal] = useState(false);
   const [showRemoveConfirmModal, setShowRemoveConfirmModal] = useState(false);
   const [patientToRemove, setPatientToRemove] = useState<any>(null);
 
@@ -162,6 +163,18 @@ export default function CaregiverDashboard() {
 
   const unreadNotifications = notifications?.filter((n: any) => !n.isRead) || [];
 
+  // Mark all notifications as read mutation
+  const markAllNotificationsReadMutation = useMutation({
+    mutationFn: async () => {
+      return await apiRequest(`/api/caregivers/${user?.id}/notifications/read-all`, {
+        method: 'POST',
+      });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/caregivers", user?.id, "notifications"] });
+    },
+  });
+
   const handleLogout = () => {
     logout();
     setLocation("/caregiver/login");
@@ -223,7 +236,12 @@ export default function CaregiverDashboard() {
 
               {/* Notifications */}
               <div className="relative">
-                <Button variant="ghost" size="sm" className="text-white hover:bg-white/20">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="text-white hover:bg-white/20"
+                  onClick={() => setShowNotificationsModal(true)}
+                >
                   <Bell size={20} />
                   {unreadNotifications.length > 0 && (
                     <span className="absolute -top-1 -right-1 bg-yellow-400 text-gray-900 text-xs font-bold w-5 h-5 rounded-full flex items-center justify-center">
@@ -672,6 +690,72 @@ export default function CaregiverDashboard() {
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setShowInvitationsModal(false)}>
+              Close
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Caregiver Notifications Dialog */}
+      <Dialog open={showNotificationsModal} onOpenChange={setShowNotificationsModal}>
+        <DialogContent className="sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle className="flex items-center">
+              <Bell className="w-5 h-5 mr-2 text-purple-600" />
+              Notifications
+            </DialogTitle>
+            <DialogDescription>
+              Updates about your patients and access requests.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3 py-4 max-h-96 overflow-y-auto">
+            {notifications?.map((notification: any) => (
+              <div
+                key={notification.id}
+                className={`p-4 rounded-lg border ${
+                  notification.isRead ? 'bg-gray-50 border-gray-200' : 'bg-purple-50 border-purple-200'
+                }`}
+              >
+                <div className="flex items-start justify-between">
+                  <div className="flex-1">
+                    <p className={`font-medium ${notification.isRead ? 'text-gray-700' : 'text-purple-900'}`}>
+                      {notification.title}
+                    </p>
+                    <p className={`text-sm mt-1 ${notification.isRead ? 'text-gray-600' : 'text-purple-700'}`}>
+                      {notification.message}
+                    </p>
+                    <p className="text-xs text-gray-400 mt-2">
+                      {new Date(notification.createdAt).toLocaleDateString('en-US', {
+                        month: 'short',
+                        day: 'numeric',
+                        hour: 'numeric',
+                        minute: '2-digit'
+                      })}
+                    </p>
+                  </div>
+                  {!notification.isRead && (
+                    <span className="w-2 h-2 bg-purple-500 rounded-full flex-shrink-0 mt-2"></span>
+                  )}
+                </div>
+              </div>
+            ))}
+            {(!notifications || notifications.length === 0) && (
+              <p className="text-center text-gray-500 py-4">
+                No notifications yet
+              </p>
+            )}
+          </div>
+          <DialogFooter className="gap-2">
+            {unreadNotifications.length > 0 && (
+              <Button
+                variant="outline"
+                onClick={() => markAllNotificationsReadMutation.mutate()}
+                disabled={markAllNotificationsReadMutation.isPending}
+              >
+                Mark All Read
+              </Button>
+            )}
+            <Button variant="outline" onClick={() => setShowNotificationsModal(false)}>
               Close
             </Button>
           </DialogFooter>

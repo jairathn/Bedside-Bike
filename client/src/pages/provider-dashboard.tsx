@@ -290,6 +290,17 @@ export default function ProviderDashboard() {
     enabled: !!user && user.userType === 'provider',
   });
 
+  // Get provider notifications (access approved/denied by patients)
+  const { data: providerNotifications = [] } = useQuery({
+    queryKey: [`/api/providers/${user?.id}/notifications`],
+    enabled: !!user && user.userType === 'provider',
+  });
+
+  const unreadNotifications = providerNotifications.filter((n: any) => !n.isRead);
+
+  // Notifications modal state
+  const [notificationsOpen, setNotificationsOpen] = useState(false);
+
   // Show pending requests modal when there are pending requests on first load
   useEffect(() => {
     if (pendingPatientRequests.length > 0 && !pendingRequestsOpen) {
@@ -383,6 +394,18 @@ export default function ProviderDashboard() {
         description: error.message || "Failed to remove patients",
         variant: "destructive",
       });
+    },
+  });
+
+  // Mark all notifications as read mutation
+  const markAllNotificationsReadMutation = useMutation({
+    mutationFn: async () => {
+      return await apiRequest(`/api/providers/${user?.id}/notifications/read-all`, {
+        method: 'POST',
+      });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: [`/api/providers/${user?.id}/notifications`] });
     },
   });
 
@@ -659,6 +682,21 @@ export default function ProviderDashboard() {
                     Active Patients
                   </CardTitle>
                   <div className="flex items-center gap-2">
+                    {/* Notifications (access approved/denied) */}
+                    {unreadNotifications.length > 0 && (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="relative"
+                        onClick={() => setNotificationsOpen(true)}
+                      >
+                        <Bell className="w-4 h-4 text-blue-600" />
+                        <span className="absolute -top-1 -right-1 w-5 h-5 bg-blue-500 text-white text-xs rounded-full flex items-center justify-center">
+                          {unreadNotifications.length}
+                        </span>
+                      </Button>
+                    )}
+                    {/* Pending patient invitations */}
                     {pendingPatientRequests.length > 0 && (
                       <Button
                         variant="outline"
@@ -666,8 +704,8 @@ export default function ProviderDashboard() {
                         className="relative"
                         onClick={() => setPendingRequestsOpen(true)}
                       >
-                        <Bell className="w-4 h-4" />
-                        <span className="absolute -top-1 -right-1 w-5 h-5 bg-red-500 text-white text-xs rounded-full flex items-center justify-center">
+                        <UserPlus className="w-4 h-4 text-orange-600" />
+                        <span className="absolute -top-1 -right-1 w-5 h-5 bg-orange-500 text-white text-xs rounded-full flex items-center justify-center">
                           {pendingPatientRequests.length}
                         </span>
                       </Button>
@@ -1115,6 +1153,72 @@ export default function ProviderDashboard() {
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setPendingRequestsOpen(false)}>
+              Close
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Provider Notifications Dialog */}
+      <Dialog open={notificationsOpen} onOpenChange={setNotificationsOpen}>
+        <DialogContent className="sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle className="flex items-center">
+              <Bell className="w-5 h-5 mr-2 text-blue-600" />
+              Notifications
+            </DialogTitle>
+            <DialogDescription>
+              Updates about your patient access requests.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3 py-4 max-h-96 overflow-y-auto">
+            {providerNotifications.map((notification: any) => (
+              <div
+                key={notification.id}
+                className={`p-4 rounded-lg border ${
+                  notification.isRead ? 'bg-gray-50 border-gray-200' : 'bg-blue-50 border-blue-200'
+                }`}
+              >
+                <div className="flex items-start justify-between">
+                  <div className="flex-1">
+                    <p className={`font-medium ${notification.isRead ? 'text-gray-700' : 'text-blue-900'}`}>
+                      {notification.title}
+                    </p>
+                    <p className={`text-sm mt-1 ${notification.isRead ? 'text-gray-600' : 'text-blue-700'}`}>
+                      {notification.message}
+                    </p>
+                    <p className="text-xs text-gray-400 mt-2">
+                      {new Date(notification.createdAt).toLocaleDateString('en-US', {
+                        month: 'short',
+                        day: 'numeric',
+                        hour: 'numeric',
+                        minute: '2-digit'
+                      })}
+                    </p>
+                  </div>
+                  {!notification.isRead && (
+                    <span className="w-2 h-2 bg-blue-500 rounded-full flex-shrink-0 mt-2"></span>
+                  )}
+                </div>
+              </div>
+            ))}
+            {providerNotifications.length === 0 && (
+              <p className="text-center text-gray-500 py-4">
+                No notifications yet
+              </p>
+            )}
+          </div>
+          <DialogFooter className="gap-2">
+            {unreadNotifications.length > 0 && (
+              <Button
+                variant="outline"
+                onClick={() => markAllNotificationsReadMutation.mutate()}
+                disabled={markAllNotificationsReadMutation.isPending}
+              >
+                Mark All Read
+              </Button>
+            )}
+            <Button variant="outline" onClick={() => setNotificationsOpen(false)}>
               Close
             </Button>
           </DialogFooter>
