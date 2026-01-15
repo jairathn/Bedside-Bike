@@ -44,6 +44,7 @@ import {
   caregiverObservationSchema,
   caregiverAccessRequestSchema,
   caregiverInviteSchema,
+  providerAccessRequestSchema,
   riskAssessmentInputSchema,
   insertExerciseSessionSchema,
   insertPatientGoalSchema,
@@ -823,10 +824,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // HIPAA: Log only non-PHI metadata
       logger.debug('Risk assessment data parsed', { mobilityStatus: riskData.mobility_status });
       const patientId = parseInt(req.body.patientId) || 1; // Should come from authenticated session
-      
+
+      // Get provider ID from session if authenticated as a provider
+      const providerId = (req as any).session?.user?.userType === 'provider'
+        ? (req as any).session?.user?.id
+        : undefined;
+
       // Calculate risks using the risk calculator
       const riskResults = calculateRisks(riskData);
-      
+
       // Extract robust stay predictions from the comprehensive risk calculator (no literature-based fallbacks)
       const stayPredictions = (riskResults as any).stay_predictions;
       const losData = stayPredictions?.length_of_stay;
@@ -836,10 +842,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const mobilityBenefits = (riskResults as any).mobility_benefits;
 
       logger.debug('Risk assessment calculated', { assessmentComplete: true });
-      
+
       // Store the assessment - serialize all JSON objects to text for database storage
+      // Include providerId and all input data for persistence and patient view auto-population
       const assessment = await storage.createRiskAssessment({
         patientId,
+        providerId, // Track which provider created this assessment
         deconditioning: JSON.stringify(riskResults.deconditioning),
         vte: JSON.stringify(riskResults.vte),
         falls: JSON.stringify(riskResults.falls),
@@ -847,23 +855,26 @@ export async function registerRoutes(app: Express): Promise<Server> {
         mobilityRecommendation: JSON.stringify(riskResults.mobility_recommendation),
         losData: losData ? JSON.stringify(losData) : null,
         dischargeData: dischargeData ? JSON.stringify(dischargeData) : null,
-        readmissionData: readmissionData ? JSON.stringify(readmissionData) : null
+        readmissionData: readmissionData ? JSON.stringify(readmissionData) : null,
+        // Store all calculator input values for persistence and patient view
+        inputData: req.body
       });
-      
+
       res.json({
         ...riskResults,
         losData,
         dischargeData,
         readmissionData,
         mobility_benefits: mobilityBenefits, // Add mobility_benefits to API response
-        assessmentId: assessment.id
+        assessmentId: assessment.id,
+        providerId // Include providerId in response so client knows this was a provider-generated assessment
       });
     } catch (error) {
       logger.error("Risk assessment error", { error: (error as Error).message });
       if (error.name === 'ZodError') {
-        res.status(400).json({ 
-          error: "Invalid risk assessment data", 
-          details: (error as any).errors?.map((e: any) => `${e.path.join('.')}: ${e.message}`).join(', ') || (error as any).message 
+        res.status(400).json({
+          error: "Invalid risk assessment data",
+          details: (error as any).errors?.map((e: any) => `${e.path.join('.')}: ${e.message}`).join(', ') || (error as any).message
         });
       } else {
         res.status(400).json({ error: (error as any).message || "Invalid risk assessment data" });
@@ -912,6 +923,49 @@ export async function registerRoutes(app: Express): Promise<Server> {
       } else {
         res.status(400).json({ error: (error as any).message || "Invalid risk assessment data" });
       }
+    }
+  });
+
+  // Get latest provider-generated risk assessment input data for auto-population
+  // Returns the saved input data from the most recent provider-generated assessment
+  app.get("/api/patients/:patientId/provider-assessment-data", async (req, res) => {
+    try {
+      const patientId = parseInt(req.params.patientId);
+      if (isNaN(patientId)) {
+        return res.status(400).json({ error: "Invalid patient ID" });
+      }
+
+      // Get the latest risk assessment that has inputData (provider-generated)
+      const assessment = await storage.getLatestRiskAssessment(patientId);
+
+      if (!assessment || !(assessment as any).inputData) {
+        return res.json({
+          hasProviderData: false,
+          inputData: null,
+          providerId: null,
+          createdAt: null
+        });
+      }
+
+      // Parse the inputData if it's stored as a string
+      let inputData = (assessment as any).inputData;
+      if (typeof inputData === 'string') {
+        try {
+          inputData = JSON.parse(inputData);
+        } catch (e) {
+          inputData = null;
+        }
+      }
+
+      res.json({
+        hasProviderData: !!(assessment as any).providerId,
+        inputData,
+        providerId: (assessment as any).providerId,
+        createdAt: assessment.createdAt
+      });
+    } catch (error) {
+      logger.error("Error fetching provider assessment data", { error: (error as Error).message });
+      res.status(500).json({ error: "Failed to fetch provider assessment data" });
     }
   });
 
@@ -2730,13 +2784,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ error: "This caregiver already has a relationship with this patient" });
       }
 
-      // Create pre-approved relationship (since patient initiated)
+      // Create pending relationship (caregiver needs to accept the invitation)
       const relation = await storage.createCaregiverPatientRelation({
         caregiverId: caregiver.id,
         patientId,
         relationshipType: data.relationshipType,
-        accessStatus: 'approved',
-        approvedAt: new Date()
+        accessStatus: 'pending',
+        requestedBy: 'patient' // Patient initiated the invitation
       });
 
       // Create notification for caregiver
@@ -2744,14 +2798,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
       await storage.createCaregiverNotification({
         caregiverId: caregiver.id,
         patientId,
-        notificationType: 'access_approved',
-        title: 'You\'ve Been Added as a Caregiver',
-        message: `${patient?.firstName} ${patient?.lastName} has added you as a caregiver. You can now view their progress.`,
+        notificationType: 'access_request',
+        title: 'Caregiver Invitation',
+        message: `${patient?.firstName} ${patient?.lastName} has invited you to be their caregiver. Please accept or decline the invitation.`,
         metadata: JSON.stringify({ patientName: `${patient?.firstName} ${patient?.lastName}` })
       });
 
       res.status(201).json({
-        message: "Caregiver invited successfully",
+        message: "Caregiver invitation sent. They will be notified on their next login.",
         caregiverId: caregiver.id,
         relationshipId: relation.id
       });
@@ -2832,6 +2886,77 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       logger.error("Error fetching caregiver's patients", { error: (error as Error).message });
       res.status(500).json({ error: "Failed to fetch patients" });
+    }
+  });
+
+  // Get pending patient invitations for a caregiver (patients who invited this caregiver)
+  app.get("/api/caregivers/:caregiverId/patient-invitations", requireAuth, requireCaregiver, async (req, res) => {
+    try {
+      const caregiverId = parseInt(req.params.caregiverId);
+
+      // Ensure caregiver can only see their own invitations
+      if ((req.user as User).id !== caregiverId) {
+        return res.status(403).json({ error: "Access denied" });
+      }
+
+      const invitations = await storage.getPendingPatientInvitations(caregiverId);
+      res.json(invitations);
+    } catch (error) {
+      logger.error("Error fetching patient invitations", { error: (error as Error).message });
+      res.status(500).json({ error: "Failed to fetch patient invitations" });
+    }
+  });
+
+  // Caregiver accepts/denies patient invitation
+  app.patch("/api/caregivers/:caregiverId/patient-invitations/:relationId", requireAuth, requireCaregiver, async (req, res) => {
+    try {
+      const caregiverId = parseInt(req.params.caregiverId);
+      const relationId = parseInt(req.params.relationId);
+      const { status } = req.body;
+
+      // Ensure caregiver can only respond to their own invitations
+      if ((req.user as User).id !== caregiverId) {
+        return res.status(403).json({ error: "Access denied" });
+      }
+
+      if (!['approved', 'denied'].includes(status)) {
+        return res.status(400).json({ error: "Invalid status. Must be 'approved' or 'denied'" });
+      }
+
+      const updated = await storage.updateCaregiverAccessStatus(relationId, status);
+      if (!updated) {
+        return res.status(404).json({ error: "Invitation not found" });
+      }
+
+      // Create notification for patient
+      if (status === 'approved' || status === 'denied') {
+        const caregiver = await storage.getUser(caregiverId);
+        const notificationType = status === 'approved' ? 'access_approved' : 'access_denied';
+        const title = status === 'approved' ? 'Caregiver Accepted' : 'Caregiver Declined';
+        const message = status === 'approved'
+          ? `${caregiver?.firstName} ${caregiver?.lastName} has accepted your invitation and can now view your progress.`
+          : `${caregiver?.firstName} ${caregiver?.lastName} has declined your invitation.`;
+
+        await storage.createCaregiverNotification({
+          caregiverId: caregiverId,
+          patientId: updated.patientId,
+          notificationType,
+          title,
+          message,
+          metadata: JSON.stringify({ caregiverName: `${caregiver?.firstName} ${caregiver?.lastName}` })
+        });
+      }
+
+      logger.info("Caregiver responded to patient invitation", {
+        caregiverId,
+        relationId,
+        status
+      });
+
+      res.json(updated);
+    } catch (error) {
+      logger.error("Error responding to patient invitation", { error: (error as Error).message });
+      res.status(500).json({ error: "Failed to respond to invitation" });
     }
   });
 
@@ -3124,6 +3249,278 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       logger.error("Error sending caregiver nudge", { error: (error as Error).message });
       res.status(500).json({ error: "Failed to send nudge" });
+    }
+  });
+
+  // ============================================================================
+  // PROVIDER ACCESS REQUEST SYSTEM ROUTES
+  // ============================================================================
+
+  // Provider requests access to a patient (provider initiates)
+  app.post("/api/provider-access-requests", requireAuth, requireProvider, async (req, res) => {
+    try {
+      const providerId = (req.user as User).id;
+      const parsed = providerAccessRequestSchema.safeParse(req.body);
+
+      if (!parsed.success) {
+        return res.status(400).json({ error: parsed.error.errors[0].message });
+      }
+
+      const { patientFirstName, patientLastName, patientDateOfBirth } = parsed.data;
+
+      // Find the patient by name and DOB
+      const patient = await storage.getPatientByName(patientFirstName, patientLastName, patientDateOfBirth);
+      if (!patient) {
+        return res.status(404).json({ error: "Patient not found. Please verify the patient's name and date of birth." });
+      }
+
+      // Check if relationship already exists
+      const existingRelation = await storage.getProviderPatientRelation(providerId, patient.id);
+      if (existingRelation) {
+        if (existingRelation.accessStatus === 'pending') {
+          return res.status(400).json({ error: "You already have a pending access request for this patient." });
+        }
+        if (existingRelation.accessStatus === 'approved' && existingRelation.permissionGranted) {
+          return res.status(400).json({ error: "You already have access to this patient." });
+        }
+        if (existingRelation.accessStatus === 'denied') {
+          return res.status(400).json({ error: "Your previous access request was denied. Please contact the patient directly." });
+        }
+      }
+
+      // Create the access request
+      const relation = await storage.createProviderAccessRequest(providerId, patient.id);
+
+      logger.info("Provider requested patient access", {
+        providerId,
+        patientId: patient.id,
+        relationId: relation.id
+      });
+
+      res.status(201).json({
+        message: "Access request sent successfully. The patient will be notified on their next login.",
+        relationId: relation.id,
+        patientId: patient.id
+      });
+    } catch (error) {
+      logger.error("Error creating provider access request", { error: (error as Error).message });
+      res.status(500).json({ error: "Failed to create access request" });
+    }
+  });
+
+  // Get pending provider requests for a patient (requests FROM providers TO patient)
+  app.get("/api/patients/:patientId/provider-requests", requireAuth, authorizePatientAccess, async (req, res) => {
+    try {
+      const patientId = parseInt(req.params.patientId);
+      const requests = await storage.getPendingProviderRequests(patientId);
+      res.json(requests);
+    } catch (error) {
+      logger.error("Error fetching provider requests", { error: (error as Error).message });
+      res.status(500).json({ error: "Failed to fetch provider requests" });
+    }
+  });
+
+  // Get pending patient requests for a provider (requests FROM patients TO provider)
+  app.get("/api/providers/:providerId/patient-requests", requireAuth, requireProvider, async (req, res) => {
+    try {
+      const providerId = parseInt(req.params.providerId);
+
+      // Ensure provider can only see their own requests
+      if ((req.user as User).id !== providerId) {
+        return res.status(403).json({ error: "Access denied" });
+      }
+
+      const requests = await storage.getPendingPatientRequests(providerId);
+      res.json(requests);
+    } catch (error) {
+      logger.error("Error fetching patient requests", { error: (error as Error).message });
+      res.status(500).json({ error: "Failed to fetch patient requests" });
+    }
+  });
+
+  // Approve/Deny/Revoke provider access (patient action)
+  app.patch("/api/provider-relations/:relationId/status", requireAuth, async (req, res) => {
+    try {
+      const relationId = parseInt(req.params.relationId);
+      const { status } = req.body;
+
+      if (!['approved', 'denied', 'revoked'].includes(status)) {
+        return res.status(400).json({ error: "Invalid status. Must be 'approved', 'denied', or 'revoked'" });
+      }
+
+      const updated = await storage.updateProviderAccessStatus(relationId, status);
+      if (!updated) {
+        return res.status(404).json({ error: "Resource not found" });
+      }
+
+      // Create notification for provider
+      const notificationType = status === 'approved' ? 'access_approved' : status === 'denied' ? 'access_denied' : 'access_revoked';
+      const title = status === 'approved' ? 'Access Approved' : status === 'denied' ? 'Access Request Denied' : 'Access Revoked';
+      const message = status === 'approved'
+        ? 'Your request to view patient data has been approved.'
+        : status === 'denied'
+        ? 'Your access request was not approved at this time.'
+        : 'Your access to this patient has been revoked.';
+
+      await storage.createProviderNotification({
+        providerId: updated.providerId,
+        patientId: updated.patientId,
+        notificationType,
+        title,
+        message,
+        metadata: '{}'
+      });
+
+      logger.info("Provider access status updated", {
+        relationId,
+        status,
+        providerId: updated.providerId,
+        patientId: updated.patientId
+      });
+
+      res.json(updated);
+    } catch (error) {
+      logger.error("Error updating provider access status", { error: (error as Error).message });
+      res.status(500).json({ error: "Failed to update provider access status" });
+    }
+  });
+
+  // Patient invites a provider (creates pending request for provider to accept)
+  app.post("/api/patients/:patientId/invite-provider", requireAuth, authorizePatientAccess, async (req, res) => {
+    try {
+      const patientId = parseInt(req.params.patientId);
+      const { providerEmail } = req.body;
+
+      if (!providerEmail) {
+        return res.status(400).json({ error: "Provider email is required" });
+      }
+
+      // Find the provider by email
+      const provider = await storage.getUserByEmail(providerEmail);
+      if (!provider || provider.userType !== 'provider') {
+        return res.status(404).json({ error: "Provider not found. Please verify the email address." });
+      }
+
+      // Check if relationship already exists
+      const existingRelation = await storage.getProviderPatientRelation(provider.id, patientId);
+      if (existingRelation) {
+        if (existingRelation.accessStatus === 'pending') {
+          return res.status(400).json({ error: "A pending request already exists with this provider." });
+        }
+        if (existingRelation.accessStatus === 'approved' && existingRelation.permissionGranted) {
+          return res.status(400).json({ error: "This provider already has access to your data." });
+        }
+      }
+
+      // Create the access request (patient inviting provider)
+      const relation = await storage.createPatientAccessRequest(provider.id, patientId);
+
+      // Create notification for provider
+      const patient = await storage.getUser(patientId);
+      await storage.createProviderNotification({
+        providerId: provider.id,
+        patientId: patientId,
+        notificationType: 'access_request',
+        title: 'Patient Access Request',
+        message: `${patient?.firstName} ${patient?.lastName} has invited you to view their mobility data.`,
+        metadata: JSON.stringify({ patientName: `${patient?.firstName} ${patient?.lastName}` })
+      });
+
+      logger.info("Patient invited provider", {
+        patientId,
+        providerId: provider.id,
+        relationId: relation.id
+      });
+
+      res.status(201).json({
+        message: "Invitation sent successfully. The provider will be notified on their next login.",
+        relationId: relation.id,
+        providerId: provider.id
+      });
+    } catch (error) {
+      logger.error("Error inviting provider", { error: (error as Error).message });
+      res.status(500).json({ error: "Failed to invite provider" });
+    }
+  });
+
+  // Provider accepts/denies patient invitation
+  app.patch("/api/providers/:providerId/patient-requests/:relationId", requireAuth, requireProvider, async (req, res) => {
+    try {
+      const providerId = parseInt(req.params.providerId);
+      const relationId = parseInt(req.params.relationId);
+      const { status } = req.body;
+
+      // Ensure provider can only respond to their own requests
+      if ((req.user as User).id !== providerId) {
+        return res.status(403).json({ error: "Access denied" });
+      }
+
+      if (!['approved', 'denied'].includes(status)) {
+        return res.status(400).json({ error: "Invalid status. Must be 'approved' or 'denied'" });
+      }
+
+      const updated = await storage.updateProviderAccessStatus(relationId, status);
+      if (!updated) {
+        return res.status(404).json({ error: "Resource not found" });
+      }
+
+      logger.info("Provider responded to patient invitation", {
+        providerId,
+        relationId,
+        status
+      });
+
+      res.json(updated);
+    } catch (error) {
+      logger.error("Error responding to patient invitation", { error: (error as Error).message });
+      res.status(500).json({ error: "Failed to respond to invitation" });
+    }
+  });
+
+  // Provider Notifications
+  app.get("/api/providers/:providerId/notifications", requireAuth, requireProvider, async (req, res) => {
+    try {
+      const providerId = parseInt(req.params.providerId);
+
+      // Ensure provider can only see their own notifications
+      if ((req.user as User).id !== providerId) {
+        return res.status(403).json({ error: "Access denied" });
+      }
+
+      const unreadOnly = req.query.unreadOnly === 'true';
+      const notifications = await storage.getProviderNotifications(providerId, unreadOnly);
+      res.json(notifications);
+    } catch (error) {
+      logger.error("Error fetching provider notifications", { error: (error as Error).message });
+      res.status(500).json({ error: "Failed to fetch notifications" });
+    }
+  });
+
+  app.patch("/api/provider-notifications/:notificationId/read", requireAuth, async (req, res) => {
+    try {
+      const notificationId = parseInt(req.params.notificationId);
+      const updated = await storage.markProviderNotificationRead(notificationId);
+      res.json(updated);
+    } catch (error) {
+      logger.error("Error marking provider notification read", { error: (error as Error).message });
+      res.status(500).json({ error: "Failed to mark notification read" });
+    }
+  });
+
+  app.post("/api/providers/:providerId/notifications/read-all", requireAuth, requireProvider, async (req, res) => {
+    try {
+      const providerId = parseInt(req.params.providerId);
+
+      // Ensure provider can only mark their own notifications as read
+      if ((req.user as User).id !== providerId) {
+        return res.status(403).json({ error: "Access denied" });
+      }
+
+      await storage.markAllProviderNotificationsRead(providerId);
+      res.json({ success: true });
+    } catch (error) {
+      logger.error("Error marking all provider notifications read", { error: (error as Error).message });
+      res.status(500).json({ error: "Failed to mark notifications read" });
     }
   });
 

@@ -33,6 +33,7 @@ export const users = pgTable("users", {
   dateOfBirth: varchar("date_of_birth", { length: 10 }), // ISO date string
   admissionDate: varchar("admission_date", { length: 10 }), // ISO date string
   // Patient physical measurements (required for mobility calculations)
+  sex: varchar("sex", { length: 10 }), // 'male', 'female', or 'other'
   heightCm: doublePrecision("height_cm"),
   weightKg: doublePrecision("weight_kg"),
   heightUnit: varchar("height_unit", { length: 10 }).default('imperial'), // 'imperial' or 'metric'
@@ -83,6 +84,12 @@ export const providerPatients = pgTable("provider_patients", {
   permissionGranted: boolean("permission_granted").default(false),
   grantedAt: timestamp("granted_at", { withTimezone: true }),
   isActive: boolean("is_active").default(true),
+  // Access request workflow fields (similar to caregiverPatients)
+  accessStatus: varchar("access_status", { length: 20 }).default('pending'), // 'pending', 'approved', 'denied', 'revoked'
+  requestedBy: varchar("requested_by", { length: 20 }).default('patient'), // 'patient' or 'provider' - who initiated the request
+  requestedAt: timestamp("requested_at", { withTimezone: true }).default(sql`NOW()`),
+  approvedAt: timestamp("approved_at", { withTimezone: true }),
+  deniedAt: timestamp("denied_at", { withTimezone: true }),
   createdAt: timestamp("created_at", { withTimezone: true }).default(sql`NOW()`),
 });
 
@@ -90,6 +97,7 @@ export const providerPatients = pgTable("provider_patients", {
 export const riskAssessments = pgTable("risk_assessments", {
   id: serial("id").primaryKey(),
   patientId: integer("patient_id").notNull().references(() => users.id),
+  providerId: integer("provider_id").references(() => users.id), // Provider who created this assessment
   deconditioning: jsonb("deconditioning").notNull(),
   vte: jsonb("vte").notNull(),
   falls: jsonb("falls").notNull(),
@@ -98,6 +106,8 @@ export const riskAssessments = pgTable("risk_assessments", {
   losData: jsonb("los_data"),
   dischargeData: jsonb("discharge_data"),
   readmissionData: jsonb("readmission_data"),
+  // Store all input values provider entered in the calculator for persistence
+  inputData: jsonb("input_data"), // JSON with all calculator input values
   createdAt: timestamp("created_at", { withTimezone: true }).default(sql`NOW()`),
 });
 
@@ -581,6 +591,7 @@ export const caregiverPatients = pgTable("caregiver_patients", {
   patientId: integer("patient_id").notNull().references(() => users.id),
   relationshipType: varchar("relationship_type", { length: 50 }).notNull(), // 'spouse', 'child', 'parent', 'sibling', 'friend', 'other_family', 'professional_caregiver'
   accessStatus: varchar("access_status", { length: 20 }).default('pending'), // 'pending', 'approved', 'denied', 'revoked'
+  requestedBy: varchar("requested_by", { length: 20 }).default('caregiver'), // 'caregiver' or 'patient' - who initiated the request
   requestedAt: timestamp("requested_at", { withTimezone: true }).default(sql`NOW()`),
   approvedAt: timestamp("approved_at", { withTimezone: true }),
   revokedAt: timestamp("revoked_at", { withTimezone: true }),
@@ -665,6 +676,23 @@ export const caregiverAchievements = pgTable("caregiver_achievements", {
 });
 
 // ============================================================================
+// PROVIDER NOTIFICATION SYSTEM
+// ============================================================================
+
+// Provider notifications - in-app notifications for providers (e.g., patient access requests)
+export const providerNotifications = pgTable("provider_notifications", {
+  id: serial("id").primaryKey(),
+  providerId: integer("provider_id").notNull().references(() => users.id),
+  patientId: integer("patient_id").notNull().references(() => users.id),
+  notificationType: varchar("notification_type", { length: 50 }).notNull(), // 'access_request', 'access_approved', 'access_denied', 'access_revoked'
+  title: varchar("title", { length: 255 }).notNull(),
+  message: text("message").notNull(),
+  metadata: jsonb("metadata").default({}),
+  isRead: boolean("is_read").default(false),
+  createdAt: timestamp("created_at", { withTimezone: true }).default(sql`NOW()`),
+});
+
+// ============================================================================
 // Validation schemas
 // ============================================================================
 
@@ -681,7 +709,9 @@ export const patientRegistrationSchema = loginSchema.extend({
   userType: z.literal("patient"),
   tosAccepted: z.boolean().refine(val => val === true, "You must accept the Terms of Service"),
   tosVersion: z.string().optional(),
-  // Physical measurements required for mobility calculations
+  // Patient physical measurements (required for new registrations)
+  sex: z.enum(["male", "female", "other"]),
+  // Support both imperial and metric input
   heightFeet: z.number().min(3).max(8).optional(),
   heightInches: z.number().min(0).max(11).optional(),
   heightCm: z.number().min(100).max(250).optional(),
@@ -739,6 +769,18 @@ export const caregiverInviteSchema = z.object({
   caregiverLastName: z.string().min(1, "Last name is required"),
   relationshipType: z.enum(["spouse", "partner", "child", "parent", "sibling", "friend", "other_family", "professional_caregiver"]),
   phoneNumber: z.string().optional(),
+});
+
+// Provider access request schema - for providers requesting access to patients
+export const providerAccessRequestSchema = z.object({
+  patientFirstName: z.string().min(1, "Patient first name is required"),
+  patientLastName: z.string().min(1, "Patient last name is required"),
+  patientDateOfBirth: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Date must be in YYYY-MM-DD format"),
+});
+
+// Provider invite schema - for patients inviting providers
+export const providerInviteSchema = z.object({
+  providerEmail: z.string().email("Please enter a valid email address"),
 });
 
 export const riskAssessmentInputSchema = z.object({
@@ -955,3 +997,15 @@ export type CaregiverRegistration = z.infer<typeof caregiverRegistrationSchema>;
 export type CaregiverObservationInput = z.infer<typeof caregiverObservationSchema>;
 export type CaregiverAccessRequest = z.infer<typeof caregiverAccessRequestSchema>;
 export type CaregiverInvite = z.infer<typeof caregiverInviteSchema>;
+
+// ============================================================================
+// PROVIDER NOTIFICATION SYSTEM - Insert Schemas and Types
+// ============================================================================
+
+export const insertProviderNotificationSchema = createInsertSchema(providerNotifications);
+
+export type ProviderNotification = typeof providerNotifications.$inferSelect;
+export type InsertProviderNotification = typeof providerNotifications.$inferInsert;
+
+export type ProviderAccessRequest = z.infer<typeof providerAccessRequestSchema>;
+export type ProviderInvite = z.infer<typeof providerInviteSchema>;

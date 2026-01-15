@@ -27,6 +27,10 @@ export const users = sqliteTable("users", {
   userType: text("user_type").notNull(), // 'patient' or 'provider'
   dateOfBirth: text("date_of_birth"), // ISO date string
   admissionDate: text("admission_date"), // ISO date string
+  // Patient physical measurements (required for mobility calculations)
+  sex: text("sex"), // 'male', 'female', or 'other'
+  heightCm: real("height_cm"),
+  weightKg: real("weight_kg"),
   // Provider specific fields
   providerRole: text("provider_role"), // 'physician', 'nurse', etc.
   credentials: text("credentials"),
@@ -70,6 +74,12 @@ export const providerPatients = sqliteTable("provider_patients", {
   permissionGranted: integer("permission_granted", { mode: 'boolean' }).default(false),
   grantedAt: integer("granted_at", { mode: 'timestamp' }),
   isActive: integer("is_active", { mode: 'boolean' }).default(true),
+  // Access request workflow fields (similar to caregiverPatients)
+  accessStatus: text("access_status").default('pending'), // 'pending', 'approved', 'denied', 'revoked'
+  requestedBy: text("requested_by").default('patient'), // 'patient' or 'provider' - who initiated the request
+  requestedAt: integer("requested_at", { mode: 'timestamp' }).default(sql`(unixepoch())`),
+  approvedAt: integer("approved_at", { mode: 'timestamp' }),
+  deniedAt: integer("denied_at", { mode: 'timestamp' }),
   createdAt: integer("created_at", { mode: 'timestamp' }).default(sql`(unixepoch())`),
 });
 
@@ -77,6 +87,7 @@ export const providerPatients = sqliteTable("provider_patients", {
 export const riskAssessments = sqliteTable("risk_assessments", {
   id: integer("id").primaryKey({ autoIncrement: true }),
   patientId: integer("patient_id").notNull().references(() => users.id),
+  providerId: integer("provider_id").references(() => users.id), // Provider who created this assessment
   deconditioning: text("deconditioning").notNull(), // JSON as text
   vte: text("vte").notNull(),
   falls: text("falls").notNull(),
@@ -85,6 +96,8 @@ export const riskAssessments = sqliteTable("risk_assessments", {
   losData: text("los_data"),
   dischargeData: text("discharge_data"),
   readmissionData: text("readmission_data"),
+  // Store all input values provider entered in the calculator for persistence
+  inputData: text("input_data"), // JSON with all calculator input values
   createdAt: integer("created_at", { mode: 'timestamp' }).default(sql`(unixepoch())`),
 });
 
@@ -705,6 +718,7 @@ export const caregiverPatients = sqliteTable("caregiver_patients", {
   patientId: integer("patient_id").notNull().references(() => users.id),
   relationshipType: text("relationship_type").notNull(), // 'spouse', 'child', 'parent', 'sibling', 'friend', 'other_family', 'professional_caregiver'
   accessStatus: text("access_status").default('pending'), // 'pending', 'approved', 'denied', 'revoked'
+  requestedBy: text("requested_by").default('caregiver'), // 'caregiver' or 'patient' - who initiated the request
   requestedAt: integer("requested_at", { mode: 'timestamp' }).default(sql`(unixepoch())`),
   approvedAt: integer("approved_at", { mode: 'timestamp' }),
   revokedAt: integer("revoked_at", { mode: 'timestamp' }),
@@ -788,6 +802,23 @@ export const caregiverAchievements = sqliteTable("caregiver_achievements", {
   createdAt: integer("created_at", { mode: 'timestamp' }).default(sql`(unixepoch())`),
 });
 
+// ============================================================================
+// PROVIDER NOTIFICATION SYSTEM
+// ============================================================================
+
+// Provider notifications - in-app notifications for providers (e.g., patient access requests)
+export const providerNotifications = sqliteTable("provider_notifications", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  providerId: integer("provider_id").notNull().references(() => users.id),
+  patientId: integer("patient_id").notNull().references(() => users.id),
+  notificationType: text("notification_type").notNull(), // 'access_request', 'access_approved', 'access_denied', 'access_revoked'
+  title: text("title").notNull(),
+  message: text("message").notNull(),
+  metadata: text("metadata").default('{}'),
+  isRead: integer("is_read", { mode: 'boolean' }).default(false),
+  createdAt: integer("created_at", { mode: 'timestamp' }).default(sql`(unixepoch())`),
+});
+
 // Validation schemas (reuse from main schema)
 export const loginSchema = z.object({
   email: z.string().email("Please enter a valid email address"),
@@ -800,6 +831,18 @@ export const loginSchema = z.object({
 export const patientRegistrationSchema = loginSchema.extend({
   dateOfBirth: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Date must be in YYYY-MM-DD format"),
   userType: z.literal("patient"),
+  tosAccepted: z.boolean().refine(val => val === true, "You must accept the Terms of Service"),
+  tosVersion: z.string().optional(),
+  // Patient physical measurements (required for new registrations)
+  sex: z.enum(["male", "female", "other"]),
+  // Support both imperial and metric input
+  heightFeet: z.number().min(3).max(8).optional(),
+  heightInches: z.number().min(0).max(11).optional(),
+  heightCm: z.number().min(100).max(250).optional(),
+  weightLbs: z.number().min(50).max(500).optional(),
+  weightKg: z.number().min(20).max(250).optional(),
+  heightUnit: z.enum(["imperial", "metric"]).optional(),
+  weightUnit: z.enum(["imperial", "metric"]).optional(),
 });
 
 export const providerRegistrationSchema = loginSchema.extend({
@@ -848,6 +891,18 @@ export const caregiverInviteSchema = z.object({
   caregiverLastName: z.string().min(1, "Last name is required"),
   relationshipType: z.enum(["spouse", "partner", "child", "parent", "sibling", "friend", "other_family", "professional_caregiver"]),
   phoneNumber: z.string().optional(),
+});
+
+// Provider access request schema - for providers requesting access to patients
+export const providerAccessRequestSchema = z.object({
+  patientFirstName: z.string().min(1, "Patient first name is required"),
+  patientLastName: z.string().min(1, "Patient last name is required"),
+  patientDateOfBirth: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Date must be in YYYY-MM-DD format"),
+});
+
+// Provider invite schema - for patients inviting providers
+export const providerInviteSchema = z.object({
+  providerEmail: z.string().email("Please enter a valid email address"),
 });
 
 export const riskAssessmentInputSchema = z.object({
@@ -1068,3 +1123,15 @@ export type CaregiverRegistration = z.infer<typeof caregiverRegistrationSchema>;
 export type CaregiverObservationInput = z.infer<typeof caregiverObservationSchema>;
 export type CaregiverAccessRequest = z.infer<typeof caregiverAccessRequestSchema>;
 export type CaregiverInvite = z.infer<typeof caregiverInviteSchema>;
+
+// ============================================================================
+// PROVIDER NOTIFICATION SYSTEM - Insert Schemas and Types
+// ============================================================================
+
+export const insertProviderNotificationSchema = createInsertSchema(providerNotifications);
+
+export type ProviderNotification = typeof providerNotifications.$inferSelect;
+export type InsertProviderNotification = typeof providerNotifications.$inferInsert;
+
+export type ProviderAccessRequest = z.infer<typeof providerAccessRequestSchema>;
+export type ProviderInvite = z.infer<typeof providerInviteSchema>;

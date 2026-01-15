@@ -15,6 +15,7 @@ import {
   caregiverNotifications,
   caregiverAchievements,
   dischargeChecklists,
+  providerNotifications,
   type User,
   type InsertUser,
   type UpsertUser,
@@ -46,6 +47,8 @@ import {
   type InsertCaregiverAchievement,
   type DischargeChecklist,
   type InsertDischargeChecklist,
+  type ProviderNotification,
+  type InsertProviderNotification,
   // Legacy compatibility
   type Patient,
   type InsertPatient,
@@ -455,6 +458,186 @@ export class DatabaseStorage implements IStorage {
       )
       .limit(1);
     return !!relation;
+  }
+
+  // ============================================================================
+  // PROVIDER ACCESS REQUEST OPERATIONS
+  // ============================================================================
+
+  /**
+   * Create a provider access request (provider requesting access to patient)
+   */
+  async createProviderAccessRequest(providerId: number, patientId: number): Promise<ProviderPatient> {
+    const [relation] = await db.insert(providerPatients).values({
+      providerId,
+      patientId,
+      permissionGranted: false,
+      isActive: true,
+      accessStatus: 'pending',
+      requestedBy: 'provider',
+      requestedAt: new Date(),
+    }).returning();
+    return relation;
+  }
+
+  /**
+   * Create a patient access request (patient inviting a provider)
+   */
+  async createPatientAccessRequest(providerId: number, patientId: number): Promise<ProviderPatient> {
+    const [relation] = await db.insert(providerPatients).values({
+      providerId,
+      patientId,
+      permissionGranted: false,
+      isActive: true,
+      accessStatus: 'pending',
+      requestedBy: 'patient',
+      requestedAt: new Date(),
+    }).returning();
+    return relation;
+  }
+
+  /**
+   * Get existing provider-patient relationship
+   */
+  async getProviderPatientRelation(providerId: number, patientId: number): Promise<ProviderPatient | undefined> {
+    const [relation] = await db
+      .select()
+      .from(providerPatients)
+      .where(and(
+        eq(providerPatients.providerId, providerId),
+        eq(providerPatients.patientId, patientId)
+      ));
+    return relation;
+  }
+
+  /**
+   * Get pending provider access requests for a patient (requests FROM providers)
+   */
+  async getPendingProviderRequests(patientId: number): Promise<Array<User & { relationship: ProviderPatient }>> {
+    const relations = await db
+      .select()
+      .from(providerPatients)
+      .innerJoin(users, eq(providerPatients.providerId, users.id))
+      .where(and(
+        eq(providerPatients.patientId, patientId),
+        eq(providerPatients.accessStatus, 'pending'),
+        eq(providerPatients.requestedBy, 'provider'),
+        eq(providerPatients.isActive, true)
+      ));
+
+    return relations.map(r => ({
+      ...r.users,
+      relationship: r.provider_patients
+    }));
+  }
+
+  /**
+   * Get pending patient access requests for a provider (requests FROM patients)
+   */
+  async getPendingPatientRequests(providerId: number): Promise<Array<User & { relationship: ProviderPatient }>> {
+    const relations = await db
+      .select()
+      .from(providerPatients)
+      .innerJoin(users, eq(providerPatients.patientId, users.id))
+      .where(and(
+        eq(providerPatients.providerId, providerId),
+        eq(providerPatients.accessStatus, 'pending'),
+        eq(providerPatients.requestedBy, 'patient'),
+        eq(providerPatients.isActive, true)
+      ));
+
+    return relations.map(r => ({
+      ...r.users,
+      relationship: r.provider_patients
+    }));
+  }
+
+  /**
+   * Update provider access status (approve, deny, revoke)
+   */
+  async updateProviderAccessStatus(
+    relationId: number,
+    status: 'approved' | 'denied' | 'revoked'
+  ): Promise<ProviderPatient | undefined> {
+    const updateData: Partial<ProviderPatient> = {
+      accessStatus: status,
+    };
+
+    if (status === 'approved') {
+      updateData.approvedAt = new Date();
+      updateData.permissionGranted = true;
+      updateData.grantedAt = new Date();
+    } else if (status === 'denied') {
+      updateData.deniedAt = new Date();
+      updateData.permissionGranted = false;
+    } else if (status === 'revoked') {
+      updateData.permissionGranted = false;
+      updateData.isActive = false;
+    }
+
+    const [updated] = await db
+      .update(providerPatients)
+      .set(updateData)
+      .where(eq(providerPatients.id, relationId))
+      .returning();
+
+    return updated;
+  }
+
+  // ============================================================================
+  // PROVIDER NOTIFICATION OPERATIONS
+  // ============================================================================
+
+  /**
+   * Create a provider notification
+   */
+  async createProviderNotification(notification: InsertProviderNotification): Promise<ProviderNotification> {
+    const [newNotif] = await db.insert(providerNotifications).values(notification).returning();
+    return newNotif;
+  }
+
+  /**
+   * Get provider notifications
+   */
+  async getProviderNotifications(providerId: number, unreadOnly = false): Promise<ProviderNotification[]> {
+    if (unreadOnly) {
+      return await db
+        .select()
+        .from(providerNotifications)
+        .where(and(
+          eq(providerNotifications.providerId, providerId),
+          eq(providerNotifications.isRead, false)
+        ))
+        .orderBy(desc(providerNotifications.createdAt));
+    }
+
+    return await db
+      .select()
+      .from(providerNotifications)
+      .where(eq(providerNotifications.providerId, providerId))
+      .orderBy(desc(providerNotifications.createdAt));
+  }
+
+  /**
+   * Mark provider notification as read
+   */
+  async markProviderNotificationRead(notificationId: number): Promise<ProviderNotification | undefined> {
+    const [updated] = await db
+      .update(providerNotifications)
+      .set({ isRead: true })
+      .where(eq(providerNotifications.id, notificationId))
+      .returning();
+    return updated;
+  }
+
+  /**
+   * Mark all provider notifications as read
+   */
+  async markAllProviderNotificationsRead(providerId: number): Promise<void> {
+    await db
+      .update(providerNotifications)
+      .set({ isRead: true })
+      .where(eq(providerNotifications.providerId, providerId));
   }
 
   // Session operations
@@ -876,10 +1059,10 @@ export class DatabaseStorage implements IStorage {
   }
 
   // Risk Assessment operations
-  async createRiskAssessment(assessment: InsertRiskAssessment): Promise<RiskAssessment> {
+  async createRiskAssessment(assessment: InsertRiskAssessment & { providerId?: number; inputData?: any }): Promise<RiskAssessment> {
     // Extract only the fields we need - ensure all values are proper strings
     // IMPORTANT: Do not include id or createdAt - let DB handle defaults
-    const insertData = {
+    const insertData: any = {
       patientId: Number(assessment.patientId),
       deconditioning: String(assessment.deconditioning || '{}'),
       vte: String(assessment.vte || '{}'),
@@ -891,7 +1074,19 @@ export class DatabaseStorage implements IStorage {
       readmissionData: assessment.readmissionData ? String(assessment.readmissionData) : null,
     };
 
-    console.log('Inserting risk assessment - patientId:', insertData.patientId);
+    // Add provider ID if this assessment was created by a provider
+    if (assessment.providerId) {
+      insertData.providerId = Number(assessment.providerId);
+    }
+
+    // Store all calculator input values for persistence and patient view auto-population
+    if (assessment.inputData) {
+      insertData.inputData = typeof assessment.inputData === 'string'
+        ? assessment.inputData
+        : JSON.stringify(assessment.inputData);
+    }
+
+    console.log('Inserting risk assessment - patientId:', insertData.patientId, 'providerId:', insertData.providerId);
 
     const [newAssessment] = await db.insert(riskAssessments).values(insertData).returning();
 
@@ -1292,7 +1487,28 @@ export class DatabaseStorage implements IStorage {
       .innerJoin(users, eq(caregiverPatients.caregiverId, users.id))
       .where(and(
         eq(caregiverPatients.patientId, patientId),
-        eq(caregiverPatients.accessStatus, 'pending')
+        eq(caregiverPatients.accessStatus, 'pending'),
+        eq(caregiverPatients.requestedBy, 'caregiver')
+      ));
+
+    return relations.map(r => ({
+      ...r.users,
+      relationship: r.caregiver_patients
+    }));
+  }
+
+  /**
+   * Get pending patient invitations for a caregiver (patients who invited this caregiver)
+   */
+  async getPendingPatientInvitations(caregiverId: number): Promise<Array<User & { relationship: CaregiverPatient }>> {
+    const relations = await db
+      .select()
+      .from(caregiverPatients)
+      .innerJoin(users, eq(caregiverPatients.patientId, users.id))
+      .where(and(
+        eq(caregiverPatients.caregiverId, caregiverId),
+        eq(caregiverPatients.accessStatus, 'pending'),
+        eq(caregiverPatients.requestedBy, 'patient')
       ));
 
     return relations.map(r => ({

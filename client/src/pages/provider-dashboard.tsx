@@ -8,6 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
 import {
   Users,
@@ -33,7 +34,9 @@ import {
   BarChart3,
   Menu,
   X,
-  ClipboardCheck
+  ClipboardCheck,
+  UserPlus,
+  Bell
 } from "lucide-react";
 import { apiRequest } from "@/lib/queryClient";
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar } from 'recharts';
@@ -253,6 +256,15 @@ export default function ProviderDashboard() {
   const [editingGoal, setEditingGoal] = useState<any>(null);
   const [navMenuOpen, setNavMenuOpen] = useState(false);
 
+  // Add Patient dialog state
+  const [addPatientOpen, setAddPatientOpen] = useState(false);
+  const [patientFirstName, setPatientFirstName] = useState('');
+  const [patientLastName, setPatientLastName] = useState('');
+  const [patientDOB, setPatientDOB] = useState('');
+
+  // Pending patient requests modal state
+  const [pendingRequestsOpen, setPendingRequestsOpen] = useState(false);
+
   // Check if user can edit goals (all provider types can edit)
   const canEditGoals = (user: any) => {
     return user?.userType === 'provider';
@@ -262,6 +274,73 @@ export default function ProviderDashboard() {
   const { data: patients = [], isLoading: patientsLoading } = useQuery({
     queryKey: [`/api/providers/${user?.id}/patients`],
     enabled: !!user && user.userType === 'provider',
+  });
+
+  // Get pending patient requests (patients who have invited this provider)
+  const { data: pendingPatientRequests = [] } = useQuery({
+    queryKey: [`/api/providers/${user?.id}/patient-requests`],
+    enabled: !!user && user.userType === 'provider',
+  });
+
+  // Show pending requests modal when there are pending requests on first load
+  useEffect(() => {
+    if (pendingPatientRequests.length > 0 && !pendingRequestsOpen) {
+      setPendingRequestsOpen(true);
+    }
+  }, [pendingPatientRequests]);
+
+  // Request patient access mutation
+  const requestAccessMutation = useMutation({
+    mutationFn: async (data: { patientFirstName: string; patientLastName: string; patientDateOfBirth: string }) => {
+      return await apiRequest('/api/provider-access-requests', {
+        method: 'POST',
+        body: JSON.stringify(data),
+      });
+    },
+    onSuccess: () => {
+      toast({
+        title: "Access Request Sent",
+        description: "The patient will be notified on their next login.",
+      });
+      setAddPatientOpen(false);
+      setPatientFirstName('');
+      setPatientLastName('');
+      setPatientDOB('');
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Request Failed",
+        description: error.message || "Failed to send access request",
+        variant: "destructive",
+      });
+    },
+  });
+
+  // Respond to patient invitation mutation
+  const respondToInvitationMutation = useMutation({
+    mutationFn: async ({ relationId, status }: { relationId: number; status: 'approved' | 'denied' }) => {
+      return await apiRequest(`/api/providers/${user?.id}/patient-requests/${relationId}`, {
+        method: 'PATCH',
+        body: JSON.stringify({ status }),
+      });
+    },
+    onSuccess: (_, variables) => {
+      queryClient.invalidateQueries({ queryKey: [`/api/providers/${user?.id}/patient-requests`] });
+      queryClient.invalidateQueries({ queryKey: [`/api/providers/${user?.id}/patients`] });
+      toast({
+        title: variables.status === 'approved' ? "Access Accepted" : "Request Declined",
+        description: variables.status === 'approved'
+          ? "You now have access to this patient's data."
+          : "You have declined the access request.",
+      });
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Action Failed",
+        description: error.message || "Failed to respond to request",
+        variant: "destructive",
+      });
+    },
   });
 
   // Debug logging for provider dashboard
@@ -517,11 +596,36 @@ export default function ProviderDashboard() {
           {/* Patient List */}
           <div className="lg:col-span-1">
             <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center">
-                  <Users className="w-5 h-5 mr-2" />
-                  Active Patients
-                </CardTitle>
+              <CardHeader className="pb-3">
+                <div className="flex items-center justify-between">
+                  <CardTitle className="flex items-center">
+                    <Users className="w-5 h-5 mr-2" />
+                    Active Patients
+                  </CardTitle>
+                  <div className="flex items-center gap-2">
+                    {pendingPatientRequests.length > 0 && (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="relative"
+                        onClick={() => setPendingRequestsOpen(true)}
+                      >
+                        <Bell className="w-4 h-4" />
+                        <span className="absolute -top-1 -right-1 w-5 h-5 bg-red-500 text-white text-xs rounded-full flex items-center justify-center">
+                          {pendingPatientRequests.length}
+                        </span>
+                      </Button>
+                    )}
+                    <Button
+                      variant="default"
+                      size="sm"
+                      onClick={() => setAddPatientOpen(true)}
+                    >
+                      <UserPlus className="w-4 h-4 mr-1" />
+                      Add Patient
+                    </Button>
+                  </div>
+                </div>
               </CardHeader>
               <CardContent className="space-y-3">
                 {patients?.map((patient: any) => (
@@ -779,6 +883,139 @@ export default function ProviderDashboard() {
           </div>
         </div>
       </div>
+
+      {/* Add Patient Dialog */}
+      <Dialog open={addPatientOpen} onOpenChange={setAddPatientOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Request Patient Access</DialogTitle>
+            <DialogDescription>
+              Enter the patient's information to request access to their mobility data.
+              The patient will receive a notification on their next login.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label htmlFor="patientFirstName">Patient First Name</Label>
+              <Input
+                id="patientFirstName"
+                value={patientFirstName}
+                onChange={(e) => setPatientFirstName(e.target.value)}
+                placeholder="Enter first name"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="patientLastName">Patient Last Name</Label>
+              <Input
+                id="patientLastName"
+                value={patientLastName}
+                onChange={(e) => setPatientLastName(e.target.value)}
+                placeholder="Enter last name"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="patientDOB">Date of Birth</Label>
+              <Input
+                id="patientDOB"
+                type="date"
+                value={patientDOB}
+                onChange={(e) => setPatientDOB(e.target.value)}
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setAddPatientOpen(false)}
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={() => requestAccessMutation.mutate({
+                patientFirstName,
+                patientLastName,
+                patientDateOfBirth: patientDOB,
+              })}
+              disabled={!patientFirstName || !patientLastName || !patientDOB || requestAccessMutation.isPending}
+            >
+              {requestAccessMutation.isPending ? 'Sending...' : 'Send Request'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Pending Patient Requests Dialog */}
+      <Dialog open={pendingRequestsOpen} onOpenChange={setPendingRequestsOpen}>
+        <DialogContent className="sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle className="flex items-center">
+              <Bell className="w-5 h-5 mr-2 text-blue-600" />
+              Pending Patient Requests
+            </DialogTitle>
+            <DialogDescription>
+              The following patients have invited you to view their mobility data.
+              Accept to gain access to their information.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3 py-4 max-h-96 overflow-y-auto">
+            {pendingPatientRequests.map((request: any) => (
+              <div
+                key={request.relationship.id}
+                className="p-4 border rounded-lg bg-gray-50"
+              >
+                <div className="flex justify-between items-start">
+                  <div>
+                    <p className="font-medium text-gray-900">
+                      {request.firstName} {request.lastName}
+                    </p>
+                    {request.admissionDate && (
+                      <p className="text-sm text-gray-500">
+                        Admitted: {new Date(request.admissionDate).toLocaleDateString()}
+                      </p>
+                    )}
+                    <p className="text-xs text-gray-400 mt-1">
+                      Requested: {new Date(request.relationship.requestedAt).toLocaleDateString()}
+                    </p>
+                  </div>
+                  <div className="flex gap-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => respondToInvitationMutation.mutate({
+                        relationId: request.relationship.id,
+                        status: 'denied',
+                      })}
+                      disabled={respondToInvitationMutation.isPending}
+                    >
+                      Decline
+                    </Button>
+                    <Button
+                      size="sm"
+                      onClick={() => respondToInvitationMutation.mutate({
+                        relationId: request.relationship.id,
+                        status: 'approved',
+                      })}
+                      disabled={respondToInvitationMutation.isPending}
+                    >
+                      Accept
+                    </Button>
+                  </div>
+                </div>
+              </div>
+            ))}
+            {pendingPatientRequests.length === 0 && (
+              <p className="text-center text-gray-500 py-4">
+                No pending requests
+              </p>
+            )}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setPendingRequestsOpen(false)}>
+              Close
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
