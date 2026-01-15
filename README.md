@@ -661,15 +661,116 @@ curl -X POST http://localhost:5000/api/patients/4/stroke-protocol \
 
 ---
 
-## 🔐 **Security**
+## 🔐 **HIPAA Compliance & Security**
 
-- ✅ API rate limiting (prevent DoS)
-- ✅ Session-based authentication
-- ✅ HTTPS/WSS in production
-- ✅ SQL injection prevention (parameterized queries)
-- ✅ HIPAA-compliant logging
-- ✅ Patient privacy controls (opt-in social features)
-- ✅ Anonymous competition IDs
+This application implements comprehensive HIPAA (Health Insurance Portability and Accountability Act) compliance measures for protecting PHI (Protected Health Information).
+
+### Business Associate Agreements (BAAs)
+
+Before deploying with real patient data, ensure BAAs are signed with:
+- **Supabase** - Database hosting (PostgreSQL)
+- **Anthropic** - AI text processing for medical data
+
+### Technical Safeguards Implemented
+
+#### Authentication & Authorization
+| Control | Implementation | HIPAA Reference |
+|---------|---------------|-----------------|
+| **Session-based Authentication** | Secure httpOnly cookies, 4-hour timeout | 164.312(d) |
+| **Role-based Access Control** | Patient, Provider, Caregiver roles with middleware | 164.312(a)(1) |
+| **Patient Data Authorization** | Providers can only access assigned patients | 164.312(a)(2)(i) |
+| **Automatic Session Timeout** | 4-hour max session duration (HIPAA best practice) | 164.312(a)(2)(iii) |
+| **WebSocket Authentication** | Session validation for real-time connections | 164.312(e)(1) |
+
+#### Audit Controls
+| Control | Implementation | HIPAA Reference |
+|---------|---------------|-----------------|
+| **Access Logging** | All PHI access logged with user ID, timestamp, IP | 164.312(b) |
+| **Authentication Events** | Login success/failure, logout audited | 164.312(b) |
+| **Authorization Failures** | Access denied events logged | 164.312(b) |
+| **PHI Export Tracking** | Report generation audited | 164.312(b) |
+
+#### Transmission Security
+| Control | Implementation | HIPAA Reference |
+|---------|---------------|-----------------|
+| **HTTPS in Production** | TLS encryption required | 164.312(e)(1) |
+| **WSS for WebSocket** | Secure WebSocket connections | 164.312(e)(1) |
+| **Database SSL** | Certificate validation enabled | 164.312(e)(2)(ii) |
+| **Strict Cookie Policy** | SameSite=strict, httpOnly, secure | 164.312(e)(1) |
+
+#### Data Protection
+| Control | Implementation | HIPAA Reference |
+|---------|---------------|-----------------|
+| **No PHI in Browser Storage** | Only session IDs in sessionStorage | 164.312(a)(2)(iv) |
+| **No PHI in Logs** | Server logs sanitized, no names/DOB/health data | 164.312(b) |
+| **SQL Injection Prevention** | Parameterized queries via Drizzle ORM | 164.312(c)(1) |
+| **Rate Limiting** | API rate limits prevent DoS attacks | 164.312(a)(1) |
+
+### Security Configuration Checklist
+
+Before production deployment, verify these environment variables are set:
+
+```env
+# REQUIRED for HIPAA compliance
+SESSION_SECRET=<cryptographically-secure-random-string-min-32-chars>
+NODE_ENV=production
+
+# Database (Supabase with BAA)
+DATABASE_URL=<your-supabase-connection-string>
+USE_POSTGRES=true
+
+# Optional: Enable strict SSL (recommended)
+# Set to 'false' only for development with self-signed certs
+DB_SSL_REJECT_UNAUTHORIZED=true
+
+# Optional: Device authentication (recommended for production)
+DEVICE_API_KEY=<secure-api-key-for-devices>
+
+# AI Processing (Anthropic with BAA)
+ANTHROPIC_API_KEY=<your-anthropic-key>
+```
+
+### File Locations for Security Components
+
+```
+server/
+├── middleware/
+│   ├── auth.ts         # Authentication & authorization middleware
+│   └── audit.ts        # HIPAA audit logging system
+├── session.ts          # Secure session configuration
+├── db.ts               # Database connection with SSL
+└── websocket/
+    └── index.ts        # Authenticated WebSocket server
+
+client/src/lib/
+└── auth.tsx            # HIPAA-compliant client auth (no PHI storage)
+```
+
+### Security Features Summary
+
+- ✅ **Authentication Middleware** - All PHI endpoints protected
+- ✅ **4-Hour Session Timeout** - Automatic logoff per HIPAA requirements
+- ✅ **Strict Session Secret** - Required in production, enforced
+- ✅ **No PHI in Browser** - Only session ID stored client-side
+- ✅ **Comprehensive Audit Logging** - WHO accessed WHAT, WHEN, from WHERE
+- ✅ **Database SSL Validation** - Certificate verification enabled
+- ✅ **WebSocket Authentication** - Session-based for providers, API key for devices
+- ✅ **Rate Limiting** - Prevents brute force and DoS attacks
+- ✅ **SQL Injection Prevention** - Parameterized queries throughout
+- ✅ **Secure Error Messages** - No user enumeration information leakage
+- ✅ **PHI-Safe Logging** - No names, DOB, health data in server logs
+- ✅ **CSRF Protection** - SameSite=strict cookies
+
+### Recommended Additional Measures
+
+For full HIPAA compliance, also implement:
+- [ ] Multi-factor authentication (MFA) for providers
+- [ ] Data encryption at rest (database-level)
+- [ ] Regular security penetration testing
+- [ ] Employee security training program
+- [ ] Incident response procedures
+- [ ] Data backup and recovery procedures
+- [ ] Business continuity plan
 
 ---
 

@@ -1,8 +1,25 @@
 import type { Express } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
-// Authentication will be handled by existing auth system
 import { db } from "./db";
+import { logger } from "./logger";
+// HIPAA-Compliant Authentication & Audit Middleware
+import {
+  requireAuth,
+  requireProvider,
+  requirePatient,
+  authorizePatientAccess,
+  authorizePatientOrProvider,
+  setAuthSession,
+  clearAuthSession,
+} from "./middleware/auth";
+import {
+  auditLog,
+  auditAuthEvent,
+  createAuditMiddleware,
+  AuditAction,
+  ResourceType,
+} from "./middleware/audit";
 import { updateRollingDataWindow } from "./rolling-data";
 import { patientStats, users, providerPatients, patientGoals, exerciseSessions, patientPreferences, feedItems, nudgeMessages, kudosReactions } from "@shared/schema";
 import { eq, and, desc, gte, inArray, sql } from "drizzle-orm";
@@ -169,18 +186,26 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (req.body.firstName && req.body.lastName && req.body.dateOfBirth && !req.body.email) {
         const { firstName, lastName, dateOfBirth, deviceNumber } = req.body;
 
-        console.log('=== SERVER LOGIN DEBUG ===');
-        console.log('Received:', { firstName, lastName, dateOfBirth, deviceNumber });
+        // HIPAA: Don't log PHI (names, DOB)
+        logger.debug('Patient login attempt via legacy method');
 
         const patient = await storage.getPatientByName(firstName, lastName, dateOfBirth);
-        console.log('Patient found:', patient ? `Yes (ID: ${patient.id}, DOB: ${patient.dateOfBirth})` : 'No');
+        logger.debug('Patient lookup result', { found: !!patient, patientId: patient?.id });
 
         // If patient doesn't exist, return error - they need to register first
         if (!patient) {
+          // HIPAA: Audit failed login attempt
+          auditAuthEvent(req, AuditAction.LOGIN_FAILED, null, false, { method: 'legacy' });
           return res.status(401).json({
             error: "Account not found. Please register first using the Register tab."
           });
         }
+
+        // HIPAA: Set server-side session
+        setAuthSession(req, patient);
+
+        // HIPAA: Audit successful login
+        auditAuthEvent(req, AuditAction.LOGIN_SUCCESS, patient.id, true, { method: 'legacy', userType: 'patient' });
 
         // Link patient to device if device number provided
         let deviceLinkResult = null;
@@ -188,7 +213,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           try {
             deviceLinkResult = await storage.linkPatientToDevice(patient.id, deviceNumber);
           } catch (error) {
-            console.warn('Failed to link patient to device:', error);
+            logger.warn('Failed to link patient to device', { patientId: patient.id, deviceNumber });
           }
         }
 
@@ -202,7 +227,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       // Modern email-based login
       const loginData = loginSchema.parse(req.body) as LoginData;
-      
+
       if (loginData.userType === 'patient') {
         let patient = await storage.getUserByEmail(loginData.email);
 
@@ -217,10 +242,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
         // If patient doesn't exist, return error - they need to register first
         if (!patient) {
+          // HIPAA: Audit failed login attempt (don't log email for privacy)
+          auditAuthEvent(req, AuditAction.LOGIN_FAILED, null, false, { userType: 'patient' });
           return res.status(401).json({
             error: "Account not found. Please register first using the Register tab."
           });
         }
+
+        // HIPAA: Set server-side session
+        setAuthSession(req, patient);
+
+        // HIPAA: Audit successful login
+        auditAuthEvent(req, AuditAction.LOGIN_SUCCESS, patient.id, true, { userType: 'patient' });
 
         // Link patient to device if device number provided
         const { deviceNumber } = req.body;
@@ -229,7 +262,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           try {
             deviceLinkResult = await storage.linkPatientToDevice(patient.id, deviceNumber);
           } catch (error) {
-            console.warn('Failed to link patient to device:', error);
+            logger.warn('Failed to link patient to device', { patientId: patient.id, deviceNumber });
           }
         }
 
@@ -239,24 +272,110 @@ export async function registerRoutes(app: Express): Promise<Server> {
           deviceNumber,
           deviceLinkResult // Include device switching info
         });
-        
+
       } else if (loginData.userType === 'provider') {
-        console.log(`DEBUG: Looking for provider with email: "${loginData.email}"`);
+        // HIPAA: Don't log email addresses
+        logger.debug('Provider login attempt');
         const provider = await storage.getUserByEmail(loginData.email);
-        console.log(`DEBUG: Provider found:`, provider ? `ID ${provider.id}` : 'NULL');
-        
+        logger.debug('Provider lookup result', { found: !!provider, providerId: provider?.id });
+
         if (!provider) {
+          // HIPAA: Audit failed login attempt
+          auditAuthEvent(req, AuditAction.LOGIN_FAILED, null, false, { userType: 'provider' });
           return res.status(401).json({ error: "Provider not found. Please register first." });
         }
-        
+
+        // HIPAA: Set server-side session
+        setAuthSession(req, provider);
+
+        // HIPAA: Audit successful login
+        auditAuthEvent(req, AuditAction.LOGIN_SUCCESS, provider.id, true, { userType: 'provider' });
+
         res.json({ user: provider });
-        
+
       } else {
         return res.status(400).json({ error: "Invalid user type" });
       }
     } catch (error) {
-      console.error("Login error:", error);
+      logger.error("Login error occurred", { error: (error as Error).message });
       res.status(400).json({ error: "Invalid login credentials" });
+    }
+  });
+
+  // HIPAA-Compliant Session Management Endpoints
+
+  /**
+   * Get current authenticated user
+   * Used for session restoration without storing PHI client-side
+   */
+  app.get("/api/auth/me", requireAuth, async (req, res) => {
+    try {
+      const userId = req.authenticatedUser!.id;
+      const user = await storage.getUser(userId);
+
+      if (!user) {
+        return res.status(404).json({ error: "User not found" });
+      }
+
+      // Audit the session restoration
+      auditLog({
+        userId,
+        action: AuditAction.READ,
+        resourceType: ResourceType.PATIENT,
+        resourceId: userId,
+        details: { action: 'session_restore' },
+        ipAddress: req.ip || 'unknown',
+        userAgent: req.get('user-agent') || 'unknown',
+      });
+
+      // If caregiver, also fetch their patients
+      if (user.userType === 'caregiver') {
+        const caregiverPatientsData = await db
+          .select()
+          .from(users)
+          .innerJoin(
+            caregiverPatients,
+            eq(users.id, caregiverPatients.patientId)
+          )
+          .where(
+            and(
+              eq(caregiverPatients.caregiverId, userId),
+              eq(caregiverPatients.isActive, true)
+            )
+          );
+
+        return res.json({
+          user,
+          caregiverPatients: caregiverPatientsData.map(r => r.users),
+        });
+      }
+
+      res.json({ user });
+    } catch (error) {
+      logger.error("Session restore error", { error: (error as Error).message });
+      res.status(500).json({ error: "Failed to restore session" });
+    }
+  });
+
+  /**
+   * Logout - Destroy session
+   * HIPAA requires secure session termination
+   */
+  app.post("/api/auth/logout", async (req, res) => {
+    const userId = req.session?.userId;
+
+    try {
+      // Audit the logout
+      if (userId) {
+        auditAuthEvent(req, AuditAction.LOGOUT, userId, true);
+      }
+
+      await clearAuthSession(req);
+      res.json({ success: true, message: "Logged out successfully" });
+    } catch (error) {
+      logger.error("Logout error", { error: (error as Error).message });
+      // Still return success - user is effectively logged out even if session destruction fails
+      res.json({ success: true, message: "Logged out" });
     }
   });
 
@@ -336,8 +455,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const patientId = parseInt(req.params.id);
 
-      console.log('=== DASHBOARD REQUEST ===');
-      console.log('Patient ID:', patientId);
+      // HIPAA: Log request without PHI
+      logger.debug('Dashboard request', { patientId });
 
       const [patient, goals, achievements, stats, sessions, adaptiveGoal] = await Promise.all([
         storage.getPatient(patientId),
@@ -348,19 +467,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
         storage.calculateAdaptiveGoal(patientId)
       ]);
 
-      console.log('Patient found:', patient ? `${patient.firstName} ${patient.lastName} (ID: ${patient.id})` : 'NO');
-      console.log('Stats:', stats ? `Sessions: ${stats.totalSessions}, Duration: ${stats.totalDuration} min, Level: ${stats.level}` : 'NO STATS');
-      console.log('Sessions count:', sessions ? sessions.length : 0);
-      console.log('Goals count:', goals ? goals.length : 0);
-
-      // Debug: Show session dates
-      const sessionDates = sessions?.slice(0, 10).map(s => s.sessionDate) || [];
-      console.log('📅 Recent session dates:', sessionDates.join(', '));
-      const uniqueDates = [...new Set(sessionDates)].sort();
-      console.log('📅 Unique dates in sessions:', uniqueDates.join(', '));
+      // HIPAA: Don't log patient names or PHI - only IDs and counts
+      logger.debug('Dashboard data retrieved', {
+        patientId,
+        found: !!patient,
+        sessionsCount: sessions?.length || 0,
+        goalsCount: goals?.length || 0
+      });
 
       if (!patient) {
-        return res.status(404).json({ error: "Patient not found" });
+        return res.status(404).json({ error: "Resource not found" });
       }
 
       // Calculate days since start for legacy compatibility
@@ -370,13 +486,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Recalculate consistency streak based on current sessions
       const currentStreak = calculateCurrentStreak(sessions);
       const updatedStats = stats ? { ...stats, consistencyStreak: currentStreak } : null;
-
-      console.log('Returning dashboard data:', {
-        hasPatient: !!patient,
-        goalsCount: goals?.length,
-        hasStats: !!updatedStats,
-        sessionsCount: sessions?.length
-      });
 
       res.json({
         patient,
@@ -388,7 +497,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         adaptiveGoal
       });
     } catch (error) {
-      console.error("Dashboard error:", error);
+      logger.error("Dashboard error", { error: (error as Error).message });
       res.status(500).json({ error: "Failed to load dashboard" });
     }
   });
@@ -444,7 +553,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Create exercise session
   app.post("/api/sessions", createLimiter, async (req, res) => {
     try {
-      console.log("Creating session with body:", JSON.stringify(req.body, null, 2));
+      // HIPAA: Don't log PHI in request body
+      logger.debug('Creating session', { patientId: req.body.patientId });
 
       // Convert startTime string to Date object if needed
       const body = { ...req.body };
@@ -471,13 +581,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
       }
 
-      console.log("Parsed body:", JSON.stringify({ ...body, startTime: body.startTime?.toISOString?.() }, null, 2));
+      logger.debug('Session data parsed', { patientId: body.patientId, activityType: body.activityType });
 
       const sessionData = insertExerciseSessionSchema.parse(body) as InsertExerciseSession;
-      console.log("Validated session data, creating...");
+      logger.debug('Session data validated, creating');
 
       const session = await storage.createSession(sessionData);
-      console.log("Session created successfully:", session.id);
+      logger.debug('Session created', { sessionId: session.id });
       res.json(session);
     } catch (error) {
       console.error("Session creation error:", error);
@@ -563,7 +673,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ error: "Goals array is required" });
       }
 
-      console.log('Saving goals for patient:', patientId, 'Goals:', JSON.stringify(goals, null, 2));
+      // HIPAA: Don't log goal details which may contain PHI
+      logger.debug('Saving goals', { patientId, goalsCount: goals.length });
 
       // Deactivate existing goals for this patient
       await storage.deactivatePatientGoals(patientId);
@@ -670,17 +781,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.post("/api/risk-assessment", riskAssessmentLimiter, async (req, res) => {
     try {
-      console.log("Risk assessment request body:", JSON.stringify(req.body, null, 2));
+      // HIPAA: Don't log PHI in risk assessment request
+      logger.debug('Risk assessment request', { patientId: req.body.patientId });
       const riskData = riskAssessmentInputSchema.parse(req.body) as RiskAssessmentInput;
-      console.log("Parsed risk data for calculation:", {
-        mobility_status: riskData.mobility_status,
-        age: riskData.age,
-        level_of_care: riskData.level_of_care,
-        has_diabetes: riskData.has_diabetes,
-        has_obesity: riskData.has_obesity,
-        is_sepsis: riskData.is_sepsis,
-        days_immobile: riskData.days_immobile
-      });
+      // HIPAA: Log only non-PHI metadata
+      logger.debug('Risk assessment data parsed', { mobilityStatus: riskData.mobility_status });
       const patientId = parseInt(req.body.patientId) || 1; // Should come from authenticated session
       
       // Calculate risks using the risk calculator
@@ -694,7 +799,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // mobility_benefits is at the top level, not nested under stay_predictions
       const mobilityBenefits = (riskResults as any).mobility_benefits;
 
-      console.log("Robust calculator predictions:", { losData, dischargeData, readmissionData, mobilityBenefits });
+      logger.debug('Risk assessment calculated', { assessmentComplete: true });
       
       // Store the assessment - serialize all JSON objects to text for database storage
       const assessment = await storage.createRiskAssessment({
@@ -733,17 +838,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Anonymous risk assessment endpoint - same calculation but no data storage
   app.post("/api/anonymous-risk-assessment", riskAssessmentLimiter, async (req, res) => {
     try {
-      console.log("Anonymous risk assessment request body:", JSON.stringify(req.body, null, 2));
+      // HIPAA: Anonymous assessments - no PHI logging needed
+      logger.debug('Anonymous risk assessment request');
       const riskData = riskAssessmentInputSchema.parse(req.body) as RiskAssessmentInput;
-      console.log("Parsed anonymous risk data for calculation:", {
-        mobility_status: riskData.mobility_status,
-        age: riskData.age,
-        level_of_care: riskData.level_of_care,
-        has_diabetes: riskData.has_diabetes,
-        has_obesity: riskData.has_obesity,
-        is_sepsis: riskData.is_sepsis,
-        days_immobile: riskData.days_immobile
-      });
+      logger.debug('Anonymous risk data parsed', { mobilityStatus: riskData.mobility_status });
       
       // Calculate risks using the risk calculator (same calculation as authenticated users)
       const riskResults = calculateRisks(riskData);
@@ -757,8 +855,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // mobility_benefits is at the top level, not nested under stay_predictions
       const mobilityBenefits = (riskResults as any).mobility_benefits;
 
-      console.log("Anonymous calculator predictions:", { losData, dischargeData, readmissionData, mobilityBenefits });
-      console.log("Full riskResults structure:", riskResults);
+      logger.debug('Anonymous risk assessment calculated', { assessmentComplete: true });
       
       // NO DATA STORAGE - return results directly without saving to database
       res.json({

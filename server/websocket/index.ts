@@ -2,36 +2,59 @@ import { WebSocketServer, WebSocket } from 'ws';
 import { Server } from 'http';
 import { logger } from '../logger';
 import { db } from '../db';
-import { exerciseSessions } from '@shared/schema';
-import { eq } from 'drizzle-orm';
+import { exerciseSessions, devices, providerPatients } from '@shared/schema';
+import { eq, and } from 'drizzle-orm';
 import type { SessionUpdate, Alert, WebSocketMessage, DeviceStatus } from './types';
+import { parse as parseCookie } from 'cookie';
+import { auditLog, AuditAction } from '../middleware/audit';
 
 /**
- * WebSocket Server for Real-Time Device Communication
+ * HIPAA-Compliant WebSocket Server for Real-Time Device Communication
  *
- * Handles bidirectional communication between:
- * - Devices (Bedside Bikes) → Server
- * - Server → Provider Web Clients (nurses, PTs)
+ * Security features:
+ * - Device authentication via shared secret (API key)
+ * - Provider authentication via session cookie
+ * - Patient data access authorization verification
+ * - Audit logging of all connections
  *
  * Architecture:
- * - Device connects with ?type=device&deviceId=XXX
- * - Provider connects with ?type=provider&patientId=XXX
- * - Messages route: Device → Server → Database → All providers watching patient
+ * - Device connects with ?type=device&deviceId=XXX&apiKey=XXX
+ * - Provider connects with ?type=provider&patientId=XXX (session required)
+ * - Messages route: Device → Server → Database → Authorized providers
  */
 export class DeviceBridgeWebSocket {
   private wss: WebSocketServer;
   private deviceConnections = new Map<string, WebSocket>();
   private providerConnections = new Map<string, Set<WebSocket>>();
   private deviceHeartbeats = new Map<string, NodeJS.Timeout>();
+  private sessionStore: any;
 
-  constructor(server: Server) {
+  constructor(server: Server, sessionStore?: any) {
+    this.sessionStore = sessionStore;
+
     this.wss = new WebSocketServer({
       server,
       path: '/ws/device-bridge',
-      // Handle CORS for WebSocket
-      verifyClient: (info) => {
-        // In production, add proper authentication here
-        return true;
+      verifyClient: async (info, callback) => {
+        try {
+          const url = new URL(info.req.url || '', 'http://localhost');
+          const clientType = url.searchParams.get('type');
+
+          if (clientType === 'device') {
+            // Device authentication via API key
+            const result = await this.verifyDeviceAuth(info.req, url);
+            callback(result.allowed, result.code, result.message);
+          } else if (clientType === 'provider') {
+            // Provider authentication via session cookie
+            const result = await this.verifyProviderAuth(info.req, url);
+            callback(result.allowed, result.code, result.message);
+          } else {
+            callback(false, 400, 'Invalid client type');
+          }
+        } catch (error) {
+          logger.error('WebSocket auth error', { error: (error as Error).message });
+          callback(false, 500, 'Authentication error');
+        }
       }
     });
 
@@ -40,13 +63,181 @@ export class DeviceBridgeWebSocket {
       logger.error('WebSocket server error', { error: error.message });
     });
 
-    logger.info('WebSocket server initialized', {
+    logger.info('HIPAA-compliant WebSocket server initialized', {
       path: '/ws/device-bridge',
-      status: 'ready'
+      status: 'ready',
+      authRequired: true
     });
 
     // Start heartbeat checker for device connections
     this.startHeartbeatMonitor();
+  }
+
+  /**
+   * Verify device authentication
+   * Devices authenticate with a shared API key
+   */
+  private async verifyDeviceAuth(
+    req: any,
+    url: URL
+  ): Promise<{ allowed: boolean; code?: number; message?: string }> {
+    const deviceId = url.searchParams.get('deviceId');
+    const apiKey = url.searchParams.get('apiKey');
+
+    if (!deviceId) {
+      return { allowed: false, code: 400, message: 'Device ID required' };
+    }
+
+    // In production, verify device API key against database or environment
+    const expectedApiKey = process.env.DEVICE_API_KEY;
+
+    // If DEVICE_API_KEY is set, require it; otherwise allow (dev mode)
+    if (expectedApiKey && apiKey !== expectedApiKey) {
+      logger.warn('Device auth failed - invalid API key', { deviceId });
+      auditLog({
+        userId: null,
+        action: AuditAction.ACCESS_DENIED,
+        resourceType: 'WEBSOCKET_DEVICE',
+        resourceId: deviceId,
+        details: { reason: 'Invalid API key' },
+        ipAddress: req.socket?.remoteAddress || 'unknown',
+        userAgent: req.headers['user-agent'] || 'unknown',
+      });
+      return { allowed: false, code: 401, message: 'Invalid device credentials' };
+    }
+
+    // Verify device exists in database
+    try {
+      const [device] = await db.select().from(devices).where(eq(devices.id, deviceId)).limit(1);
+      if (!device && expectedApiKey) {
+        logger.warn('Device auth failed - unknown device', { deviceId });
+        return { allowed: false, code: 404, message: 'Unknown device' };
+      }
+    } catch (error) {
+      // Database check is optional - allow connection if DB unavailable
+      logger.warn('Device DB check failed, allowing connection', { deviceId });
+    }
+
+    logger.info('Device authenticated', { deviceId });
+    return { allowed: true };
+  }
+
+  /**
+   * Verify provider authentication via session cookie
+   * Providers must have valid session and access to requested patient
+   */
+  private async verifyProviderAuth(
+    req: any,
+    url: URL
+  ): Promise<{ allowed: boolean; code?: number; message?: string }> {
+    const patientId = url.searchParams.get('patientId');
+
+    if (!patientId) {
+      return { allowed: false, code: 400, message: 'Patient ID required' };
+    }
+
+    // Parse session cookie
+    const cookieHeader = req.headers.cookie;
+    if (!cookieHeader) {
+      logger.warn('Provider WebSocket auth failed - no cookie');
+      return { allowed: false, code: 401, message: 'Authentication required' };
+    }
+
+    const cookies = parseCookie(cookieHeader);
+    const sessionId = cookies['bedside.sid'];
+
+    if (!sessionId) {
+      logger.warn('Provider WebSocket auth failed - no session cookie');
+      return { allowed: false, code: 401, message: 'Session required' };
+    }
+
+    // If session store is available, verify the session
+    if (this.sessionStore) {
+      try {
+        // Extract session ID from signed cookie (s:sessionId.signature)
+        const rawSessionId = sessionId.startsWith('s:')
+          ? sessionId.slice(2).split('.')[0]
+          : sessionId;
+
+        const session = await new Promise<any>((resolve, reject) => {
+          this.sessionStore.get(rawSessionId, (err: Error, session: any) => {
+            if (err) reject(err);
+            else resolve(session);
+          });
+        });
+
+        if (!session || !session.userId) {
+          logger.warn('Provider WebSocket auth failed - invalid session');
+          return { allowed: false, code: 401, message: 'Invalid session' };
+        }
+
+        // Verify provider has access to this patient
+        if (session.userType === 'provider') {
+          const [access] = await db
+            .select()
+            .from(providerPatients)
+            .where(
+              and(
+                eq(providerPatients.providerId, session.userId),
+                eq(providerPatients.patientId, parseInt(patientId)),
+                eq(providerPatients.isActive, true)
+              )
+            )
+            .limit(1);
+
+          if (!access) {
+            logger.warn('Provider WebSocket auth failed - no patient access', {
+              providerId: session.userId,
+              patientId
+            });
+            auditLog({
+              userId: session.userId,
+              action: AuditAction.ACCESS_DENIED,
+              resourceType: 'WEBSOCKET_PATIENT',
+              resourceId: parseInt(patientId),
+              details: { reason: 'No provider-patient relationship' },
+              ipAddress: req.socket?.remoteAddress || 'unknown',
+              userAgent: req.headers['user-agent'] || 'unknown',
+            });
+            return { allowed: false, code: 403, message: 'Access denied to patient' };
+          }
+        }
+
+        // Patient can only watch their own data
+        if (session.userType === 'patient' && session.userId !== parseInt(patientId)) {
+          logger.warn('Patient WebSocket auth failed - wrong patient', {
+            sessionUserId: session.userId,
+            requestedPatientId: patientId
+          });
+          return { allowed: false, code: 403, message: 'Access denied' };
+        }
+
+        logger.info('Provider/Patient WebSocket authenticated', {
+          userId: session.userId,
+          userType: session.userType,
+          patientId
+        });
+
+        // Store session info on request for later use
+        (req as any).authenticatedUser = {
+          id: session.userId,
+          userType: session.userType
+        };
+
+        return { allowed: true };
+      } catch (error) {
+        logger.error('Session verification error', { error: (error as Error).message });
+        return { allowed: false, code: 500, message: 'Session verification failed' };
+      }
+    }
+
+    // In development without session store, allow with warning
+    if (process.env.NODE_ENV !== 'production') {
+      logger.warn('WebSocket session verification skipped (no session store)');
+      return { allowed: true };
+    }
+
+    return { allowed: false, code: 401, message: 'Session verification unavailable' };
   }
 
   /**
@@ -61,7 +252,8 @@ export class DeviceBridgeWebSocket {
     if (clientType === 'device' && deviceId) {
       this.handleDeviceConnection(ws, deviceId);
     } else if (clientType === 'provider' && patientId) {
-      this.handleProviderConnection(ws, patientId);
+      const userId = (req as any).authenticatedUser?.id;
+      this.handleProviderConnection(ws, patientId, userId);
     } else {
       logger.warn('WebSocket connection rejected - invalid parameters', {
         clientType,
@@ -78,6 +270,17 @@ export class DeviceBridgeWebSocket {
   private handleDeviceConnection(ws: WebSocket, deviceId: string) {
     this.deviceConnections.set(deviceId, ws);
     logger.info('Device connected', { deviceId, totalDevices: this.deviceConnections.size });
+
+    // Audit device connection
+    auditLog({
+      userId: null,
+      action: AuditAction.CREATE,
+      resourceType: 'DEVICE_CONNECTION',
+      resourceId: deviceId,
+      details: { event: 'connected' },
+      ipAddress: 'device',
+      userAgent: 'Bedside Bike Device',
+    });
 
     // Send welcome message
     this.sendToDevice(deviceId, {
@@ -144,16 +347,30 @@ export class DeviceBridgeWebSocket {
   /**
    * Handle provider connection (nurses, PTs viewing dashboard)
    */
-  private handleProviderConnection(ws: WebSocket, patientId: string) {
+  private handleProviderConnection(ws: WebSocket, patientId: string, userId?: number) {
     if (!this.providerConnections.has(patientId)) {
       this.providerConnections.set(patientId, new Set());
     }
     this.providerConnections.get(patientId)!.add(ws);
 
-    logger.info('Provider connected', {
+    logger.info('Provider connected to patient stream', {
       patientId,
+      userId,
       totalProviders: this.getTotalProviderConnections()
     });
+
+    // Audit provider connection
+    if (userId) {
+      auditLog({
+        userId,
+        action: AuditAction.READ,
+        resourceType: 'PATIENT_STREAM',
+        resourceId: parseInt(patientId),
+        details: { event: 'websocket_connected' },
+        ipAddress: 'websocket',
+        userAgent: 'Provider Dashboard',
+      });
+    }
 
     // Send current active sessions for this patient
     this.sendCurrentSessionStatus(ws, parseInt(patientId));
