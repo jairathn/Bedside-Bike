@@ -32,9 +32,12 @@ const simpleOptions = [
 
 export default function PatientObservationsPage() {
   const [, setLocation] = useLocation();
-  const { user } = useAuth();
+  const { user, patient } = useAuth();
   const { toast } = useToast();
   const queryClient = useQueryClient();
+
+  // For caregivers, use the selected patient; for patients, use their own ID
+  const targetPatientId = user?.userType === 'caregiver' ? patient?.id : user?.id;
 
   const [showFullForm, setShowFullForm] = useState(true);
   const [formData, setFormData] = useState({
@@ -54,16 +57,16 @@ export default function PatientObservationsPage() {
 
   // Fetch existing observations for today
   const { data: existingObservations = [] } = useQuery({
-    queryKey: [`/api/patients/${user?.id}/observations`, { date: today }],
-    enabled: !!user?.id,
+    queryKey: [`/api/patients/${targetPatientId}/observations`, { date: today }],
+    enabled: !!targetPatientId,
   });
 
   const submitObservation = useMutation({
     mutationFn: async (data: typeof formData) => {
-      return await apiRequest(`/api/patients/${user?.id}/observations`, {
+      return await apiRequest(`/api/patients/${targetPatientId}/observations`, {
         method: "POST",
         body: JSON.stringify({
-          patientId: user?.id,
+          patientId: targetPatientId,
           observationDate: today,
           ...data,
         }),
@@ -74,7 +77,7 @@ export default function PatientObservationsPage() {
         title: "Observation Logged",
         description: "Your observation has been saved and shared with your care team.",
       });
-      queryClient.invalidateQueries({ queryKey: [`/api/patients/${user?.id}/observations`] });
+      queryClient.invalidateQueries({ queryKey: [`/api/patients/${targetPatientId}/observations`] });
       // Reset form
       setFormData({
         moodLevel: "",

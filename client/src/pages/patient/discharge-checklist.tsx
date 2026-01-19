@@ -129,9 +129,12 @@ const checklistSections = [
 
 export default function PatientDischargeChecklistPage() {
   const [, setLocation] = useLocation();
-  const { user } = useAuth();
+  const { user, patient } = useAuth();
   const { toast } = useToast();
   const queryClient = useQueryClient();
+
+  // For caregivers, use the selected patient; for patients, use their own ID
+  const targetPatientId = user?.userType === 'caregiver' ? patient?.id : user?.id;
 
   const [expandedSections, setExpandedSections] = useState<Set<string>>(new Set(["equipment", "home_safety"]));
   const [checkedItems, setCheckedItems] = useState<Record<string, boolean>>({});
@@ -139,8 +142,8 @@ export default function PatientDischargeChecklistPage() {
 
   // Fetch existing checklist
   const { data: checklist, isLoading } = useQuery({
-    queryKey: [`/api/patients/${user?.id}/discharge-checklist`],
-    enabled: !!user?.id,
+    queryKey: [`/api/patients/${targetPatientId}/discharge-checklist`],
+    enabled: !!targetPatientId,
   });
 
   // Initialize checked items from server data
@@ -178,7 +181,7 @@ export default function PatientDischargeChecklistPage() {
       return null;
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: [`/api/patients/${user?.id}/discharge-checklist`] });
+      queryClient.invalidateQueries({ queryKey: [`/api/patients/${targetPatientId}/discharge-checklist`] });
     },
   });
 
