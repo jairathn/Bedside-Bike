@@ -3219,8 +3219,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post("/api/patients/:patientId/observations", requireAuth, authorizePatientAccess, async (req, res) => {
     try {
       const patientId = parseInt(req.params.patientId);
-      const userId = req.session.user?.id;
-      const userType = req.session.user?.userType;
+      const userId = req.authenticatedUser?.id;
+      const userType = req.authenticatedUser?.userType;
 
       // Determine observer type and ID based on who's making the request
       let observerId: number;
