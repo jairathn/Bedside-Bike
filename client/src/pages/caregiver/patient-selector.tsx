@@ -173,28 +173,28 @@ export default function CaregiverPatientSelectorPage() {
             <div className="space-y-3">
               {linkedPatients.map((patientData: any) => (
                 <Card
-                  key={patientData.patient.id}
+                  key={patientData.id}
                   className="hover:shadow-lg transition-all cursor-pointer group border-2 hover:border-purple-300"
-                  onClick={() => handleSelectPatient(patientData.patient)}
+                  onClick={() => handleSelectPatient(patientData)}
                 >
                   <CardContent className="p-4">
                     <div className="flex items-center justify-between">
                       <div className="flex items-center gap-4">
                         <div className="w-14 h-14 bg-gradient-to-br from-purple-400 to-rose-400 rounded-full flex items-center justify-center text-white text-xl font-bold">
-                          {patientData.patient.firstName?.[0]}{patientData.patient.lastName?.[0]}
+                          {patientData.firstName?.[0]}{patientData.lastName?.[0]}
                         </div>
                         <div>
                           <h4 className="text-lg font-semibold text-gray-900 group-hover:text-purple-700 transition-colors">
-                            {patientData.patient.firstName} {patientData.patient.lastName}
+                            {patientData.firstName} {patientData.lastName}
                           </h4>
                           <div className="flex items-center gap-2 mt-1">
                             <Badge variant="secondary" className="bg-purple-100 text-purple-700">
-                              {relationshipLabels[patientData.relationship.relationshipType] || patientData.relationship.relationshipType}
+                              {relationshipLabels[patientData.relationship?.relationshipType] || patientData.relationship?.relationshipType}
                             </Badge>
-                            {patientData.patient.dateOfBirth && (
+                            {patientData.dateOfBirth && (
                               <span className="text-sm text-gray-500 flex items-center gap-1">
                                 <Calendar className="w-3 h-3" />
-                                {new Date(patientData.patient.dateOfBirth).toLocaleDateString()}
+                                {new Date(patientData.dateOfBirth).toLocaleDateString()}
                               </span>
                             )}
                           </div>
@@ -204,7 +204,7 @@ export default function CaregiverPatientSelectorPage() {
                         <div className="text-right hidden sm:block">
                           <p className="text-sm text-gray-500">Connected since</p>
                           <p className="text-sm font-medium text-gray-700">
-                            {patientData.relationship.approvedAt
+                            {patientData.relationship?.approvedAt
                               ? new Date(patientData.relationship.approvedAt).toLocaleDateString()
                               : 'N/A'}
                           </p>
