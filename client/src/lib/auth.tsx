@@ -22,12 +22,14 @@ interface CaregiverLoginResponse {
 
 interface AuthContext {
   user: User | null;
-  patient: Patient | null; // For backward compatibility
+  patient: Patient | null; // For backward compatibility - returns user if patient, or selectedPatient if caregiver
+  selectedPatient: User | null; // For caregivers - the patient they're currently viewing
   caregiverPatients: Array<User & { relationship: any }> | null; // For caregivers
   login: (firstName: string, lastName: string, dateOfBirth: string) => Promise<boolean>;
   loginCaregiver: (email: string) => Promise<CaregiverLoginResponse | null>;
   logout: () => Promise<void>;
   setUser: (user: User | null) => void;
+  setPatient: (patient: User | null) => void; // For caregivers to select which patient to view
   setCaregiverPatients: (patients: Array<User & { relationship: any }> | null) => void;
   isLoading: boolean;
 }
@@ -80,6 +82,7 @@ function clearSessionInfo(): void {
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUserState] = useState<User | null>(null);
+  const [selectedPatient, setSelectedPatientState] = useState<User | null>(null);
   const [caregiverPatients, setCaregiverPatientsState] = useState<Array<User & { relationship: any }> | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
@@ -191,8 +194,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     // Clear local state regardless of server response
     setUserState(null);
+    setSelectedPatientState(null);
     setCaregiverPatientsState(null);
     clearSessionInfo();
+  };
+
+  const updateSelectedPatient = (patient: User | null) => {
+    setSelectedPatientState(patient);
   };
 
   const updateUser = (newUser: User | null) => {
@@ -213,15 +221,26 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     // Note: Patient data is NOT stored locally - only kept in memory
   };
 
+  // Compute the effective patient - for backward compatibility
+  // If user is a patient, return user. If user is a caregiver with selectedPatient, return selectedPatient
+  const effectivePatient: Patient | null =
+    user?.userType === 'patient'
+      ? user as Patient
+      : (user?.userType === 'caregiver' && selectedPatient?.userType === 'patient')
+        ? selectedPatient as Patient
+        : null;
+
   return (
     <AuthContext.Provider value={{
       user,
-      patient: user?.userType === 'patient' ? user as Patient : null, // For backward compatibility
+      patient: effectivePatient, // For backward compatibility - returns selectedPatient for caregivers
+      selectedPatient, // For caregivers - the patient they're currently viewing
       caregiverPatients, // For caregiver users
       login,
       loginCaregiver,
       logout,
       setUser: updateUser,
+      setPatient: updateSelectedPatient, // For caregivers to select which patient to view
       setCaregiverPatients: updateCaregiverPatients,
       isLoading
     }}>

@@ -45,6 +45,7 @@ import { apiRequest } from "@/lib/queryClient";
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar } from 'recharts';
 import { ProviderGoalEditor } from "@/components/provider-goal-editor";
 import MobilitySummaryCard from "@/components/MobilitySummaryCard";
+import DailyObservationsCard from "@/components/DailyObservationsCard";
 
 // Did You Know Component
 function DidYouKnowSection() {
@@ -982,6 +983,12 @@ export default function ProviderDashboard() {
                     return sessionsGoal ? Math.round(parseFloat(sessionsGoal.targetValue) || 2) : 2;
                   })()}
                   goalHistory={goalHistory}
+                />
+
+                {/* Daily Observations from Patient/Caregiver */}
+                <DailyObservationsCard
+                  patientId={selectedPatient.id}
+                  patientName={`${selectedPatient.firstName} ${selectedPatient.lastName}`}
                 />
 
                 {/* Comprehensive Goal Management */}

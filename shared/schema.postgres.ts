@@ -605,11 +605,34 @@ export const caregiverPatients = pgTable("caregiver_patients", {
   createdAt: timestamp("created_at", { withTimezone: true }).default(sql`NOW()`),
 });
 
-// Caregiver observations - structured feedback from family members
+// Caregiver observations - structured feedback from family members (legacy, kept for backwards compatibility)
 export const caregiverObservations = pgTable("caregiver_observations", {
   id: serial("id").primaryKey(),
   caregiverId: integer("caregiver_id").notNull().references(() => users.id),
   patientId: integer("patient_id").notNull().references(() => users.id),
+  observationDate: varchar("observation_date", { length: 10 }).notNull(), // ISO date string
+  // Structured observations
+  moodLevel: varchar("mood_level", { length: 20 }), // 'great', 'good', 'fair', 'poor'
+  painLevel: integer("pain_level"), // 0-10
+  energyLevel: varchar("energy_level", { length: 20 }), // 'high', 'medium', 'low'
+  appetite: varchar("appetite", { length: 20 }), // 'good', 'fair', 'poor'
+  sleepQuality: varchar("sleep_quality", { length: 20 }), // 'good', 'fair', 'poor'
+  mobilityObservations: text("mobility_observations"), // Free text
+  // Free text fields
+  notes: text("notes"),
+  concerns: text("concerns"),
+  questionsForProvider: text("questions_for_provider"),
+  // AI-generated copy-pasteable summary for provider notes
+  aiSummary: text("ai_summary"),
+  createdAt: timestamp("created_at", { withTimezone: true }).default(sql`NOW()`),
+});
+
+// Unified observations - observations from both patients and caregivers
+export const observations = pgTable("observations", {
+  id: serial("id").primaryKey(),
+  patientId: integer("patient_id").notNull().references(() => users.id),
+  observerId: integer("observer_id").notNull().references(() => users.id), // Who logged the observation
+  observerType: varchar("observer_type", { length: 20 }).notNull(), // 'patient' or 'caregiver'
   observationDate: varchar("observation_date", { length: 10 }).notNull(), // ISO date string
   // Structured observations
   moodLevel: varchar("mood_level", { length: 20 }), // 'great', 'good', 'fair', 'poor'
@@ -757,6 +780,21 @@ export const caregiverRegistrationSchema = loginSchema.extend({
 });
 
 export const caregiverObservationSchema = z.object({
+  patientId: z.number().int().positive(),
+  observationDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Date must be in YYYY-MM-DD format"),
+  moodLevel: z.enum(["great", "good", "fair", "poor"]).optional(),
+  painLevel: z.number().min(0).max(10).optional(),
+  energyLevel: z.enum(["high", "medium", "low"]).optional(),
+  appetite: z.enum(["good", "fair", "poor"]).optional(),
+  sleepQuality: z.enum(["good", "fair", "poor"]).optional(),
+  mobilityObservations: z.string().optional(),
+  notes: z.string().optional(),
+  concerns: z.string().optional(),
+  questionsForProvider: z.string().optional(),
+});
+
+// Unified observation schema for both patients and caregivers
+export const observationSchema = z.object({
   patientId: z.number().int().positive(),
   observationDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Date must be in YYYY-MM-DD format"),
   moodLevel: z.enum(["great", "good", "fair", "poor"]).optional(),
@@ -988,6 +1026,7 @@ export type InsertAlert = typeof alerts.$inferInsert;
 
 export const insertCaregiverPatientSchema = createInsertSchema(caregiverPatients);
 export const insertCaregiverObservationSchema = createInsertSchema(caregiverObservations);
+export const insertObservationSchema = createInsertSchema(observations);
 export const insertDischargeChecklistSchema = createInsertSchema(dischargeChecklists);
 export const insertCaregiverNotificationSchema = createInsertSchema(caregiverNotifications);
 export const insertCaregiverAchievementSchema = createInsertSchema(caregiverAchievements);
@@ -997,6 +1036,9 @@ export type InsertCaregiverPatient = typeof caregiverPatients.$inferInsert;
 
 export type CaregiverObservation = typeof caregiverObservations.$inferSelect;
 export type InsertCaregiverObservation = typeof caregiverObservations.$inferInsert;
+
+export type Observation = typeof observations.$inferSelect;
+export type InsertObservation = typeof observations.$inferInsert;
 
 export type DischargeChecklist = typeof dischargeChecklists.$inferSelect;
 export type InsertDischargeChecklist = typeof dischargeChecklists.$inferInsert;

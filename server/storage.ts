@@ -12,6 +12,7 @@ import {
   deviceSessions,
   caregiverPatients,
   caregiverObservations,
+  observations,
   caregiverNotifications,
   caregiverAchievements,
   dischargeChecklists,
@@ -42,6 +43,8 @@ import {
   type InsertCaregiverPatient,
   type CaregiverObservation,
   type InsertCaregiverObservation,
+  type Observation,
+  type InsertObservation,
   type CaregiverNotification,
   type InsertCaregiverNotification,
   type CaregiverAchievement,
@@ -1761,6 +1764,151 @@ export class DatabaseStorage implements IStorage {
       .where(eq(caregiverObservations.id, observationId))
       .returning();
     return updated;
+  }
+
+  // Unified Observation Operations (for both patients and caregivers)
+  async createObservation(observation: InsertObservation): Promise<Observation> {
+    const [newObs] = await db.insert(observations).values(observation).returning();
+    return newObs;
+  }
+
+  async getObservationsByPatient(patientId: number, limit = 10): Promise<Observation[]> {
+    return await db
+      .select()
+      .from(observations)
+      .where(eq(observations.patientId, patientId))
+      .orderBy(desc(observations.createdAt))
+      .limit(limit);
+  }
+
+  async getObservationsByDate(patientId: number, date: string): Promise<Observation[]> {
+    return await db
+      .select()
+      .from(observations)
+      .where(and(
+        eq(observations.patientId, patientId),
+        eq(observations.observationDate, date)
+      ))
+      .orderBy(desc(observations.createdAt));
+  }
+
+  async updateUnifiedObservationAiSummary(observationId: number, aiSummary: string): Promise<Observation | undefined> {
+    const [updated] = await db
+      .update(observations)
+      .set({ aiSummary })
+      .where(eq(observations.id, observationId))
+      .returning();
+    return updated;
+  }
+
+  // Get all observations for a patient for a specific date (combines legacy caregiverObservations and new unified observations)
+  async getAllObservationsForDate(patientId: number, date: string): Promise<Array<{
+    id: number;
+    observerType: string;
+    observerName?: string;
+    moodLevel: string | null;
+    painLevel: number | null;
+    energyLevel: string | null;
+    appetite: string | null;
+    sleepQuality: string | null;
+    mobilityObservations: string | null;
+    notes: string | null;
+    concerns: string | null;
+    questionsForProvider: string | null;
+    aiSummary: string | null;
+    createdAt: Date | null;
+  }>> {
+    // Get unified observations
+    const unifiedObs = await db
+      .select({
+        id: observations.id,
+        observerType: observations.observerType,
+        observerId: observations.observerId,
+        moodLevel: observations.moodLevel,
+        painLevel: observations.painLevel,
+        energyLevel: observations.energyLevel,
+        appetite: observations.appetite,
+        sleepQuality: observations.sleepQuality,
+        mobilityObservations: observations.mobilityObservations,
+        notes: observations.notes,
+        concerns: observations.concerns,
+        questionsForProvider: observations.questionsForProvider,
+        aiSummary: observations.aiSummary,
+        createdAt: observations.createdAt,
+      })
+      .from(observations)
+      .where(and(
+        eq(observations.patientId, patientId),
+        eq(observations.observationDate, date)
+      ));
+
+    // Get legacy caregiver observations
+    const legacyObs = await db
+      .select({
+        id: caregiverObservations.id,
+        caregiverId: caregiverObservations.caregiverId,
+        moodLevel: caregiverObservations.moodLevel,
+        painLevel: caregiverObservations.painLevel,
+        energyLevel: caregiverObservations.energyLevel,
+        appetite: caregiverObservations.appetite,
+        sleepQuality: caregiverObservations.sleepQuality,
+        mobilityObservations: caregiverObservations.mobilityObservations,
+        notes: caregiverObservations.notes,
+        concerns: caregiverObservations.concerns,
+        questionsForProvider: caregiverObservations.questionsForProvider,
+        aiSummary: caregiverObservations.aiSummary,
+        createdAt: caregiverObservations.createdAt,
+      })
+      .from(caregiverObservations)
+      .where(and(
+        eq(caregiverObservations.patientId, patientId),
+        eq(caregiverObservations.observationDate, date)
+      ));
+
+    // Get observer names for unified observations
+    const observerIds = [...new Set(unifiedObs.map(o => o.observerId))];
+    const observers = observerIds.length > 0 ? await db
+      .select({ id: users.id, firstName: users.firstName, lastName: users.lastName })
+      .from(users)
+      .where(inArray(users.id, observerIds)) : [];
+    const observerMap = new Map(observers.map(o => [o.id, `${o.firstName} ${o.lastName}`]));
+
+    // Get caregiver names for legacy observations
+    const caregiverIds = [...new Set(legacyObs.map(o => o.caregiverId))];
+    const caregivers = caregiverIds.length > 0 ? await db
+      .select({ id: users.id, firstName: users.firstName, lastName: users.lastName })
+      .from(users)
+      .where(inArray(users.id, caregiverIds)) : [];
+    const caregiverMap = new Map(caregivers.map(c => [c.id, `${c.firstName} ${c.lastName}`]));
+
+    // Combine and format
+    const allObs = [
+      ...unifiedObs.map(o => ({
+        ...o,
+        observerName: observerMap.get(o.observerId) || 'Unknown',
+      })),
+      ...legacyObs.map(o => ({
+        id: o.id,
+        observerType: 'caregiver' as const,
+        moodLevel: o.moodLevel,
+        painLevel: o.painLevel,
+        energyLevel: o.energyLevel,
+        appetite: o.appetite,
+        sleepQuality: o.sleepQuality,
+        mobilityObservations: o.mobilityObservations,
+        notes: o.notes,
+        concerns: o.concerns,
+        questionsForProvider: o.questionsForProvider,
+        aiSummary: o.aiSummary,
+        createdAt: o.createdAt,
+        observerName: caregiverMap.get(o.caregiverId) || 'Caregiver',
+      })),
+    ];
+
+    return allObs.sort((a, b) => {
+      if (!a.createdAt || !b.createdAt) return 0;
+      return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
+    });
   }
 
   // Caregiver Notification Operations

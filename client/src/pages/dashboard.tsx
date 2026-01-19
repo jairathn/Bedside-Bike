@@ -9,7 +9,7 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, Di
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
-import { Target, MessageCircle, LogOut, Calculator, Gamepad2, TrendingUp, Play, Trophy, Menu, Lightbulb, ChevronDown, ChevronUp, ChevronLeft, ChevronRight, HelpCircle, Heart, Activity, Info, ClipboardPlus, Clock, Calendar, Bike, Footprints, Armchair, Bell, UserCheck } from "lucide-react";
+import { Target, MessageCircle, LogOut, Calculator, Gamepad2, TrendingUp, Play, Trophy, Menu, Lightbulb, ChevronDown, ChevronUp, ChevronLeft, ChevronRight, HelpCircle, Heart, Activity, Info, ClipboardPlus, Clock, Calendar, Bike, Footprints, Armchair, Bell, UserCheck, FileText, ClipboardList } from "lucide-react";
 import { apiRequest } from "@/lib/queryClient";
 import { ProgressRing } from "@/components/progress-ring";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -506,15 +506,23 @@ export default function DashboardPage() {
                 <Calculator className="w-4 h-4 sm:w-5 sm:h-5 mr-2" />
                 <span className="text-xs sm:text-sm">Goal Calculator</span>
               </Button>
-              <Button variant="ghost" size="sm" onClick={() => setLocation("/games")} className="hidden sm:flex">
+              <Button variant="ghost" size="sm" onClick={() => setLocation("/patient/observations")} className="hidden sm:flex">
+                <FileText className="w-4 h-4 sm:w-5 sm:h-5 mr-2" />
+                <span className="text-xs sm:text-sm">Log Observations</span>
+              </Button>
+              <Button variant="ghost" size="sm" onClick={() => setLocation("/patient/discharge-checklist")} className="hidden sm:flex">
+                <ClipboardList className="w-4 h-4 sm:w-5 sm:h-5 mr-2" />
+                <span className="text-xs sm:text-sm">Before Discharge</span>
+              </Button>
+              <Button variant="ghost" size="sm" onClick={() => setLocation("/games")} className="hidden lg:flex">
                 <Gamepad2 className="w-4 h-4 sm:w-5 sm:h-5 mr-2" />
                 <span className="text-xs sm:text-sm">Games</span>
               </Button>
-              <Button variant="ghost" size="sm" onClick={() => setLocation("/kudos-wall")} className="hidden sm:flex">
+              <Button variant="ghost" size="sm" onClick={() => setLocation("/kudos-wall")} className="hidden lg:flex">
                 <MessageCircle className="w-4 h-4 sm:w-5 sm:h-5 mr-2" />
                 <span className="text-xs sm:text-sm">Community</span>
               </Button>
-              <Button variant="ghost" size="sm" onClick={handleLogout} className="hidden sm:flex">
+              <Button variant="ghost" size="sm" onClick={handleLogout} className="hidden lg:flex">
                 <LogOut className="w-4 h-4 sm:w-5 sm:h-5 mr-1" />
                 <span className="text-xs sm:text-sm">Logout</span>
               </Button>
@@ -533,6 +541,14 @@ export default function DashboardPage() {
             {/* Mobile Dropdown Menu */}
             {showMobileMenu && (
               <div className="sm:hidden mt-4 space-y-2">
+                <Button variant="ghost" size="sm" onClick={() => setLocation("/patient/observations")} className="w-full justify-start">
+                  <FileText className="w-4 h-4 mr-2" />
+                  Log Observations
+                </Button>
+                <Button variant="ghost" size="sm" onClick={() => setLocation("/patient/discharge-checklist")} className="w-full justify-start">
+                  <ClipboardList className="w-4 h-4 mr-2" />
+                  Before Discharge
+                </Button>
                 <Button variant="ghost" size="sm" onClick={() => setLocation("/games")} className="w-full justify-start">
                   <Gamepad2 className="w-4 h-4 mr-2" />
                   Games

@@ -27,6 +27,11 @@ import CaregiverDashboard from "@/pages/caregiver/dashboard";
 import CaregiverRegisterPage from "@/pages/caregiver/register";
 import CaregiverObservationsPage from "@/pages/caregiver/observations";
 import CaregiverDischargeChecklistPage from "@/pages/caregiver/discharge-checklist";
+import CaregiverPatientSelectorPage from "@/pages/caregiver/patient-selector";
+
+// Patient Pages (observations and discharge checklist)
+import PatientObservationsPage from "@/pages/patient/observations";
+import PatientDischargeChecklistPage from "@/pages/patient/discharge-checklist";
 
 // Personalization Module Pages
 import PersonalizedPrescriptionPage from "@/pages/personalization/personalized-prescription";
@@ -52,7 +57,8 @@ function Router() {
         if (user.userType === 'provider') {
           setLocation("/provider-dashboard");
         } else if (user.userType === 'caregiver') {
-          setLocation("/caregiver/dashboard");
+          // Caregivers go to patient selector
+          setLocation("/caregiver/select-patient");
         } else {
           setLocation("/dashboard");
         }
@@ -83,7 +89,8 @@ function Router() {
     if (userData.userType === 'provider') {
       setLocation("/provider-dashboard");
     } else if (userData.userType === 'caregiver') {
-      setLocation("/caregiver/dashboard");
+      // Caregivers go to patient selector to choose which patient to view
+      setLocation("/caregiver/select-patient");
     } else {
       setLocation("/dashboard");
     }
@@ -105,9 +112,14 @@ function Router() {
       <Route path="/anonymous-risk-calculator" component={AnonymousRiskCalculator} />
       <Route path="/public-discharge-readiness" component={PublicDischargeReadinessPage} />
 
+      {/* Patient Routes (observations and discharge checklist) */}
+      <Route path="/patient/observations" component={user ? PatientObservationsPage : () => <AuthPage onAuthSuccess={handleAuthSuccess} />} />
+      <Route path="/patient/discharge-checklist" component={user ? PatientDischargeChecklistPage : () => <AuthPage onAuthSuccess={handleAuthSuccess} />} />
+
       {/* Caregiver Routes */}
       <Route path="/caregiver/login" component={CaregiverLoginPage} />
       <Route path="/caregiver/register" component={CaregiverRegisterPage} />
+      <Route path="/caregiver/select-patient" component={user?.userType === 'caregiver' ? CaregiverPatientSelectorPage : CaregiverLoginPage} />
       <Route path="/caregiver/dashboard" component={user?.userType === 'caregiver' ? CaregiverDashboard : CaregiverLoginPage} />
       <Route path="/caregiver/observations" component={user?.userType === 'caregiver' ? CaregiverObservationsPage : CaregiverLoginPage} />
       <Route path="/caregiver/discharge-checklist/:patientId" component={user?.userType === 'caregiver' ? CaregiverDischargeChecklistPage : CaregiverLoginPage} />
