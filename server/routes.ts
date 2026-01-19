@@ -42,6 +42,7 @@ import {
   providerRegistrationSchema,
   caregiverRegistrationSchema,
   caregiverObservationSchema,
+  observationSchema,
   caregiverAccessRequestSchema,
   caregiverInviteSchema,
   providerAccessRequestSchema,
@@ -50,6 +51,7 @@ import {
   insertPatientGoalSchema,
   caregiverPatients,
   caregiverObservations,
+  observations,
   caregiverNotifications,
   type LoginData,
   type PatientRegistration,
@@ -3211,6 +3213,159 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       logger.error("Error fetching observations", { error: (error as Error).message });
       res.status(500).json({ error: "Failed to fetch observations" });
+    }
+  });
+
+  // Patient logs their own observation (unified observations table)
+  app.post("/api/patients/:patientId/observations", requireAuth, requirePatient, async (req, res) => {
+    try {
+      const patientId = parseInt(req.params.patientId);
+
+      // Verify the patient is logging for themselves
+      if (req.session.user?.id !== patientId) {
+        return res.status(403).json({ error: "You can only log observations for yourself" });
+      }
+
+      const parsed = observationSchema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ error: parsed.error.errors[0].message });
+      }
+
+      const data = parsed.data;
+
+      // Create observation
+      const observation = await storage.createObservation({
+        patientId,
+        observerId: patientId,
+        observerType: 'patient',
+        observationDate: data.observationDate,
+        moodLevel: data.moodLevel || null,
+        painLevel: data.painLevel !== undefined ? data.painLevel : null,
+        energyLevel: data.energyLevel || null,
+        appetite: data.appetite || null,
+        sleepQuality: data.sleepQuality || null,
+        mobilityObservations: data.mobilityObservations || null,
+        notes: data.notes || null,
+        concerns: data.concerns || null,
+        questionsForProvider: data.questionsForProvider || null,
+      });
+
+      // Generate a simple AI summary
+      const summaryParts: string[] = [];
+      if (data.moodLevel) summaryParts.push(`Mood: ${data.moodLevel}`);
+      if (data.painLevel !== undefined) summaryParts.push(`Pain: ${data.painLevel}/10`);
+      if (data.energyLevel) summaryParts.push(`Energy: ${data.energyLevel}`);
+      if (data.appetite) summaryParts.push(`Appetite: ${data.appetite}`);
+      if (data.sleepQuality) summaryParts.push(`Sleep: ${data.sleepQuality}`);
+      if (data.mobilityObservations) summaryParts.push(`Mobility notes: ${data.mobilityObservations}`);
+      if (data.notes) summaryParts.push(`Notes: ${data.notes}`);
+      if (data.concerns) summaryParts.push(`Concerns: ${data.concerns}`);
+      if (data.questionsForProvider) summaryParts.push(`Questions for provider: ${data.questionsForProvider}`);
+
+      const aiSummary = `Patient self-reported observation from ${data.observationDate}: ${summaryParts.join('. ')}`;
+
+      await storage.updateUnifiedObservationAiSummary(observation.id, aiSummary);
+
+      res.status(201).json({
+        ...observation,
+        aiSummary
+      });
+    } catch (error) {
+      logger.error("Error creating patient observation", { error: (error as Error).message });
+      res.status(500).json({ error: "Failed to create observation" });
+    }
+  });
+
+  // Get AI-summarized daily observations for a patient (for providers)
+  app.get("/api/patients/:patientId/observations/daily-summary", requireAuth, authorizePatientAccess, async (req, res) => {
+    try {
+      const patientId = parseInt(req.params.patientId);
+      const date = req.query.date as string || new Date().toISOString().split('T')[0];
+
+      // Get all observations for this date
+      const allObservations = await storage.getAllObservationsForDate(patientId, date);
+
+      if (allObservations.length === 0) {
+        return res.json({
+          date,
+          observationCount: 0,
+          observations: [],
+          aiSummary: `No observations recorded for ${date}.`,
+          copyPasteText: `Daily Observations (${date}): No observations recorded.`
+        });
+      }
+
+      // Build copy-pasteable text for EMR
+      const obsText = allObservations.map((obs, i) => {
+        const parts: string[] = [];
+        parts.push(`Observation ${i + 1} (by ${obs.observerName}, ${obs.observerType}):`);
+        if (obs.moodLevel) parts.push(`  Mood: ${obs.moodLevel}`);
+        if (obs.painLevel !== null) parts.push(`  Pain: ${obs.painLevel}/10`);
+        if (obs.energyLevel) parts.push(`  Energy: ${obs.energyLevel}`);
+        if (obs.appetite) parts.push(`  Appetite: ${obs.appetite}`);
+        if (obs.sleepQuality) parts.push(`  Sleep: ${obs.sleepQuality}`);
+        if (obs.mobilityObservations) parts.push(`  Mobility: ${obs.mobilityObservations}`);
+        if (obs.notes) parts.push(`  Notes: ${obs.notes}`);
+        if (obs.concerns) parts.push(`  Concerns: ${obs.concerns}`);
+        if (obs.questionsForProvider) parts.push(`  Questions: ${obs.questionsForProvider}`);
+        return parts.join('\n');
+      }).join('\n\n');
+
+      const copyPasteText = `DAILY OBSERVATIONS (${date})\n${'='.repeat(40)}\n${allObservations.length} observation(s) recorded\n\n${obsText}`;
+
+      // Generate a concise AI summary
+      const summaryItems: string[] = [];
+
+      // Aggregate mood - find most common or notable
+      const moods = allObservations.filter(o => o.moodLevel).map(o => o.moodLevel);
+      if (moods.length > 0) {
+        const moodCounts = moods.reduce((acc, m) => { acc[m!] = (acc[m!] || 0) + 1; return acc; }, {} as Record<string, number>);
+        const dominantMood = Object.entries(moodCounts).sort((a, b) => b[1] - a[1])[0][0];
+        summaryItems.push(`Mood: primarily ${dominantMood}`);
+      }
+
+      // Aggregate pain - show range
+      const painLevels = allObservations.filter(o => o.painLevel !== null).map(o => o.painLevel!);
+      if (painLevels.length > 0) {
+        const minPain = Math.min(...painLevels);
+        const maxPain = Math.max(...painLevels);
+        summaryItems.push(minPain === maxPain ? `Pain: ${minPain}/10` : `Pain: ${minPain}-${maxPain}/10`);
+      }
+
+      // Aggregate energy
+      const energyLevels = allObservations.filter(o => o.energyLevel).map(o => o.energyLevel);
+      if (energyLevels.length > 0) {
+        const energyCounts = energyLevels.reduce((acc, e) => { acc[e!] = (acc[e!] || 0) + 1; return acc; }, {} as Record<string, number>);
+        const dominantEnergy = Object.entries(energyCounts).sort((a, b) => b[1] - a[1])[0][0];
+        summaryItems.push(`Energy: ${dominantEnergy}`);
+      }
+
+      // Note any concerns
+      const allConcerns = allObservations.filter(o => o.concerns).map(o => o.concerns);
+      if (allConcerns.length > 0) {
+        summaryItems.push(`Concerns flagged: ${allConcerns.length}`);
+      }
+
+      // Note any questions
+      const allQuestions = allObservations.filter(o => o.questionsForProvider).map(o => o.questionsForProvider);
+      if (allQuestions.length > 0) {
+        summaryItems.push(`Questions for provider: ${allQuestions.length}`);
+      }
+
+      const aiSummary = summaryItems.length > 0
+        ? `Daily summary for ${date}: ${summaryItems.join('; ')}.`
+        : `${allObservations.length} observation(s) recorded for ${date}.`;
+
+      res.json({
+        date,
+        observationCount: allObservations.length,
+        observations: allObservations,
+        aiSummary,
+        copyPasteText
+      });
+    } catch (error) {
+      logger.error("Error fetching daily observations summary", { error: (error as Error).message });
+      res.status(500).json({ error: "Failed to fetch daily observations summary" });
     }
   });
 

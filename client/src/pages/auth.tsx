@@ -6,10 +6,11 @@ import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
-import { Heart, Activity, Shield, UserPlus, LogIn, Lightbulb, ChevronDown, ChevronUp, ChevronLeft, ChevronRight, Calculator, User, ClipboardCheck, Stethoscope } from "lucide-react";
+import { Heart, Activity, Shield, UserPlus, LogIn, Lightbulb, ChevronDown, ChevronUp, ChevronLeft, ChevronRight, Calculator, User, ClipboardCheck, Stethoscope, Users, BookOpen } from "lucide-react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import { TermsOfServiceModal, TOS_VERSION } from "@/components/terms-of-service-modal";
+import { useAuth } from "@/hooks/use-auth";
 
 interface AuthProps {
   onAuthSuccess: (user: any) => void;
@@ -158,6 +159,212 @@ function PatientFactoids() {
   );
 }
 
+// Research statistics for caregiver rotating banner
+const caregiverResearchStats = [
+  {
+    category: "INFORM",
+    title: "Family engagement reduces readmissions",
+    stat: "25%",
+    description: "reduction in 30-day readmissions when families are actively involved in care transitions",
+    citation: "AHRQ Patient & Family Engagement Guide, 2023"
+  },
+  {
+    category: "ACTIVATE",
+    title: "Caregiver involvement improves outcomes",
+    stat: "40%",
+    description: "improvement in medication adherence when caregivers participate in discharge planning",
+    citation: "Joint Commission Family Engagement Standards, 2024"
+  },
+  {
+    category: "COLLABORATE",
+    title: "Shared decision-making increases satisfaction",
+    stat: "3x",
+    description: "higher patient satisfaction scores when families collaborate with care teams",
+    citation: "Institute for Patient & Family-Centered Care, 2023"
+  },
+  {
+    category: "INFORM",
+    title: "Knowledge improves caregiver confidence",
+    stat: "67%",
+    description: "of caregivers report feeling unprepared at discharge; education reduces anxiety",
+    citation: "National Alliance for Caregiving, 2024"
+  },
+  {
+    category: "ACTIVATE",
+    title: "Early mobilization requires support",
+    stat: "2.5x",
+    description: "faster functional recovery when families encourage and track mobility exercises",
+    citation: "AACN Evidence-Based Practice Guidelines, 2023"
+  },
+  {
+    category: "COLLABORATE",
+    title: "Caregiver observations catch issues early",
+    stat: "48%",
+    description: "of clinical deterioration signs first noticed by family members, not staff",
+    citation: "Journal of Hospital Medicine, 2024"
+  }
+];
+
+// Caregiver-Friendly Did You Know Component
+function CaregiverFactoids() {
+  const [currentStatIndex, setCurrentStatIndex] = useState(0);
+  const [intervalId, setIntervalId] = useState<NodeJS.Timeout | null>(null);
+
+  const startAutoRotation = () => {
+    if (intervalId) clearInterval(intervalId);
+    const newInterval = setInterval(() => {
+      setCurrentStatIndex((prev) => (prev + 1) % caregiverResearchStats.length);
+    }, 6000);
+    setIntervalId(newInterval);
+  };
+
+  useEffect(() => {
+    startAutoRotation();
+    return () => {
+      if (intervalId) clearInterval(intervalId);
+    };
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      if (intervalId) clearInterval(intervalId);
+    };
+  }, [intervalId]);
+
+  const currentStat = caregiverResearchStats[currentStatIndex];
+
+  const getCategoryColor = (category: string) => {
+    switch (category) {
+      case "INFORM": return "bg-blue-500";
+      case "ACTIVATE": return "bg-green-500";
+      case "COLLABORATE": return "bg-purple-500";
+      default: return "bg-gray-500";
+    }
+  };
+
+  const getCategoryIcon = (category: string) => {
+    switch (category) {
+      case "INFORM": return BookOpen;
+      case "ACTIVATE": return Heart;
+      case "COLLABORATE": return Users;
+      default: return BookOpen;
+    }
+  };
+
+  const CategoryIcon = getCategoryIcon(currentStat.category);
+
+  return (
+    <Card className="mb-6 bg-white/95 backdrop-blur shadow-lg overflow-hidden">
+      <CardContent className="p-0">
+        <div className="flex items-stretch">
+          {/* Category indicator */}
+          <div className={`${getCategoryColor(currentStat.category)} w-2 flex-shrink-0`} />
+
+          <div className="flex-1 p-5">
+            <div className="flex items-start justify-between">
+              <div className="flex items-center gap-3 mb-3">
+                <div className={`${getCategoryColor(currentStat.category)} p-2 rounded-lg`}>
+                  <CategoryIcon className="text-white" size={20} />
+                </div>
+                <span className={`text-xs font-bold uppercase tracking-wider ${
+                  currentStat.category === "INFORM" ? "text-blue-600" :
+                  currentStat.category === "ACTIVATE" ? "text-green-600" :
+                  "text-purple-600"
+                }`}>
+                  {currentStat.category}
+                </span>
+              </div>
+
+              {/* Navigation arrows */}
+              <div className="flex items-center gap-1">
+                <button
+                  onClick={() => setCurrentStatIndex((prev) => (prev - 1 + caregiverResearchStats.length) % caregiverResearchStats.length)}
+                  className="p-1 hover:bg-gray-100 rounded-full transition-colors"
+                  aria-label="Previous stat"
+                >
+                  <ChevronLeft size={18} className="text-gray-400" />
+                </button>
+                <span className="text-xs text-gray-400 min-w-[3ch] text-center">
+                  {currentStatIndex + 1}/{caregiverResearchStats.length}
+                </span>
+                <button
+                  onClick={() => setCurrentStatIndex((prev) => (prev + 1) % caregiverResearchStats.length)}
+                  className="p-1 hover:bg-gray-100 rounded-full transition-colors"
+                  aria-label="Next stat"
+                >
+                  <ChevronRight size={18} className="text-gray-400" />
+                </button>
+              </div>
+            </div>
+
+            <h3 className="text-lg font-semibold text-gray-900 mb-2">
+              {currentStat.title}
+            </h3>
+
+            <div className="flex items-baseline gap-3 mb-2">
+              <span className={`text-4xl font-bold ${
+                currentStat.category === "INFORM" ? "text-blue-600" :
+                currentStat.category === "ACTIVATE" ? "text-green-600" :
+                "text-purple-600"
+              }`}>
+                {currentStat.stat}
+              </span>
+              <span className="text-gray-600 text-sm">
+                {currentStat.description}
+              </span>
+            </div>
+
+            <p className="text-xs text-gray-400 italic">
+              {currentStat.citation}
+            </p>
+          </div>
+        </div>
+
+        {/* Progress dots */}
+        <div className="flex justify-center gap-1.5 pb-3">
+          {caregiverResearchStats.map((_, index) => (
+            <button
+              key={index}
+              onClick={() => setCurrentStatIndex(index)}
+              className={`w-2 h-2 rounded-full transition-all ${
+                index === currentStatIndex
+                  ? getCategoryColor(caregiverResearchStats[index].category)
+                  : "bg-gray-200 hover:bg-gray-300"
+              }`}
+              aria-label={`Go to stat ${index + 1}`}
+            />
+          ))}
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+// Demo caregiver accounts
+const demoCaregivers = [
+  {
+    name: "Maria Martinez",
+    email: "maria.martinez@caregiver.local",
+    relationship: "Spouse",
+    patientName: "Robert Martinez",
+    patientCondition: "COPD + Parkinson's (Hospital ICU)"
+  },
+  {
+    name: "Michael Chen",
+    email: "michael.chen@caregiver.local",
+    relationship: "Adult Son",
+    patientName: "Dorothy Chen",
+    patientCondition: "Hip Fracture (Inpatient Rehab)"
+  },
+  {
+    name: "Sarah Thompson",
+    email: "sarah.thompson@caregiver.local",
+    relationship: "Daughter",
+    patientName: "James Thompson",
+    patientCondition: "Sepsis + CHF (SNF)"
+  }
+];
+
 const demoPatients = [
   {
     name: "Robert Martinez",
@@ -186,7 +393,10 @@ const demoPatients = [
 ];
 
 export default function Auth({ onAuthSuccess }: AuthProps) {
-  const [userType, setUserType] = useState<"patient" | "provider">("patient");
+  const [userType, setUserType] = useState<"patient" | "provider" | "caregiver">("patient");
+  const { loginCaregiver } = useAuth();
+  const [caregiverEmail, setCaregiverEmail] = useState("");
+  const [caregiverLoading, setCaregiverLoading] = useState(false);
   const [patientCredentials, setPatientCredentials] = useState({
     firstName: "",
     lastName: "",
@@ -344,6 +554,47 @@ export default function Auth({ onAuthSuccess }: AuthProps) {
     });
   };
 
+  const fillDemoCaregiver = (caregiver: typeof demoCaregivers[0]) => {
+    setCaregiverEmail(caregiver.email);
+    toast({
+      title: "Demo caregiver loaded",
+      description: `${caregiver.name}'s credentials have been filled in. Click "Sign In as Caregiver" to login.`,
+      duration: 5000,
+    });
+  };
+
+  const handleCaregiverLogin = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (caregiverLoading || !caregiverEmail) return;
+
+    setCaregiverLoading(true);
+
+    try {
+      const result = await loginCaregiver(caregiverEmail);
+      if (result) {
+        onAuthSuccess(result.user);
+        toast({
+          title: `Welcome, ${result.user.firstName}!`,
+          description: `You have access to ${result.patients.length} patient${result.patients.length !== 1 ? 's' : ''}.`,
+        });
+      } else {
+        toast({
+          title: "Invalid credentials",
+          description: "No caregiver account found with this email.",
+          variant: "destructive",
+        });
+      }
+    } catch (error) {
+      toast({
+        title: "Sign in failed",
+        description: "An error occurred while signing in. Please try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setCaregiverLoading(false);
+    }
+  };
+
   const handleLogin = (formData: FormData) => {
     const data = Object.fromEntries(formData.entries());
 
@@ -439,8 +690,8 @@ export default function Auth({ onAuthSuccess }: AuthProps) {
           </CardContent>
         </Card>
 
-        {/* Patient Education Factoids */}
-        <PatientFactoids />
+        {/* Education Factoids - switch based on user type */}
+        {userType === "caregiver" ? <CaregiverFactoids /> : <PatientFactoids />}
 
         {/* User Type Selection */}
         <Card>
@@ -448,8 +699,8 @@ export default function Auth({ onAuthSuccess }: AuthProps) {
             <CardTitle className="text-lg">Choose Account Type</CardTitle>
           </CardHeader>
           <CardContent>
-            <Tabs value={userType} onValueChange={(value) => setUserType(value as "patient" | "provider")} className="w-full">
-              <TabsList className="grid w-full grid-cols-2">
+            <Tabs value={userType} onValueChange={(value) => setUserType(value as "patient" | "provider" | "caregiver")} className="w-full">
+              <TabsList className="grid w-full grid-cols-3">
                 <TabsTrigger value="patient" className="flex items-center gap-2">
                   <Heart className="w-4 h-4" />
                   Patient
@@ -458,18 +709,11 @@ export default function Auth({ onAuthSuccess }: AuthProps) {
                   <Shield className="w-4 h-4" />
                   Provider
                 </TabsTrigger>
+                <TabsTrigger value="caregiver" className="flex items-center gap-2">
+                  <Users className="w-4 h-4" />
+                  Caregiver
+                </TabsTrigger>
               </TabsList>
-
-              {/* Caregiver Link */}
-              <div className="mt-4 text-center">
-                <a
-                  href="/caregiver/login"
-                  className="text-sm text-purple-600 hover:text-purple-700 hover:underline inline-flex items-center gap-1"
-                >
-                  <Heart className="w-3 h-3" />
-                  Are you a family member or caregiver? Sign in here
-                </a>
-              </div>
 
               {/* Patient Auth */}
               <TabsContent value="patient" className="mt-6">
@@ -989,6 +1233,128 @@ export default function Auth({ onAuthSuccess }: AuthProps) {
                       <ClipboardCheck className="w-4 h-4 mr-2" />
                       Try the Calculator
                     </Button>
+                  </CardContent>
+                </Card>
+              </TabsContent>
+
+              {/* Caregiver Auth */}
+              <TabsContent value="caregiver" className="mt-6">
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="flex items-center gap-2">
+                      <Heart className="w-5 h-5 text-rose-500" />
+                      Caregiver Sign In
+                    </CardTitle>
+                    <CardDescription>
+                      Support your loved one's recovery journey
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    <form onSubmit={handleCaregiverLogin} className="space-y-4">
+                      <div className="space-y-2">
+                        <Label htmlFor="caregiver-email">Email Address</Label>
+                        <Input
+                          id="caregiver-email"
+                          type="email"
+                          value={caregiverEmail}
+                          onChange={(e) => setCaregiverEmail(e.target.value)}
+                          placeholder="your.email@example.com"
+                          required
+                        />
+                      </div>
+
+                      <Button
+                        type="submit"
+                        className="w-full bg-gradient-to-r from-rose-500 to-purple-600 hover:from-rose-600 hover:to-purple-700"
+                        disabled={caregiverLoading}
+                      >
+                        {caregiverLoading ? "Signing In..." : "Sign In as Caregiver"}
+                      </Button>
+
+                      <div className="relative my-4">
+                        <div className="absolute inset-0 flex items-center">
+                          <div className="w-full border-t border-gray-200" />
+                        </div>
+                        <div className="relative flex justify-center text-sm">
+                          <span className="px-4 bg-white text-gray-500">New caregiver?</span>
+                        </div>
+                      </div>
+
+                      <Button
+                        type="button"
+                        variant="outline"
+                        className="w-full border-rose-200 text-rose-600 hover:bg-rose-50"
+                        onClick={() => window.location.href = '/caregiver/register'}
+                      >
+                        Request Access to Patient
+                      </Button>
+                    </form>
+                  </CardContent>
+                </Card>
+
+                {/* Demo Caregiver Accounts */}
+                <Card className="mt-4 bg-gradient-to-r from-rose-50 to-purple-50 border-rose-200">
+                  <CardHeader className="pb-3">
+                    <div className="flex items-center gap-2">
+                      <Users className="w-5 h-5 text-purple-600" />
+                      <CardTitle className="text-lg">Demo Caregiver Accounts</CardTitle>
+                    </div>
+                    <CardDescription>
+                      Click any caregiver to auto-fill login credentials
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent className="space-y-2">
+                    {demoCaregivers.map((caregiver) => (
+                      <button
+                        key={caregiver.email}
+                        type="button"
+                        onClick={() => fillDemoCaregiver(caregiver)}
+                        className="w-full text-left p-4 rounded-lg border border-rose-200 bg-white hover:border-purple-400 hover:bg-purple-50 hover:shadow-md transition-all group"
+                      >
+                        <div className="flex items-start justify-between">
+                          <div className="flex-1">
+                            <div className="flex items-center gap-2">
+                              <p className="font-semibold text-gray-900 group-hover:text-purple-700">
+                                {caregiver.name}
+                              </p>
+                              <span className="text-xs bg-purple-100 text-purple-700 px-2 py-0.5 rounded">
+                                {caregiver.relationship}
+                              </span>
+                            </div>
+                            <p className="text-sm text-gray-600 mt-1">
+                              Caring for: <span className="font-medium">{caregiver.patientName}</span>
+                            </p>
+                            <p className="text-xs text-gray-500 mt-0.5">{caregiver.patientCondition}</p>
+                            <p className="text-xs font-mono text-gray-400 mt-2 bg-gray-50 px-2 py-1 rounded inline-block">
+                              {caregiver.email}
+                            </p>
+                          </div>
+                        </div>
+                      </button>
+                    ))}
+                  </CardContent>
+                </Card>
+
+                {/* Framework explanation */}
+                <Card className="mt-4 bg-gradient-to-br from-rose-50 to-purple-50 border-rose-200">
+                  <CardContent className="p-6">
+                    <h3 className="text-md font-semibold text-gray-900 mb-3">
+                      Inform - Activate - Collaborate
+                    </h3>
+                    <div className="space-y-2 text-sm text-gray-700">
+                      <div className="flex items-start gap-2">
+                        <BookOpen size={16} className="text-blue-500 mt-0.5 flex-shrink-0" />
+                        <p><span className="font-medium text-blue-600">Inform:</span> Stay updated on your loved one's progress and care plan</p>
+                      </div>
+                      <div className="flex items-start gap-2">
+                        <Heart size={16} className="text-green-500 mt-0.5 flex-shrink-0" />
+                        <p><span className="font-medium text-green-600">Activate:</span> Encourage mobility, log observations, support recovery</p>
+                      </div>
+                      <div className="flex items-start gap-2">
+                        <Users size={16} className="text-purple-500 mt-0.5 flex-shrink-0" />
+                        <p><span className="font-medium text-purple-600">Collaborate:</span> Share insights with the care team for better outcomes</p>
+                      </div>
+                    </div>
                   </CardContent>
                 </Card>
               </TabsContent>
