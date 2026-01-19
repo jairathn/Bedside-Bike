@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useLocation } from "wouter";
 import { useQuery } from "@tanstack/react-query";
 import { useAuth } from "@/hooks/use-auth";
@@ -33,8 +33,15 @@ const relationshipLabels: Record<string, string> = {
 
 export default function CaregiverPatientSelectorPage() {
   const [, setLocation] = useLocation();
-  const { user, logout, setPatient } = useAuth();
+  const { user, logout, setPatient, selectedPatient } = useAuth();
   const { toast } = useToast();
+
+  // Navigate to dashboard when a patient is selected
+  useEffect(() => {
+    if (selectedPatient) {
+      setLocation("/dashboard");
+    }
+  }, [selectedPatient, setLocation]);
 
   // Fetch linked patients
   const { data: linkedPatients = [], isLoading } = useQuery({
@@ -49,10 +56,8 @@ export default function CaregiverPatientSelectorPage() {
   });
 
   const handleSelectPatient = (patient: any) => {
-    // Store selected patient in auth context
+    // Store selected patient in auth context - useEffect will handle navigation
     setPatient(patient);
-    // Navigate to patient dashboard
-    setLocation("/dashboard");
   };
 
   const handleLogout = () => {
