@@ -162,7 +162,10 @@ function PatientFactoids() {
 export default function DashboardPage() {
   const [, setLocation] = useLocation();
   const { user, patient, logout } = useAuth();
-  const currentPatient = patient || user;
+
+  // For caregivers, only use selected patient (not fallback to user)
+  // For patients, use patient or user
+  const currentPatient = user?.userType === 'caregiver' ? patient : (patient || user);
   const [showMobileMenu, setShowMobileMenu] = useState(false);
   const [showGoalExplanation, setShowGoalExplanation] = useState(false);
   const [showMETsExplanation, setShowMETsExplanation] = useState(false);
@@ -372,9 +375,14 @@ export default function DashboardPage() {
 
   useEffect(() => {
     if (!currentPatient) {
-      setLocation("/");
+      // Caregivers without a selected patient go to patient selector
+      if (user?.userType === 'caregiver') {
+        setLocation("/caregiver/select-patient");
+      } else {
+        setLocation("/");
+      }
     }
-  }, [currentPatient, setLocation]);
+  }, [currentPatient, user, setLocation]);
 
   const { data: dashboardData, isLoading } = useQuery({
     queryKey: [`/api/patients/${currentPatient?.id}/dashboard`],
