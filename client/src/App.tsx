@@ -46,7 +46,7 @@ import DischargeReadinessPage from "@/pages/personalization/discharge-readiness"
 
 function Router() {
   const [location, setLocation] = useLocation();
-  const { user, isLoading, setUser } = useAuth();
+  const { user, patient, isLoading, setUser } = useAuth();
 
   // Public routes that don't require authentication
   const publicRoutes = ["/", "/auth", "/anonymous-risk-calculator", "/public-discharge-readiness", "/caregiver/login", "/caregiver/register"];
@@ -99,7 +99,8 @@ function Router() {
   // Helper to get the right component based on user type
   const getPatientComponent = (Component: React.ComponentType) => {
     if (!user) return () => <AuthPage onAuthSuccess={handleAuthSuccess} />;
-    if (user.userType === 'caregiver') return CaregiverPatientSelectorPage; // Redirect caregivers
+    // Caregivers without a selected patient go to patient selector
+    if (user.userType === 'caregiver' && !patient) return CaregiverPatientSelectorPage;
     return Component;
   };
 
