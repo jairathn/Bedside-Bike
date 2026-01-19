@@ -354,7 +354,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
           .where(
             and(
               eq(caregiverPatients.caregiverId, userId),
-              eq(caregiverPatients.isActive, true),
               eq(caregiverPatients.accessStatus, 'approved')
             )
           );

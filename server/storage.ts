@@ -485,7 +485,7 @@ export class DatabaseStorage implements IStorage {
         and(
           eq(caregiverPatients.caregiverId, caregiverId),
           eq(caregiverPatients.patientId, patientId),
-          eq(caregiverPatients.isActive, true)
+          eq(caregiverPatients.accessStatus, 'approved')
         )
       )
       .limit(1);
