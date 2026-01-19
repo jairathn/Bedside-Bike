@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { useLocation } from "wouter";
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useQuery, useMutation } from "@tanstack/react-query";
 import { useAuth } from "@/hooks/use-auth";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -8,7 +8,6 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Progress } from "@/components/ui/progress";
-import { useToast } from "@/hooks/use-toast";
 import {
   ArrowLeft,
   Home,
@@ -130,8 +129,6 @@ const checklistSections = [
 export default function PatientDischargeChecklistPage() {
   const [, setLocation] = useLocation();
   const { user, patient } = useAuth();
-  const { toast } = useToast();
-  const queryClient = useQueryClient();
 
   // For caregivers, use the selected patient; for patients, use their own ID
   const targetPatientId = user?.userType === 'caregiver' ? patient?.id : user?.id;
@@ -161,7 +158,7 @@ export default function PatientDischargeChecklistPage() {
     }
   }, [checklist]);
 
-  // Save checklist mutation
+  // Save checklist mutation - no query invalidation needed since we use optimistic updates
   const saveChecklistMutation = useMutation({
     mutationFn: async (items: Record<string, boolean>) => {
       const formattedItems: Record<string, any> = {};
@@ -180,9 +177,7 @@ export default function PatientDischargeChecklistPage() {
       }
       return null;
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: [`/api/patients/${targetPatientId}/discharge-checklist`] });
-    },
+    // No onSuccess invalidation - we update local state optimistically in toggleItem
   });
 
   const toggleItem = (itemId: string) => {
