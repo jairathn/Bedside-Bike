@@ -3215,14 +3215,27 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Patient logs their own observation (unified observations table)
-  app.post("/api/patients/:patientId/observations", requireAuth, requirePatient, async (req, res) => {
+  // Patient or caregiver logs an observation (unified observations table)
+  app.post("/api/patients/:patientId/observations", requireAuth, authorizePatientAccess, async (req, res) => {
     try {
       const patientId = parseInt(req.params.patientId);
+      const userId = req.session.user?.id;
+      const userType = req.session.user?.userType;
 
-      // Verify the patient is logging for themselves
-      if (req.session.user?.id !== patientId) {
-        return res.status(403).json({ error: "You can only log observations for yourself" });
+      // Determine observer type and ID based on who's making the request
+      let observerId: number;
+      let observerType: 'patient' | 'caregiver';
+
+      if (userType === 'patient' && userId === patientId) {
+        // Patient logging for themselves
+        observerId = patientId;
+        observerType = 'patient';
+      } else if (userType === 'caregiver') {
+        // Caregiver logging for their linked patient (authorizePatientAccess already verified access)
+        observerId = userId!;
+        observerType = 'caregiver';
+      } else {
+        return res.status(403).json({ error: "You don't have permission to log observations for this patient" });
       }
 
       const parsed = observationSchema.safeParse(req.body);
@@ -3235,8 +3248,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Create observation
       const observation = await storage.createObservation({
         patientId,
-        observerId: patientId,
-        observerType: 'patient',
+        observerId,
+        observerType,
         observationDate: data.observationDate,
         moodLevel: data.moodLevel || null,
         painLevel: data.painLevel !== undefined ? data.painLevel : null,
@@ -3261,7 +3274,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (data.concerns) summaryParts.push(`Concerns: ${data.concerns}`);
       if (data.questionsForProvider) summaryParts.push(`Questions for provider: ${data.questionsForProvider}`);
 
-      const aiSummary = `Patient self-reported observation from ${data.observationDate}: ${summaryParts.join('. ')}`;
+      const observerLabel = observerType === 'patient' ? 'Patient self-reported' : 'Caregiver-reported';
+      const aiSummary = `${observerLabel} observation from ${data.observationDate}: ${summaryParts.join('. ')}`;
 
       await storage.updateUnifiedObservationAiSummary(observation.id, aiSummary);
 
