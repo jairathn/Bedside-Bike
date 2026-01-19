@@ -386,14 +386,6 @@ export default function CaregiverPatientSelectorPage() {
             <Button
               variant="outline"
               className="w-full justify-start"
-              onClick={() => setLocation("/caregiver/dashboard")}
-            >
-              <Activity className="w-4 h-4 mr-2" />
-              View Full Caregiver Dashboard
-            </Button>
-            <Button
-              variant="outline"
-              className="w-full justify-start"
               onClick={() => setLocation("/caregiver/register")}
             >
               <UserPlus className="w-4 h-4 mr-2" />
