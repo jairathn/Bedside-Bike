@@ -12,12 +12,162 @@ import {
   LogOut,
   Activity,
   ChevronRight,
+  ChevronLeft,
   Calendar,
   User,
   Loader2,
-  UserPlus
+  UserPlus,
+  BookOpen
 } from "lucide-react";
 import { apiRequest } from "@/lib/queryClient";
+
+// Research statistics for caregiver rotating banner
+const caregiverResearchStats = [
+  {
+    category: "INFORM",
+    title: "Family engagement reduces readmissions",
+    stat: "25%",
+    description: "reduction in 30-day readmissions when families are actively involved in care transitions",
+    citation: "AHRQ Patient & Family Engagement Guide, 2023"
+  },
+  {
+    category: "ACTIVATE",
+    title: "Caregiver involvement improves outcomes",
+    stat: "40%",
+    description: "improvement in medication adherence when caregivers participate in discharge planning",
+    citation: "Joint Commission Family Engagement Standards, 2024"
+  },
+  {
+    category: "COLLABORATE",
+    title: "Shared decision-making increases satisfaction",
+    stat: "3x",
+    description: "higher patient satisfaction scores when families collaborate with care teams",
+    citation: "Institute for Patient & Family-Centered Care, 2023"
+  },
+  {
+    category: "INFORM",
+    title: "Knowledge improves caregiver confidence",
+    stat: "67%",
+    description: "of caregivers report feeling unprepared at discharge; education reduces anxiety",
+    citation: "National Alliance for Caregiving, 2024"
+  },
+  {
+    category: "ACTIVATE",
+    title: "Early mobilization requires support",
+    stat: "2.5x",
+    description: "faster functional recovery when families encourage and track mobility exercises",
+    citation: "AACN Evidence-Based Practice Guidelines, 2023"
+  },
+  {
+    category: "COLLABORATE",
+    title: "Caregiver observations catch issues early",
+    stat: "48%",
+    description: "of clinical deterioration signs first noticed by family members, not staff",
+    citation: "Journal of Hospital Medicine, 2024"
+  }
+];
+
+// Caregiver Stats Banner Component
+function CaregiverStatsBanner() {
+  const [currentStatIndex, setCurrentStatIndex] = useState(0);
+
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setCurrentStatIndex((prev) => (prev + 1) % caregiverResearchStats.length);
+    }, 6000);
+    return () => clearInterval(interval);
+  }, []);
+
+  const currentStat = caregiverResearchStats[currentStatIndex];
+
+  const getCategoryColor = (category: string) => {
+    switch (category) {
+      case "INFORM": return "bg-blue-500";
+      case "ACTIVATE": return "bg-green-500";
+      case "COLLABORATE": return "bg-purple-500";
+      default: return "bg-gray-500";
+    }
+  };
+
+  const getCategoryIcon = (category: string) => {
+    switch (category) {
+      case "INFORM": return BookOpen;
+      case "ACTIVATE": return Heart;
+      case "COLLABORATE": return Users;
+      default: return BookOpen;
+    }
+  };
+
+  const CategoryIcon = getCategoryIcon(currentStat.category);
+
+  return (
+    <Card className="bg-white/95 backdrop-blur shadow-lg overflow-hidden">
+      <CardContent className="p-0">
+        <div className="flex items-stretch">
+          <div className={`${getCategoryColor(currentStat.category)} w-2 flex-shrink-0`} />
+          <div className="flex-1 p-5">
+            <div className="flex items-start justify-between">
+              <div className="flex items-center gap-3 mb-3">
+                <div className={`${getCategoryColor(currentStat.category)} p-2 rounded-lg`}>
+                  <CategoryIcon className="text-white" size={20} />
+                </div>
+                <span className={`text-xs font-bold uppercase tracking-wider ${
+                  currentStat.category === "INFORM" ? "text-blue-600" :
+                  currentStat.category === "ACTIVATE" ? "text-green-600" :
+                  "text-purple-600"
+                }`}>
+                  {currentStat.category}
+                </span>
+              </div>
+              <div className="flex items-center gap-1">
+                <button
+                  onClick={() => setCurrentStatIndex((prev) => (prev - 1 + caregiverResearchStats.length) % caregiverResearchStats.length)}
+                  className="p-1 hover:bg-gray-100 rounded-full transition-colors"
+                >
+                  <ChevronLeft size={18} className="text-gray-400" />
+                </button>
+                <span className="text-xs text-gray-400 min-w-[3ch] text-center">
+                  {currentStatIndex + 1}/{caregiverResearchStats.length}
+                </span>
+                <button
+                  onClick={() => setCurrentStatIndex((prev) => (prev + 1) % caregiverResearchStats.length)}
+                  className="p-1 hover:bg-gray-100 rounded-full transition-colors"
+                >
+                  <ChevronRight size={18} className="text-gray-400" />
+                </button>
+              </div>
+            </div>
+            <h3 className="text-lg font-semibold text-gray-900 mb-2">{currentStat.title}</h3>
+            <div className="flex items-baseline gap-3 mb-2">
+              <span className={`text-4xl font-bold ${
+                currentStat.category === "INFORM" ? "text-blue-600" :
+                currentStat.category === "ACTIVATE" ? "text-green-600" :
+                "text-purple-600"
+              }`}>
+                {currentStat.stat}
+              </span>
+              <span className="text-gray-600 text-sm">{currentStat.description}</span>
+            </div>
+            <p className="text-xs text-gray-400 italic">{currentStat.citation}</p>
+          </div>
+        </div>
+        <div className="flex justify-center gap-1.5 pb-3">
+          {caregiverResearchStats.map((_, index) => (
+            <button
+              key={index}
+              onClick={() => setCurrentStatIndex(index)}
+              className={`w-2 h-2 rounded-full transition-all ${
+                index === currentStatIndex
+                  ? getCategoryColor(caregiverResearchStats[index].category)
+                  : "bg-gray-200 hover:bg-gray-300"
+              }`}
+            />
+          ))}
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
 
 // Relationship type display mapping
 const relationshipLabels: Record<string, string> = {
@@ -110,6 +260,9 @@ export default function CaregiverPatientSelectorPage() {
       </div>
 
       <div className="max-w-4xl mx-auto p-4 space-y-6">
+        {/* Inform/Activate/Collaborate Stats Banner */}
+        <CaregiverStatsBanner />
+
         {/* Info Banner */}
         <Card className="bg-gradient-to-r from-purple-500 to-rose-500 text-white">
           <CardContent className="p-6">
