@@ -506,68 +506,73 @@ export default function DashboardPage() {
                   </span>
                 </Button>
               )}
-              <Button variant="ghost" size="sm" onClick={() => setLocation("/provider-access")} className="flex-1 sm:flex-none">
-                <Target className="w-4 h-4 sm:w-5 sm:h-5 mr-2" />
-                <span className="text-xs sm:text-sm">My Providers</span>
+              <Button variant="ghost" size="sm" onClick={() => setLocation("/provider-access")} className="hidden xl:flex" title="My Providers">
+                <Target className="w-4 h-4 mr-1" />
+                <span className="text-xs">Providers</span>
               </Button>
-              <Button variant="ghost" size="sm" onClick={() => setLocation("/risk-assessment")} className="flex-1 sm:flex-none">
-                <Calculator className="w-4 h-4 sm:w-5 sm:h-5 mr-2" />
-                <span className="text-xs sm:text-sm">Goal Calculator</span>
+              <Button variant="ghost" size="sm" onClick={() => setLocation("/risk-assessment")} className="hidden xl:flex" title="Goal Calculator">
+                <Calculator className="w-4 h-4 mr-1" />
+                <span className="text-xs">Goals</span>
               </Button>
-              <Button variant="ghost" size="sm" onClick={() => setLocation("/patient/observations")} className="hidden sm:flex">
-                <FileText className="w-4 h-4 sm:w-5 sm:h-5 mr-2" />
-                <span className="text-xs sm:text-sm">Log Observations</span>
+              <Button variant="ghost" size="sm" onClick={() => setLocation("/patient/observations")} className="hidden xl:flex" title="Log Observations">
+                <FileText className="w-4 h-4 mr-1" />
+                <span className="text-xs">Observations</span>
               </Button>
-              <Button variant="ghost" size="sm" onClick={() => setLocation("/patient/discharge-checklist")} className="hidden sm:flex">
-                <ClipboardList className="w-4 h-4 sm:w-5 sm:h-5 mr-2" />
-                <span className="text-xs sm:text-sm">Before Discharge</span>
+              <Button variant="ghost" size="sm" onClick={() => setLocation("/patient/discharge-checklist")} className="hidden xl:flex" title="Before Discharge">
+                <ClipboardList className="w-4 h-4 mr-1" />
+                <span className="text-xs">Discharge</span>
               </Button>
-              <Button variant="ghost" size="sm" onClick={() => setLocation("/games")} className="hidden lg:flex">
-                <Gamepad2 className="w-4 h-4 sm:w-5 sm:h-5 mr-2" />
-                <span className="text-xs sm:text-sm">Games</span>
+              <Button variant="ghost" size="sm" onClick={() => setLocation("/games")} className="hidden 2xl:flex" title="Games">
+                <Gamepad2 className="w-4 h-4 mr-1" />
+                <span className="text-xs">Games</span>
               </Button>
-              <Button variant="ghost" size="sm" onClick={() => setLocation("/kudos-wall")} className="hidden lg:flex">
-                <MessageCircle className="w-4 h-4 sm:w-5 sm:h-5 mr-2" />
-                <span className="text-xs sm:text-sm">Community</span>
+              <Button variant="ghost" size="sm" onClick={() => setLocation("/kudos-wall")} className="hidden 2xl:flex" title="Community">
+                <MessageCircle className="w-4 h-4 mr-1" />
+                <span className="text-xs">Community</span>
               </Button>
-              <Button variant="ghost" size="sm" onClick={handleLogout} className="hidden lg:flex">
-                <LogOut className="w-4 h-4 sm:w-5 sm:h-5 mr-1" />
-                <span className="text-xs sm:text-sm">Logout</span>
+              <Button variant="ghost" size="sm" onClick={handleLogout} title="Logout">
+                <LogOut className="w-4 h-4" />
+                <span className="hidden sm:inline text-xs ml-1">Logout</span>
               </Button>
-              
-              {/* Mobile Menu Button */}
-              <Button 
-                variant="ghost" 
-                size="sm" 
+
+              {/* Menu Button for items that don't fit */}
+              <Button
+                variant="ghost"
+                size="sm"
                 onClick={() => setShowMobileMenu(!showMobileMenu)}
-                className="sm:hidden"
+                className="xl:hidden"
+                title="Menu"
               >
                 <Menu className="w-5 h-5" />
               </Button>
             </div>
             
-            {/* Mobile Dropdown Menu */}
+            {/* Dropdown Menu for smaller screens */}
             {showMobileMenu && (
-              <div className="sm:hidden mt-4 space-y-2">
-                <Button variant="ghost" size="sm" onClick={() => setLocation("/patient/observations")} className="w-full justify-start">
+              <div className="xl:hidden mt-4 grid grid-cols-2 sm:grid-cols-3 gap-2 p-3 bg-gray-50 rounded-lg">
+                <Button variant="ghost" size="sm" onClick={() => { setLocation("/provider-access"); setShowMobileMenu(false); }} className="justify-start">
+                  <Target className="w-4 h-4 mr-2" />
+                  My Providers
+                </Button>
+                <Button variant="ghost" size="sm" onClick={() => { setLocation("/risk-assessment"); setShowMobileMenu(false); }} className="justify-start">
+                  <Calculator className="w-4 h-4 mr-2" />
+                  Goals
+                </Button>
+                <Button variant="ghost" size="sm" onClick={() => { setLocation("/patient/observations"); setShowMobileMenu(false); }} className="justify-start">
                   <FileText className="w-4 h-4 mr-2" />
-                  Log Observations
+                  Observations
                 </Button>
-                <Button variant="ghost" size="sm" onClick={() => setLocation("/patient/discharge-checklist")} className="w-full justify-start">
+                <Button variant="ghost" size="sm" onClick={() => { setLocation("/patient/discharge-checklist"); setShowMobileMenu(false); }} className="justify-start">
                   <ClipboardList className="w-4 h-4 mr-2" />
-                  Before Discharge
+                  Discharge
                 </Button>
-                <Button variant="ghost" size="sm" onClick={() => setLocation("/games")} className="w-full justify-start">
+                <Button variant="ghost" size="sm" onClick={() => { setLocation("/games"); setShowMobileMenu(false); }} className="justify-start">
                   <Gamepad2 className="w-4 h-4 mr-2" />
                   Games
                 </Button>
-                <Button variant="ghost" size="sm" onClick={() => setLocation("/kudos-wall")} className="w-full justify-start">
+                <Button variant="ghost" size="sm" onClick={() => { setLocation("/kudos-wall"); setShowMobileMenu(false); }} className="justify-start">
                   <MessageCircle className="w-4 h-4 mr-2" />
                   Community
-                </Button>
-                <Button variant="ghost" size="sm" onClick={handleLogout} className="w-full justify-start">
-                  <LogOut className="w-4 h-4 mr-1" />
-                  Logout
                 </Button>
               </div>
             )}
