@@ -96,11 +96,18 @@ function Router() {
     }
   };
 
+  // Helper to get the right component based on user type
+  const getPatientComponent = (Component: React.ComponentType) => {
+    if (!user) return () => <AuthPage onAuthSuccess={handleAuthSuccess} />;
+    if (user.userType === 'caregiver') return CaregiverPatientSelectorPage; // Redirect caregivers
+    return Component;
+  };
+
   return (
     <Switch>
-      <Route path="/" component={user ? DashboardPage : () => <AuthPage onAuthSuccess={handleAuthSuccess} />} />
+      <Route path="/" component={getPatientComponent(DashboardPage)} />
       <Route path="/auth" component={() => <AuthPage onAuthSuccess={handleAuthSuccess} />} />
-      <Route path="/dashboard" component={user ? DashboardPage : () => <AuthPage onAuthSuccess={handleAuthSuccess} />} />
+      <Route path="/dashboard" component={getPatientComponent(DashboardPage)} />
       <Route path="/session" component={user ? SessionPage : () => <AuthPage onAuthSuccess={handleAuthSuccess} />} />
       <Route path="/goals" component={user ? GoalsPage : () => <AuthPage onAuthSuccess={handleAuthSuccess} />} />
       <Route path="/reports" component={user ? ReportsPage : () => <AuthPage onAuthSuccess={handleAuthSuccess} />} />
